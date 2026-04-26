@@ -847,6 +847,21 @@ RegisterCommand('tp', function(_, args)
     end
 end, false)
 
+-- /parachute [0-13] — give parachute + canopy tint (matches Weapons → Parachute menu)
+RegisterCommand('parachute', function(_, args)
+    if not state.allowed['weapons.parachute'] then
+        notify('error', 'No permission for parachute.')
+        return
+    end
+    local tint = 0
+    if args and args[1] then
+        tint = tonumber(args[1]) or 0
+    end
+    if EsAdmin.selectAction then
+        EsAdmin.selectAction('weapons.parachute', tint)
+    end
+end, false)
+
 -- ============================================================================
 -- OTHER COMMANDS
 -- ============================================================================

@@ -3551,6 +3551,98 @@ local function actionGiveAllWeapons()
     end)
 end
 
+local WEAPON_UNARMED = joaat('weapon_unarmed')
+
+local function prettifyWeaponComponentLabel(hashStr)
+    if type(hashStr) ~= 'string' then
+        return ''
+    end
+    return (hashStr:gsub('^COMPONENT_', ''):gsub('_', ' '))
+end
+
+local function weaponNameFromHash(weaponHash)
+    local list = Config.WeaponList or {}
+    for i = 1, #list do
+        if joaat(list[i]) == weaponHash then
+            return list[i]
+        end
+    end
+    return nil
+end
+
+local function collectApplicableWeaponComponents(ped, weaponHash)
+    local hashes = Config.WeaponComponentHashes or {}
+    local rows = {}
+    for i = 1, #hashes do
+        local name = hashes[i]
+        local ch = joaat(name)
+        if DoesWeaponTakeWeaponComponent(weaponHash, ch) then
+            rows[#rows + 1] = {
+                hash = name,
+                label = prettifyWeaponComponentLabel(name),
+                on = HasPedGotWeaponComponent(ped, weaponHash, ch),
+            }
+        end
+    end
+    table.sort(rows, function(a, b)
+        return (a.label or '') < (b.label or '')
+    end)
+    return rows
+end
+
+local function collectEquippedWeaponComponentNames(ped, weaponHash)
+    local hashes = Config.WeaponComponentHashes or {}
+    local out = {}
+    for i = 1, #hashes do
+        local name = hashes[i]
+        local ch = joaat(name)
+        if DoesWeaponTakeWeaponComponent(weaponHash, ch) and HasPedGotWeaponComponent(ped, weaponHash, ch) then
+            out[#out + 1] = name
+        end
+    end
+    return out
+end
+
+Admin.getWeaponAttachmentList = function()
+    local ped = getPed()
+    local weapon = GetSelectedPedWeapon(ped)
+    if not weapon or weapon == 0 or weapon == WEAPON_UNARMED then
+        return {
+            weaponName = '',
+            components = {},
+        }
+    end
+    return {
+        weaponName = weaponNameFromHash(weapon) or ('0x%X'):format(weapon),
+        components = collectApplicableWeaponComponents(ped, weapon),
+    }
+end
+
+Admin.toggleWeaponAttachment = function(componentName)
+    if type(componentName) ~= 'string' or componentName == '' then
+        return false
+    end
+    local ped = getPed()
+    local weapon = GetSelectedPedWeapon(ped)
+    if not weapon or weapon == 0 or weapon == WEAPON_UNARMED then
+        notify('error', 'Equip a weapon first.')
+        return false
+    end
+    local ch = joaat(componentName)
+    if not DoesWeaponTakeWeaponComponent(weapon, ch) then
+        notify('error', 'That attachment does not apply to this weapon.')
+        return false
+    end
+    if HasPedGotWeaponComponent(ped, weapon, ch) then
+        RemoveWeaponComponentFromPed(ped, weapon, ch)
+        notify('success', 'Attachment removed.')
+    else
+        GiveWeaponComponentToPed(ped, weapon, ch)
+        notify('success', 'Attachment installed.')
+    end
+    return true
+end
+
 Admin.saveWeaponLoadout = function(name)
     if not name or name == '' then
         notify('error', 'Name required.')
@@ -3569,6 +3661,7 @@ Admin.saveWeaponLoadout = function(name)
             weapons[#weapons + 1] = {
                 name = weaponName,
                 ammo = GetAmmoInPedWeapon(ped, weaponHash) or 0,
+                components = collectEquippedWeaponComponentNames(ped, weaponHash),
             }
         end
     end
@@ -3600,7 +3693,20 @@ Admin.loadWeaponLoadout = function(name)
     for i = 1, #loadout.weapons do
         local weapon = loadout.weapons[i]
         if weapon and weapon.name then
-            GiveWeaponToPed(ped, joaat(weapon.name), tonumber(weapon.ammo) or 250, false, false)
+            local wHash = joaat(weapon.name)
+            GiveWeaponToPed(ped, wHash, tonumber(weapon.ammo) or 250, false, false)
+            local comps = weapon.components
+            if type(comps) == 'table' then
+                for c = 1, #comps do
+                    local cname = comps[c]
+                    if type(cname) == 'string' then
+                        local cHash = joaat(cname)
+                        if DoesWeaponTakeWeaponComponent(wHash, cHash) then
+                            GiveWeaponComponentToPed(ped, wHash, cHash)
+                        end
+                    end
+                end
+            end
         end
     end
 
@@ -4777,6 +4883,32 @@ local function actionGiveWeapon(data)
     notify('success', ('Weapon given: %s'):format(weapon))
 end
 
+--- GTA parachute gadget hash (see vespura parachute tints doc)
+local PARACHUTE_WEAPON_HASH = joaat('gadget_parachute')
+
+local function actionGiveParachute(value)
+    local tint = tonumber(value)
+    if tint == nil then
+        tint = 0
+    end
+    tint = math.floor(tint)
+    if tint < 0 then
+        tint = 0
+    elseif tint > 13 then
+        tint = 13
+    end
+
+    local ped = getPed()
+    local playerId = PlayerId()
+    if not HasPedGotWeapon(ped, PARACHUTE_WEAPON_HASH, false) then
+        GiveWeaponToPed(ped, PARACHUTE_WEAPON_HASH, 1, false, true)
+    end
+    SetPlayerHasReserveParachute(playerId, true)
+    SetPlayerParachutePackTintIndex(playerId, tint)
+    SetPlayerReserveParachuteTintIndex(playerId, tint)
+    notify('success', ('Parachute given (tint %d).'):format(tint))
+end
+
 local function actionRemoveWeapons()
     RemoveAllPedWeapons(getPed(), true)
     notify('success', 'Weapons removed.')
@@ -5040,6 +5172,22 @@ Admin.executeAction = function(actionId, data)
         return
     elseif actionId == 'world.weather' then
         return actionSetWeather(data and data.value)
+    elseif actionId == 'world.weatherEditor' then
+        ExecuteCommand('weathereditor')
+        return
+    elseif actionId == 'world.weatherReload' then
+        ExecuteCommand('weather reload')
+        return
+    elseif actionId == 'world.weatherForce' then
+        local zoneId = data and data.zoneId
+        local weatherType = data and data.weatherType
+        if not zoneId or zoneId == '' or not weatherType or weatherType == '' then
+            notify('error', 'Zone ID and weather type are required.')
+            return
+        end
+
+        ExecuteCommand(('weather force %s %s'):format(zoneId, string.upper(weatherType)))
+        return
     elseif actionId == 'world.time' then
         return actionSetTime(data and data.value)
     elseif actionId == 'world.clearArea' then
@@ -5081,6 +5229,8 @@ Admin.executeAction = function(actionId, data)
         return Admin.deleteWeaponLoadout(data and data.name)
     elseif actionId == 'weapons.setAmmo' then
         return actionSetAmmo(data)
+    elseif actionId == 'weapons.attachments' then
+        return
     elseif actionId == 'dev.resetAllSettings' then
         state.settings = {}
         for key, value in pairs(Config.DefaultSettings) do
@@ -5171,18 +5321,19 @@ Admin.executeAction = function(actionId, data)
     notify('error', 'Action not implemented.')
 end
 
-local playerBlips = {}
-
-local function updatePlayerBlips()
+-- Blip map on state.devPlayerBlips. These are Admin.* (not `local function`) so they do not use main-chunk local slots (Lua limit 200).
+function Admin.updatePlayerBlips()
+    state.devPlayerBlips = state.devPlayerBlips or {}
+    local playerBlips = state.devPlayerBlips
     local players = GetActivePlayers()
     local existingIds = {}
     local selfId = PlayerId()
-    
+
     for i = 1, #players do
         local playerId = players[i]
         existingIds[playerId] = true
         local ped = GetPlayerPed(playerId)
-        
+
         if ped and DoesEntityExist(ped) and playerId ~= selfId then
             if not playerBlips[playerId] then
                 local blip = AddBlipForEntity(ped)
@@ -5197,7 +5348,7 @@ local function updatePlayerBlips()
             end
         end
     end
-    
+
     for playerId, blip in pairs(playerBlips) do
         if not existingIds[playerId] then
             if DoesBlipExist(blip) then
@@ -5208,13 +5359,16 @@ local function updatePlayerBlips()
     end
 end
 
-local function clearPlayerBlips()
-    for playerId, blip in pairs(playerBlips) do
-        if DoesBlipExist(blip) then
-            RemoveBlip(blip)
+function Admin.clearPlayerBlips()
+    local playerBlips = state.devPlayerBlips
+    if playerBlips then
+        for playerId, blip in pairs(playerBlips) do
+            if DoesBlipExist(blip) then
+                RemoveBlip(blip)
+            end
         end
     end
-    playerBlips = {}
+    state.devPlayerBlips = {}
 end
 
 Admin.toggleAction = function(actionId, enabled)
@@ -5288,9 +5442,9 @@ Admin.toggleAction = function(actionId, enabled)
         SetSeethrough(enabled)
     elseif actionId == 'dev.playerBlips' then
         if enabled then
-            updatePlayerBlips()
+            Admin.updatePlayerBlips()
         else
-            clearPlayerBlips()
+            Admin.clearPlayerBlips()
         end
     elseif actionId == 'dev.freecam' then
         setFreecam(enabled, false)
@@ -5322,7 +5476,7 @@ Admin.toggleAction = function(actionId, enabled)
                 units = state.settings.speedHudUnits or 'mph',
             }
         })
-    elseif actionId == 'options.compactMode' or actionId == 'options.showTargetInfo' or actionId == 'options.doubleClickToRun' or actionId == 'options.autoLoadSavedPed' or actionId == 'options.restorePedOnDeath' or actionId == 'options.defaultToMpPed' or actionId == 'options.replacePersonalVehicle' or actionId == 'options.quitSessionInRockstarEditor' then
+    elseif actionId == 'options.compactMode' or actionId == 'options.showTargetInfo' or actionId == 'options.doubleClickToRun' or actionId == 'options.autoLoadSavedPed' or actionId == 'options.restorePedOnDeath' or actionId == 'options.defaultToMpPed' or actionId == 'options.replacePersonalVehicle' or actionId == 'options.disableAircraftTurbulence' or actionId == 'options.quitSessionInRockstarEditor' then
         local settingKey = actionId:gsub('options%.', '')
         if settingKey == 'compactMode' then
             state.settings.compactMode = nil
@@ -5382,13 +5536,58 @@ Admin.selectAction = function(actionId, value)
         return actionSpawnPersonalVehicle({ value = value })
     elseif actionId == 'weapons.give' then
         return actionGiveWeapon({ value = value })
+    elseif actionId == 'weapons.parachute' then
+        return actionGiveParachute(value)
+    elseif actionId == 'weapons.setTint' then
+        local tint = tonumber(value)
+        if tint == nil then
+            tint = 0
+        end
+        tint = math.floor(tint)
+        if tint < 0 then
+            tint = 0
+        elseif tint > 7 then
+            tint = 7
+        end
+        local ped = getPed()
+        local w = GetSelectedPedWeapon(ped)
+        if not w or w == 0 or w == WEAPON_UNARMED then
+            notify('error', 'Equip a weapon first.')
+            return
+        end
+        SetPedWeaponTintIndex(ped, w, tint)
+        notify('success', ('Weapon tint set to %d.'):format(tint))
+        return
     elseif actionId == 'options.uiScale' then
         local nextScale = tonumber(value) or 1.0
         if nextScale < 1.0 then nextScale = 1.0 end
         if nextScale > 1.6 then nextScale = 1.6 end
         state.settings.uiScale = nextScale
     elseif actionId == 'options.uiOpacity' then
-        state.settings.uiOpacity = value
+        local o = tonumber(value)
+        if o == nil then
+            o = 0.94
+        end
+        if o < 0.35 then
+            o = 0.35
+        elseif o > 1.0 then
+            o = 1.0
+        end
+        state.settings.uiOpacity = o
+    elseif actionId == 'options.menuAccentColor' then
+        local s = type(value) == 'string' and value:gsub('%s+', '') or ''
+        if s:sub(1, 1) ~= '#' then
+            s = '#' .. s
+        end
+        local hex = s:match('^#([0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])$') or s:match('^#([0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])$')
+        if not hex then
+            notify('error', 'Invalid accent color.')
+            return
+        end
+        if #hex == 3 then
+            hex = hex:sub(1, 1) .. hex:sub(1, 1) .. hex:sub(2, 2) .. hex:sub(2, 2) .. hex:sub(3, 3) .. hex:sub(3, 3)
+        end
+        state.settings.menuAccentColor = ('#%s'):format(hex:lower())
     elseif actionId == 'options.menuPosition' then
         local v = type(value) == 'string' and value:lower() or 'right'
         if v == 'left' or v == 'right' then
@@ -5517,7 +5716,7 @@ CreateThread(function()
             end
 
             if toggles['dev.playerBlips'] and now >= nextBlipsTick then
-                updatePlayerBlips()
+                Admin.updatePlayerBlips()
                 nextBlipsTick = now + 1000
             end
 
@@ -5653,6 +5852,28 @@ CreateThread(function()
         else
             Wait(4000)
         end
+    end
+end)
+
+CreateThread(function()
+    while true do
+        local waitMs = 500
+        local settings = state.settings
+        if settings and settings.disableAircraftTurbulence == true then
+            local ped = PlayerPedId()
+            local vehicle = GetVehiclePedIsIn(ped, false)
+            if vehicle ~= 0 then
+                local model = GetEntityModel(vehicle)
+                if IsThisModelAPlane(model) then
+                    SetPlaneTurbulenceMultiplier(vehicle, 0.0)
+                    waitMs = 0
+                elseif IsThisModelAHeli(model) and SetHeliTurbulenceScalar then
+                    SetHeliTurbulenceScalar(vehicle, 0.0)
+                    waitMs = 0
+                end
+            end
+        end
+        Wait(waitMs)
     end
 end)
 

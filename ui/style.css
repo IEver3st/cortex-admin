@@ -161,11 +161,13 @@ html,
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--es-motion-base) var(--es-motion-ease);
+    background: transparent !important;
 }
 
+/* Full-bleed wrapper stays transparent; only the shell blocks clicks (CEF/FiveM avoids dimming the world). */
 .admin-app.open {
     opacity: 1;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .admin-app.open .admin-shell:not(.docked-left):not(.docked-right) {
@@ -174,15 +176,14 @@ html,
 
 @keyframes admin-shell-in {
     from {
-        opacity: 0;
         transform: translateY(6px) scale(0.995);
     }
     to {
-        opacity: 1;
         transform: translateY(0) scale(1);
     }
 }
 
+/* No backdrop-filter on shell — FiveM NUI/CEF samples empty layer → solid black behind menu. */
 .admin-shell {
     width: min(1800px, 96vw);
     height: min(980px, 92vh);
@@ -203,6 +204,7 @@ html,
     overflow: hidden;
     opacity: var(--es-admin-opacity);
     resize: both;
+    pointer-events: auto;
 }
 
 .admin-shell.compact .admin-column {
@@ -1298,7 +1300,7 @@ html,
 
 .admin-slider input::-webkit-slider-runnable-track {
     height: calc(3px * var(--es-ui-scale));
-    background: rgba(255, 255, 255, 0.12);
+    background: linear-gradient(90deg, var(--es-a-10), var(--es-a-22));
     border-radius: 999px;
 }
 
@@ -1316,7 +1318,7 @@ html,
 
 .admin-slider input::-moz-range-track {
     height: calc(3px * var(--es-ui-scale));
-    background: rgba(255, 255, 255, 0.12);
+    background: linear-gradient(90deg, var(--es-a-10), var(--es-a-22));
     border-radius: 999px;
 }
 
@@ -1336,6 +1338,39 @@ html,
     font-size: calc(11px * var(--es-ui-scale));
     color: var(--hud-dim);
     font-family: var(--font-hud);
+}
+
+.admin-color-input {
+    -webkit-appearance: none;
+    appearance: none;
+    width: calc(38px * var(--es-ui-scale));
+    height: calc(28px * var(--es-ui-scale));
+    padding: 0;
+    border: 1px solid var(--es-a-20);
+    border-radius: calc(8px * var(--es-ui-scale));
+    background: var(--es-surface-2);
+    cursor: pointer;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.admin-color-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.admin-color-input::-webkit-color-swatch-wrapper {
+    padding: calc(3px * var(--es-ui-scale));
+}
+
+.admin-color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: calc(5px * var(--es-ui-scale));
+}
+
+.admin-color-input::-moz-color-swatch {
+    border: none;
+    border-radius: calc(5px * var(--es-ui-scale));
 }
 
 .admin-button {
@@ -1397,7 +1432,8 @@ html,
 .admin-inline-inventory-amount:focus-visible,
 .admin-inline-garage-search-input:focus-visible,
 .admin-inline-garage-tab:focus-visible,
-.admin-inline-qbx-input:focus-visible {
+.admin-inline-qbx-input:focus-visible,
+.admin-color-input:focus-visible {
     outline: none;
     border-color: var(--es-focus-ring);
     box-shadow: 0 0 0 3px var(--es-focus-glow);
@@ -1614,7 +1650,8 @@ html,
 .admin-modal {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    /* Body portaled; above shell backdrop-filter stacking + docked shell (1000); above select portal (10020) */
+    z-index: 20000;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -359,6 +359,74 @@ function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
 
+const ACCENT_ALPHA_STOPS = [
+    ['04', 0.04], ['05', 0.05], ['07', 0.07], ['08', 0.08], ['09', 0.09],
+    ['10', 0.1], ['12', 0.12], ['14', 0.14], ['16', 0.16], ['18', 0.18],
+    ['20', 0.2], ['22', 0.22], ['34', 0.34], ['92', 0.92],
+];
+
+function normalizeHex6(hex) {
+    if (typeof hex !== 'string') return null;
+    let h = hex.trim();
+    if (!h.startsWith('#')) h = `#${h}`;
+    const m = h.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+    if (!m) return null;
+    let body = m[1];
+    if (body.length === 3) {
+        body = body.split('').map((c) => c + c).join('');
+    }
+    return `#${body.toLowerCase()}`;
+}
+
+function hexToRgb(hex6) {
+    const h = normalizeHex6(hex6);
+    if (!h) return null;
+    const n = parseInt(h.slice(1), 16);
+    if (Number.isNaN(n)) return null;
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function mixTowardWhite(r, g, b, t) {
+    return {
+        r: Math.min(255, Math.round(r + (255 - r) * t)),
+        g: Math.min(255, Math.round(g + (255 - g) * t)),
+        b: Math.min(255, Math.round(b + (255 - b) * t)),
+    };
+}
+
+function applyMenuAccentCss(hexInput) {
+    const root = document.documentElement;
+    const fallback = '#7170ff';
+    const hex = normalizeHex6(hexInput) || fallback;
+    const rgb = hexToRgb(hex);
+    if (!rgb) {
+        applyMenuAccentCss(fallback);
+        return;
+    }
+    const { r, g, b } = rgb;
+    const hi = mixTowardWhite(r, g, b, 0.14);
+    root.style.setProperty('--es-accent-violet', `rgb(${r},${g},${b})`);
+    root.style.setProperty('--es-accent-hover', `rgb(${hi.r},${hi.g},${hi.b})`);
+    root.style.setProperty('--es-sidebar-nav-active-icon', `rgb(${r},${g},${b})`);
+    for (let i = 0; i < ACCENT_ALPHA_STOPS.length; i += 1) {
+        const pair = ACCENT_ALPHA_STOPS[i];
+        const suffix = pair[0];
+        const a = pair[1];
+        root.style.setProperty(`--es-a-${suffix}`, `rgba(${r},${g},${b},${a})`);
+    }
+    root.style.setProperty('--es-focus-ring', `rgba(${r},${g},${b},0.35)`);
+    root.style.setProperty('--es-focus-glow', `rgba(${r},${g},${b},0.1)`);
+}
+
+function formatSliderReadout(action, val) {
+    const fmt = action.valueFormat;
+    if (fmt === 'percent') return `${Math.round(val * 100)}%`;
+    if (fmt === 'px') return `${Math.round(val)}px`;
+    const step = Number(action.step) || 1;
+    if (step >= 1) return `${Math.round(val)}`;
+    return `${Math.round(val * 100) / 100}`;
+}
+
 const defaultCoordHudData = {
     x: 0,
     y: 0,
@@ -781,11 +849,18 @@ function InlinePersonalVehicles({ vehicles, settings, onSpawn, onDelete, onSave,
         { id: 'suvs', label: 'SUVs' },
         { id: 'offroad', label: 'Off-Road' },
         { id: 'motorcycles', label: 'Bikes' },
+        { id: 'cycles', label: 'Cycles' },
+        { id: 'vans', label: 'Vans' },
+        { id: 'commercial', label: 'Commercial' },
+        { id: 'industrial', label: 'Industrial' },
+        { id: 'utility', label: 'Utility' },
+        { id: 'service', label: 'Service' },
         { id: 'helicopters', label: 'Helis' },
         { id: 'planes', label: 'Planes' },
         { id: 'boats', label: 'Boats' },
         { id: 'emergency', label: 'Emergency' },
         { id: 'military', label: 'Military' },
+        { id: 'openwheel', label: 'Open Wheel' },
         { id: 'other', label: 'Other' }
     ];
 
@@ -1311,6 +1386,244 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'thruster', name: 'Thruster (Jetpack)' },
             { model: 'trailersmall2', name: 'AA Trailer' }
         ],
+        compacts: [
+            { model: 'asbo', name: 'Asbo' },
+            { model: 'blista', name: 'Blista' },
+            { model: 'blista2', name: 'Blista Compact' },
+            { model: 'blista3', name: 'Blista Go Go Monkey' },
+            { model: 'brioso', name: 'Brioso R/A' },
+            { model: 'brioso2', name: 'Brioso 300' },
+            { model: 'brioso3', name: 'Brioso 300 Widebody' },
+            { model: 'club', name: 'Club' },
+            { model: 'dilettante', name: 'Dilettante' },
+            { model: 'dilettante2', name: 'Dilettante (Patrol)' },
+            { model: 'issi2', name: 'Issi' },
+            { model: 'issi3', name: 'Issi Classic' },
+            { model: 'issi4', name: 'Arena Issi' },
+            { model: 'issi5', name: 'Issi Sport' },
+            { model: 'kanjo', name: 'Blista Kanjo' },
+            { model: 'panto', name: 'Panto' },
+            { model: 'prairie', name: 'Prairie' },
+            { model: 'rhapsody', name: 'Rhapsody' },
+            { model: 'weevil', name: 'Weevil' },
+            { model: 'weevil2', name: 'Weevil Custom' }
+        ],
+        sedans: [
+            { model: 'asea', name: 'Asea' },
+            { model: 'asea2', name: 'Asea (Snow)' },
+            { model: 'asterope', name: 'Asterope' },
+            { model: 'cog55', name: 'Cognoscenti 55' },
+            { model: 'cog552', name: 'Cognoscenti 55 (Armored)' },
+            { model: 'cognoscenti', name: 'Cognoscenti' },
+            { model: 'cognoscenti2', name: 'Cognoscenti (Armored)' },
+            { model: 'emperor', name: 'Emperor' },
+            { model: 'emperor2', name: 'Emperor (Rusty)' },
+            { model: 'emperor3', name: 'Emperor (Snow)' },
+            { model: 'fugitive', name: 'Fugitive' },
+            { model: 'glendale', name: 'Glendale' },
+            { model: 'glendale2', name: 'Glendale Custom' },
+            { model: 'ingot', name: 'Ingot' },
+            { model: 'intruder', name: 'Intruder' },
+            { model: 'premier', name: 'Premier' },
+            { model: 'primo', name: 'Primo' },
+            { model: 'primo2', name: 'Primo Custom' },
+            { model: 'regina', name: 'Regina' },
+            { model: 'romero', name: 'Romero Hearse' },
+            { model: 'schafter2', name: 'Schafter' },
+            { model: 'schafter5', name: 'Schafter V12 (Armored)' },
+            { model: 'schafter6', name: 'Schafter LWB (Armored)' },
+            { model: 'stafford', name: 'Stafford' },
+            { model: 'stanier', name: 'Stanier' },
+            { model: 'stratum', name: 'Stratum' },
+            { model: 'stretch', name: 'Stretch' },
+            { model: 'superd', name: 'Super Diamond' },
+            { model: 'surge', name: 'Surge' },
+            { model: 'tailgater', name: 'Tailgater' },
+            { model: 'tailgater2', name: 'Tailgater S' },
+            { model: 'warrener', name: 'Warrener' },
+            { model: 'warrener2', name: 'Warrener HKR' },
+            { model: 'washington', name: 'Washington' }
+        ],
+        coupes: [
+            { model: 'cogcabrio', name: 'Cognoscenti Cabrio' },
+            { model: 'exemplar', name: 'Exemplar' },
+            { model: 'f620', name: 'F620' },
+            { model: 'felon', name: 'Felon' },
+            { model: 'felon2', name: 'Felon GT' },
+            { model: 'jackal', name: 'Jackal' },
+            { model: 'oracle', name: 'Oracle XS' },
+            { model: 'oracle2', name: 'Oracle' },
+            { model: 'sentinel', name: 'Sentinel XS' },
+            { model: 'sentinel2', name: 'Sentinel' },
+            { model: 'windsor', name: 'Windsor' },
+            { model: 'windsor2', name: 'Windsor Drop' },
+            { model: 'zion', name: 'Zion' },
+            { model: 'zion2', name: 'Zion Cabrio' }
+        ],
+        sportsclassics: [
+            { model: 'ardent', name: 'Ardent' },
+            { model: 'btype', name: 'Roosevelt' },
+            { model: 'btype2', name: 'Fr\u00e4nken Stange' },
+            { model: 'btype3', name: 'Roosevelt Valor' },
+            { model: 'casco', name: 'Casco' },
+            { model: 'cheburek', name: 'Cheburek' },
+            { model: 'cheetah2', name: 'Cheetah Classic' },
+            { model: 'coquette2', name: 'Coquette Classic' },
+            { model: 'deluxo', name: 'Deluxo' },
+            { model: 'dynasty', name: 'Dynasty' },
+            { model: 'feltzer3', name: 'Stirling GT' },
+            { model: 'gt500', name: 'GT500' },
+            { model: 'infernus2', name: 'Infernus Classic' },
+            { model: 'jb700', name: 'JB 700' },
+            { model: 'jb7002', name: 'JB 700W' },
+            { model: 'mamba', name: 'Mamba' },
+            { model: 'manana', name: 'Manana' },
+            { model: 'michelli', name: 'Michelli GT' },
+            { model: 'monroe', name: 'Monroe' },
+            { model: 'nebula', name: 'Nebula Turbo' },
+            { model: 'peyote', name: 'Peyote' },
+            { model: 'pigalle', name: 'Pigalle' },
+            { model: 'rapidgt3', name: 'Rapid GT Classic' },
+            { model: 'retinue', name: 'Retinue' },
+            { model: 'retinue2', name: 'Retinue Mk II' },
+            { model: 'savestra', name: 'Savestra' },
+            { model: 'stinger', name: 'Stinger' },
+            { model: 'stingergt', name: 'Stinger GT' },
+            { model: 'stromberg', name: 'Stromberg' },
+            { model: 'swinger', name: 'Swinger' },
+            { model: 'torero', name: 'Torero' },
+            { model: 'tornado', name: 'Tornado' },
+            { model: 'tornado2', name: 'Tornado (Convertible)' },
+            { model: 'tornado3', name: 'Tornado Custom' },
+            { model: 'tornado4', name: 'Tornado (Marachi)' },
+            { model: 'tornado5', name: 'Tornado Rat Rod' },
+            { model: 'tornado6', name: 'Tornado (Rusty)' },
+            { model: 'turismo2', name: 'Turismo Classic' },
+            { model: 'viseris', name: 'Viseris' },
+            { model: 'z190', name: '190z' },
+            { model: 'zion3', name: 'Zion Classic' },
+            { model: 'ztype', name: 'Z-Type' }
+        ],
+        industrial: [
+            { model: 'bulldozer', name: 'Bulldozer' },
+            { model: 'caddy', name: 'Caddy' },
+            { model: 'caddy2', name: 'Caddy (Bunker)' },
+            { model: 'caddy3', name: 'Caddy (Utility)' },
+            { model: 'cutter', name: 'Cutter' },
+            { model: 'docktug', name: 'Dock Tug' },
+            { model: 'dump', name: 'Dump' },
+            { model: 'flatbed', name: 'Flatbed' },
+            { model: 'guardian', name: 'Guardian' },
+            { model: 'handler', name: 'Dock Handler' },
+            { model: 'mixer', name: 'Cement Mixer' },
+            { model: 'mixer2', name: 'Mixer' },
+            { model: 'rubble', name: 'Rubble' },
+            { model: 'tiptruck', name: 'Tip Truck' },
+            { model: 'tiptruck2', name: 'Tip Truck 2' }
+        ],
+        utility: [
+            { model: 'airtug', name: 'Airtug' },
+            { model: 'forklift', name: 'Forklift' },
+            { model: 'mower', name: 'Mower' },
+            { model: 'ripley', name: 'Ripley' },
+            { model: 'sadler', name: 'Sadler' },
+            { model: 'sadler2', name: 'Sadler (Snow)' },
+            { model: 'scrap', name: 'Scrap Truck' },
+            { model: 'towtruck', name: 'Tow Truck' },
+            { model: 'towtruck2', name: 'Tow Truck (Large)' },
+            { model: 'tractor', name: 'Tractor' },
+            { model: 'tractor2', name: 'Field Master' },
+            { model: 'tractor3', name: 'Tractor (Snow)' },
+            { model: 'utillitruck', name: 'Utility Truck' },
+            { model: 'utillitruck2', name: 'Utility Truck 2' },
+            { model: 'utillitruck3', name: 'Utility Truck 3' }
+        ],
+        vans: [
+            { model: 'bison', name: 'Bison' },
+            { model: 'bison2', name: 'Bison (Utility)' },
+            { model: 'bison3', name: 'Bison (Snow)' },
+            { model: 'bobcatxl', name: 'Bobcat XL' },
+            { model: 'boxville', name: 'Boxville' },
+            { model: 'boxville2', name: 'Boxville (LSDS)' },
+            { model: 'boxville3', name: 'Boxville (Go Postal)' },
+            { model: 'boxville4', name: 'Boxville (Humane)' },
+            { model: 'boxville5', name: 'Boxville (Armored)' },
+            { model: 'burrito', name: 'Burrito' },
+            { model: 'burrito2', name: 'Burrito (Bugstars)' },
+            { model: 'burrito3', name: 'Burrito (Utility)' },
+            { model: 'burrito4', name: 'Burrito (Snow)' },
+            { model: 'burrito5', name: 'Burrito (Gang)' },
+            { model: 'camper', name: 'Camper' },
+            { model: 'gburrito', name: 'Gang Burrito' },
+            { model: 'gburrito2', name: 'Gang Burrito (Lost)' },
+            { model: 'journey', name: 'Journey' },
+            { model: 'minivan', name: 'Minivan' },
+            { model: 'minivan2', name: 'Minivan Custom' },
+            { model: 'paradise', name: 'Paradise' },
+            { model: 'pony', name: 'Pony' },
+            { model: 'pony2', name: 'Pony (Carpet)' },
+            { model: 'rumpo', name: 'Rumpo' },
+            { model: 'rumpo2', name: 'Rumpo (Deludamol)' },
+            { model: 'rumpo3', name: 'Rumpo Custom' },
+            { model: 'speedo', name: 'Speedo' },
+            { model: 'speedo2', name: 'Clown Van' },
+            { model: 'speedo4', name: 'Speedo Custom' },
+            { model: 'surfer', name: 'Surfer' },
+            { model: 'surfer2', name: 'Surfer (Rusty)' },
+            { model: 'taco', name: 'Taco Van' },
+            { model: 'youga', name: 'Youga' },
+            { model: 'youga2', name: 'Youga Classic' },
+            { model: 'youga3', name: 'Youga Classic 4x4' }
+        ],
+        cycles: [
+            { model: 'bmx', name: 'BMX' },
+            { model: 'cruiser', name: 'Cruiser' },
+            { model: 'fixter', name: 'Fixter' },
+            { model: 'scorcher', name: 'Scorcher' },
+            { model: 'tribike', name: 'Whippet Race Bike' },
+            { model: 'tribike2', name: 'Endurex Race Bike' },
+            { model: 'tribike3', name: 'Tri-Cycles Race Bike' }
+        ],
+        service: [
+            { model: 'airbus', name: 'Airport Bus' },
+            { model: 'brickade', name: 'Brickade' },
+            { model: 'bus', name: 'Bus' },
+            { model: 'coach', name: 'Coach' },
+            { model: 'festivalbus', name: 'Festival Bus' },
+            { model: 'limo2', name: 'Turreted Limo' },
+            { model: 'rallytruck', name: 'Rally Truck' },
+            { model: 'rentbus', name: 'Rental Shuttle Bus' },
+            { model: 'taxi', name: 'Taxi' },
+            { model: 'tourbus', name: 'Tour Bus' },
+            { model: 'trash', name: 'Trashmaster' },
+            { model: 'trash2', name: 'Trashmaster (Rusty)' },
+            { model: 'wastelander', name: 'Wastelander' }
+        ],
+        commercial: [
+            { model: 'benson', name: 'Benson' },
+            { model: 'biff', name: 'Biff' },
+            { model: 'hauler', name: 'Hauler' },
+            { model: 'hauler2', name: 'Hauler Custom' },
+            { model: 'mule', name: 'Mule' },
+            { model: 'mule2', name: 'Mule (Armored)' },
+            { model: 'mule3', name: 'Mule (Heist)' },
+            { model: 'mule4', name: 'Mule Custom' },
+            { model: 'packer', name: 'Packer' },
+            { model: 'phantom', name: 'Phantom' },
+            { model: 'phantom2', name: 'Phantom Wedge' },
+            { model: 'phantom3', name: 'Phantom Custom' },
+            { model: 'pounder', name: 'Pounder' },
+            { model: 'pounder2', name: 'Pounder Custom' },
+            { model: 'stockade', name: 'Stockade' },
+            { model: 'stockade3', name: 'Stockade (Snow)' },
+            { model: 'terbyte', name: 'Terrorbyte' }
+        ],
+        openwheel: [
+            { model: 'formula', name: 'PR4' },
+            { model: 'formula2', name: 'R88' },
+            { model: 'openwheel1', name: 'BR8' },
+            { model: 'openwheel2', name: 'DR1' }
+        ],
         suvs: [
             { model: 'baller', name: 'Baller' },
             { model: 'baller2', name: 'Baller (Old)' },
@@ -1392,15 +1705,26 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     const categories = [
         { id: 'super', label: 'Super' },
         { id: 'sports', label: 'Sports' },
+        { id: 'sportsclassics', label: 'Classics' },
         { id: 'muscle', label: 'Muscle' },
-        { id: 'offroad', label: 'Off-Road' },
-        { id: 'motorcycles', label: 'Bikes' },
+        { id: 'coupes', label: 'Coupes' },
+        { id: 'sedans', label: 'Sedans' },
+        { id: 'compacts', label: 'Compacts' },
         { id: 'suvs', label: 'SUVs' },
+        { id: 'offroad', label: 'Off-Road' },
+        { id: 'vans', label: 'Vans' },
+        { id: 'motorcycles', label: 'Bikes' },
+        { id: 'cycles', label: 'Cycles' },
+        { id: 'commercial', label: 'Commercial' },
+        { id: 'industrial', label: 'Industrial' },
+        { id: 'utility', label: 'Utility' },
+        { id: 'service', label: 'Service' },
         { id: 'helicopters', label: 'Helis' },
         { id: 'planes', label: 'Planes' },
         { id: 'boats', label: 'Boats' },
         { id: 'emergency', label: 'Emergency' },
         { id: 'military', label: 'Military' },
+        { id: 'openwheel', label: 'Open Wheel' },
         { id: 'addons', label: 'Addons' }
     ];
 
@@ -2007,6 +2331,78 @@ function InlineQBXAction({ config, players, onClose }) {
     );
 }
 
+function InlineWeaponAttachments({ onClose }) {
+    const [weaponName, setWeaponName] = useState('');
+    const [rows, setRows] = useState([]);
+    const [busy, setBusy] = useState(false);
+
+    const refresh = useCallback(async () => {
+        const res = await fetchNui('es_admin:getWeaponAttachments');
+        const d = res && res.data;
+        if (d && d.ok) {
+            setWeaponName(d.weaponName || '');
+            setRows(Array.isArray(d.components) ? d.components : []);
+        } else {
+            setWeaponName('');
+            setRows([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    const toggle = async (h) => {
+        if (busy || !h) return;
+        setBusy(true);
+        try {
+            await fetchNui('es_admin:toggleWeaponAttachment', { componentHash: h });
+            await refresh();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return React.createElement('div', { className: 'admin-inline-weapon-attachments', onClick: (e) => e.stopPropagation() },
+        React.createElement('div', { className: 'admin-inline-spawner-extras-title' }, 'Attachments'),
+        React.createElement('div', { className: 'admin-inline-spawner-status-sub', style: { marginBottom: 8 } },
+            weaponName ? `Weapon: ${weaponName}` : 'Equip a weapon (in hand) to customize.'),
+        rows.length === 0
+            ? React.createElement('div', { className: 'admin-inline-spawner-extras-empty' },
+                weaponName ? 'No attachment slots found for this weapon.' : 'Nothing to show.')
+            : React.createElement('div', { className: 'admin-inline-spawner-extras-grid' },
+                rows.map((row) => React.createElement('button', {
+                    key: row.hash,
+                    type: 'button',
+                    className: `admin-inline-spawner-extra${row.on ? ' on' : ''}`,
+                    disabled: busy,
+                    onClick: (e) => {
+                        e.stopPropagation();
+                        toggle(row.hash);
+                    }
+                }, row.label || row.hash))
+            ),
+        React.createElement('div', { className: 'admin-inline-prompt-actions', style: { marginTop: 10 } },
+            React.createElement('button', {
+                type: 'button',
+                className: 'admin-button small',
+                onClick: (e) => {
+                    e.stopPropagation();
+                    refresh();
+                }
+            }, 'Refresh'),
+            React.createElement('button', {
+                type: 'button',
+                className: 'admin-button small',
+                onClick: (e) => {
+                    e.stopPropagation();
+                    onClose();
+                }
+            }, 'Close')
+        )
+    );
+}
+
 const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, allowed, onToggle, onSelect, onAction, onFavorite, isSelected, settings, onPromptSubmit, personalVehicles, addonVehicles, onSpawnVehicle, onDeleteVehicle, onSaveVehicle, onToggleSetting, onSpawnAnyVehicle, onPreviewAnyVehicle, onClearVehiclePreview, players, vehiclePreviewLaunch }) {
     const [expanded, setExpanded] = useState(false);
     const isToggle = action.type === 'toggle';
@@ -2016,6 +2412,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     const isPersonalVehicles = action.id === 'vehicle.personal';
     const isVehicleSpawner = action.id === 'vehicle.spawn';
     const isVehiclePreview = action.id === 'vehicle.preview';
+    const isWeaponAttachments = action.id === 'weapons.attachments';
     const isQBXAction = !!qbxActionConfigs[action.id];
     const isAction = action.type === 'action' || isPrompt;
     const isFavorite = favorites.includes(action.id);
@@ -2050,6 +2447,50 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
             role: 'group',
             'aria-label': action.label || 'Menu dock side'
         }, mkBtn('left', 'Left', 'panel-left'), mkBtn('right', 'Right', 'panel-right')));
+    }
+
+    if (action.type === 'color') {
+        const raw = typeof action.selected === 'string' ? action.selected : '#7170ff';
+        const v = normalizeHex6(raw) || '#7170ff';
+        controls.push(React.createElement('input', {
+            key: 'color',
+            type: 'color',
+            className: 'admin-color-input',
+            value: v,
+            disabled: !isAllowed,
+            'aria-label': action.label || 'Accent color',
+            onChange: (e) => onSelect(action, e.target.value)
+        }));
+    }
+
+    if (action.type === 'slider') {
+        const min = Number(action.min);
+        const max = Number(action.max);
+        const step = Number(action.step);
+        const safeStep = Number.isFinite(step) && step > 0 ? step : 1;
+        const lo = Number.isFinite(min) ? min : 0;
+        const hi = Number.isFinite(max) ? max : 100;
+        const rawVal = Number(action.selected);
+        const val = clamp(Number.isFinite(rawVal) ? rawVal : lo, lo, hi);
+        const label = formatSliderReadout(action, val);
+        controls.push(React.createElement('div', { key: 'slider', className: 'admin-slider' },
+            React.createElement('input', {
+                type: 'range',
+                min: lo,
+                max: hi,
+                step: safeStep,
+                value: val,
+                disabled: !isAllowed,
+                'aria-valuemin': lo,
+                'aria-valuemax': hi,
+                'aria-valuenow': val,
+                onChange: (e) => {
+                    const next = safeStep < 1 ? parseFloat(e.target.value) : parseFloat(e.target.value);
+                    if (Number.isFinite(next)) onSelect(action, next);
+                }
+            }),
+            React.createElement('span', { className: 'admin-slider-value' }, label)
+        ));
     }
 
     if (isSelect) {
@@ -2108,7 +2549,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
         // For prompts, personal vehicles, vehicle spawner, and QBX actions, toggle inline expansion
         const handleButtonClick = (e) => {
             if (e) e.stopPropagation();
-            if (isPrompt || isPersonalVehicles || isVehicleSpawner || isVehiclePreview || isQBXAction) {
+            if (isPrompt || isPersonalVehicles || isVehicleSpawner || isVehiclePreview || isQBXAction || isWeaponAttachments) {
                 setExpanded(!expanded);
             } else {
                 onAction(action);
@@ -2138,20 +2579,20 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     const handleDoubleClick = (e) => {
         if (!isAllowed) return;
         if (settings.doubleClickToRun && (isAction || isToggle)) {
-            if (isAction && !isPrompt && !isPersonalVehicles && !isVehicleSpawner && !isVehiclePreview && !isQBXAction) onAction(action);
+            if (isAction && !isPrompt && !isPersonalVehicles && !isVehicleSpawner && !isVehiclePreview && !isQBXAction && !isWeaponAttachments) onAction(action);
             if (isToggle) onToggle(action, !isEnabled);
         }
     };
 
     const handleClick = (e) => {
         if (!isAllowed) return;
-        if (isSelect || isDock) return;
+        if (isSelect || isDock || action.type === 'slider' || action.type === 'color') return;
 
-        if (e.target.closest('.admin-select') || e.target.closest('.admin-slider') || e.target.closest('.admin-button') || e.target.closest('.admin-action-chevron') || e.target.closest('.admin-toggle') || e.target.closest('.admin-option-toggle') || e.target.closest('.admin-action-star') || e.target.closest('.admin-inline-prompt') || e.target.closest('.admin-inline-vehicles') || e.target.closest('.admin-inline-spawner') || e.target.closest('.admin-inline-spawner-extra') || e.target.closest('.admin-inline-qbx') || e.target.closest('.admin-dock-segmented')) {
+        if (e.target.closest('.admin-select') || e.target.closest('.admin-slider') || e.target.closest('.admin-color-input') || e.target.closest('.admin-button') || e.target.closest('.admin-action-chevron') || e.target.closest('.admin-toggle') || e.target.closest('.admin-option-toggle') || e.target.closest('.admin-action-star') || e.target.closest('.admin-inline-prompt') || e.target.closest('.admin-inline-vehicles') || e.target.closest('.admin-inline-spawner') || e.target.closest('.admin-inline-spawner-extra') || e.target.closest('.admin-inline-qbx') || e.target.closest('.admin-inline-weapon-attachments') || e.target.closest('.admin-dock-segmented')) {
             return;
         }
 
-        if (isPrompt || isPersonalVehicles || isVehicleSpawner || isVehiclePreview || isQBXAction) {
+        if (isPrompt || isPersonalVehicles || isVehicleSpawner || isVehiclePreview || isQBXAction || isWeaponAttachments) {
             setExpanded(!expanded);
         } else if (isAction) {
             onAction(action);
@@ -2235,6 +2676,9 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
             config: qbxActionConfigs[action.id],
             players: players,
             onClose: () => setExpanded(false)
+        }),
+        expanded && isWeaponAttachments && React.createElement(InlineWeaponAttachments, {
+            onClose: () => setExpanded(false)
         })
     );
 });
@@ -2271,45 +2715,51 @@ function Modal({ title, description, fields, onCancel, onConfirm }) {
         }
     };
 
-    return React.createElement('div', { className: 'admin-modal', onClick: onCancel },
-        React.createElement('div', { className: 'admin-modal-card', onClick: (e) => e.stopPropagation() },
-            React.createElement('div', { className: 'admin-modal-title' }, title),
-            description && React.createElement('div', { className: 'admin-modal-field admin-modal-description' },
-                React.createElement('p', { className: 'admin-modal-description-text' }, description)
-            ),
-            fields.map((field, index) => React.createElement('div', { className: 'admin-modal-field', key: field.name },
-                React.createElement('label', null, field.label),
-                React.createElement('input', {
-                    value: values[field.name] || '',
-                    placeholder: field.placeholder || '',
-                    autoFocus: index === 0,
-                    onKeyDown: handleKeyDown,
-                    onChange: (e) => handleChange(field.name, e.target.value)
-                })
-            )),
-            React.createElement('div', { className: 'admin-modal-actions' },
-                React.createElement('button', { className: 'admin-button danger', onClick: onCancel }, 'Cancel'),
-                React.createElement('button', {
-                    className: 'admin-button success',
-                    onClick: () => onConfirm(values)
-                }, 'Confirm')
+    return createPortal(
+        React.createElement('div', { className: 'admin-modal', onClick: onCancel },
+            React.createElement('div', { className: 'admin-modal-card', onClick: (e) => e.stopPropagation() },
+                React.createElement('div', { className: 'admin-modal-title' }, title),
+                description && React.createElement('div', { className: 'admin-modal-field admin-modal-description' },
+                    React.createElement('p', { className: 'admin-modal-description-text' }, description)
+                ),
+                fields.map((field, index) => React.createElement('div', { className: 'admin-modal-field', key: field.name },
+                    React.createElement('label', null, field.label),
+                    React.createElement('input', {
+                        value: values[field.name] || '',
+                        placeholder: field.placeholder || '',
+                        autoFocus: index === 0,
+                        onKeyDown: handleKeyDown,
+                        onChange: (e) => handleChange(field.name, e.target.value)
+                    })
+                )),
+                React.createElement('div', { className: 'admin-modal-actions' },
+                    React.createElement('button', { className: 'admin-button danger', onClick: onCancel }, 'Cancel'),
+                    React.createElement('button', {
+                        className: 'admin-button success',
+                        onClick: () => onConfirm(values)
+                    }, 'Confirm')
+                )
             )
-        )
+        ),
+        document.body
     );
 }
 
 function ConfirmModal({ title, message, onCancel, onConfirm }) {
-    return React.createElement('div', { className: 'admin-modal' },
-        React.createElement('div', { className: 'admin-modal-card' },
-            React.createElement('div', { className: 'admin-modal-title' }, title || 'Are you sure?'),
-            React.createElement('div', { className: 'admin-modal-field admin-modal-description' },
-                React.createElement('p', { className: 'admin-modal-description-text' }, message || 'This action cannot be undone.')
-            ),
-            React.createElement('div', { className: 'admin-modal-actions' },
-                React.createElement('button', { className: 'admin-button', onClick: onCancel }, 'Cancel'),
-                React.createElement('button', { className: 'admin-button danger', onClick: onConfirm }, 'Confirm')
+    return createPortal(
+        React.createElement('div', { className: 'admin-modal' },
+            React.createElement('div', { className: 'admin-modal-card' },
+                React.createElement('div', { className: 'admin-modal-title' }, title || 'Are you sure?'),
+                React.createElement('div', { className: 'admin-modal-field admin-modal-description' },
+                    React.createElement('p', { className: 'admin-modal-description-text' }, message || 'This action cannot be undone.')
+                ),
+                React.createElement('div', { className: 'admin-modal-actions' },
+                    React.createElement('button', { className: 'admin-button', onClick: onCancel }, 'Cancel'),
+                    React.createElement('button', { className: 'admin-button danger', onClick: onConfirm }, 'Confirm')
+                )
             )
-        )
+        ),
+        document.body
     );
 }
 
@@ -4808,8 +5258,14 @@ function App() {
             if (action.framework === 'qbx' && (!frameworkInfo || !frameworkInfo.hasQBX)) return null;
             if (action.tab === 'inventory' && (!frameworkInfo || !frameworkInfo.hasInventory)) return null;
             if (action.tab === 'garage' && (!frameworkInfo || !frameworkInfo.hasGarage)) return null;
+            if (action.id === 'options.menuAccentColor') {
+                return { ...action, selected: normalizeHex6(settings.menuAccentColor) || '#7170ff' };
+            }
             if (action.id === 'options.uiScale') return { ...action, selected: settings.uiScale };
-            if (action.id === 'options.uiOpacity') return { ...action, selected: settings.uiOpacity };
+            if (action.id === 'options.uiOpacity') {
+                const o = Number(settings.uiOpacity);
+                return { ...action, selected: Number.isFinite(o) ? o : 0.94 };
+            }
             if (action.id === 'options.speedHudUnits') return { ...action, selected: settings.speedHudUnits || 'mph' };
             if (action.id === 'options.speedHudPosition') return { ...action, selected: settings.speedHudPosition || 'top-left' };
             if (action.id === 'options.menuPosition') return { ...action, selected: dockPosition };
@@ -4860,14 +5316,15 @@ function App() {
     const applySettings = useCallback((nextSettings) => {
         const rawScale = Number(nextSettings.uiScale) || 1.0;
         const uiScale = Math.min(1.6, Math.max(1.0, rawScale));
-        const rawOpacity = Number(nextSettings.uiOpacity) || 0.94;
-        const uiOpacity = Math.min(1.0, Math.max(0.8, rawOpacity));
+        const rawOpacity = Number(nextSettings.uiOpacity);
+        const uiOpacity = Math.min(1.0, Math.max(0.35, Number.isFinite(rawOpacity) ? rawOpacity : 0.94));
         // Bake the admin scale into --es-ui-scale so the element's actual DOM size
         // matches its visual size
         const baseScale = getUiScale();
         document.documentElement.style.setProperty('--es-admin-scale', uiScale);
         document.documentElement.style.setProperty('--es-ui-scale', baseScale * uiScale);
-        document.documentElement.style.setProperty('--es-admin-opacity', uiOpacity);
+        document.documentElement.style.setProperty('--es-admin-opacity', String(uiOpacity));
+        applyMenuAccentCss(nextSettings.menuAccentColor || '#7170ff');
     }, []);
 
     const setTypingState = useCallback((isTyping) => {
@@ -5236,7 +5693,7 @@ function App() {
             const isEnabled = toggles[action.id] === true;
             setToggles(prev => ({ ...prev, [action.id]: !isEnabled }));
             fetchNui('es_admin:toggle', { id: action.id, enabled: !isEnabled });
-        } else if (action.type === 'dock') {
+        } else if (action.type === 'dock' || action.type === 'slider' || action.type === 'color') {
             return;
         } else {
             queueAction(action);
@@ -5267,6 +5724,10 @@ function App() {
             setSettings((prev) => ({ ...prev, menuPosition: next }));
             fetchNui('es_admin:select', { id: action.id, value: next });
             return;
+        }
+        if (action.id.startsWith('options.')) {
+            const key = action.id.replace('options.', '');
+            setSettings((prev) => ({ ...prev, [key]: value }));
         }
         queueAction(action, { id: action.id, value }, 'es_admin:select');
     }, [queueAction]);

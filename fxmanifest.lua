@@ -9,6 +9,7 @@ description 'Admin/dev menu with QBX framework support'
 shared_scripts {
     '@es_lib/init.lua',
     'shared/config.lua',
+    'shared/weapon_component_hashes.lua',
     'shared/bridge.lua',
     'shared/actions.lua',
 }

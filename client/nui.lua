@@ -181,6 +181,26 @@ RegisterNUICallback('es_admin:getPreviewVehicleExtras', function(_, cb)
     cb({ ok = true, extras = list })
 end)
 
+RegisterNUICallback('es_admin:getWeaponAttachments', function(_, cb)
+    local payload = Admin.getWeaponAttachmentList and Admin.getWeaponAttachmentList() or { weaponName = '', components = {} }
+    cb({
+        ok = true,
+        weaponName = payload.weaponName or '',
+        components = payload.components or {},
+    })
+end)
+
+RegisterNUICallback('es_admin:toggleWeaponAttachment', function(data, cb)
+    local h = trimString(data and data.componentHash, 192)
+    if not h then
+        replyError(cb, 'invalid_component')
+        return
+    end
+
+    local ok = Admin.toggleWeaponAttachment and Admin.toggleWeaponAttachment(h)
+    cb({ ok = ok == true })
+end)
+
 RegisterNUICallback('es_admin:togglePreviewVehicleExtra', function(data, cb)
     local id = toInteger(data and data.extraId, 1, 99)
     if not id then
