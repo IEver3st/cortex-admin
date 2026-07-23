@@ -350,6 +350,15 @@ local runtimeUiCache = {
     playerListSignature = nil,
 }
 
+local menuDataCache = {
+    permissionsRequestedAt = 0,
+    addonVehiclesRequestedAt = 0,
+    addonVehiclesLoaded = false,
+}
+
+local PERMISSIONS_REFRESH_MS = 10000
+local ADDON_VEHICLES_REFRESH_MS = 300000
+
 local function buildPersonalVehiclesSummary(vehicles)
     local summary = {}
     for i = 1, #vehicles do
@@ -645,6 +654,27 @@ end
 
 EsAdmin.sendUiState = sendUiState
 
+local function requestMenuPermissions(force)
+    local now = GetGameTimer()
+    if force or now - menuDataCache.permissionsRequestedAt > PERMISSIONS_REFRESH_MS then
+        menuDataCache.permissionsRequestedAt = now
+        TriggerServerEvent('es_admin:server:requestPermissions')
+    end
+end
+
+local function requestAddonVehiclesIfNeeded(force)
+    local now = GetGameTimer()
+    local hasAddonVehicles = type(cachedData.addonVehicles) == 'table' and #cachedData.addonVehicles > 0
+    if force or not menuDataCache.addonVehiclesLoaded or not hasAddonVehicles or now - menuDataCache.addonVehiclesRequestedAt > ADDON_VEHICLES_REFRESH_MS then
+        menuDataCache.addonVehiclesRequestedAt = now
+        TriggerServerEvent('es_admin:server:requestAddonVehicles')
+        return true
+    end
+    return false
+end
+
+EsAdmin.requestAddonVehiclesIfNeeded = requestAddonVehiclesIfNeeded
+
 -- ============================================================================
 -- MENU OPEN/CLOSE
 -- ============================================================================
@@ -728,6 +758,8 @@ local function setOpen(open)
         sendUiState()
         SendNUIMessage({ action = 'es_admin:open' })
         startMenuControlThread()
+        requestMenuPermissions(false)
+        requestAddonVehiclesIfNeeded(false)
         local m = EsAdmin.getPreviewVehicleModel and EsAdmin.getPreviewVehicleModel() or nil
         if type(m) == 'string' and m ~= '' then
             SendNUIMessage({
@@ -750,10 +782,9 @@ EsAdmin.setOpen = setOpen
 
 local function openVehiclePreviewPage(model)
     if not state.open then
-        TriggerServerEvent('es_admin:server:requestPermissions')
-        TriggerServerEvent('es_admin:server:requestAddonVehicles')
         setOpen(true)
     end
+    requestAddonVehiclesIfNeeded(false)
 
     SendNUIMessage({
         action = 'es_admin:vehiclePreviewPage',
@@ -768,10 +799,6 @@ EsAdmin.openVehiclePreviewPage = openVehiclePreviewPage
 local function toggleMenu()
     local opening = not state.open
     setOpen(opening)
-    if opening then
-        TriggerServerEvent('es_admin:server:requestPermissions')
-        TriggerServerEvent('es_admin:server:requestAddonVehicles')
-    end
 end
 
 RegisterCommand(Config.Command, function()
@@ -780,11 +807,68 @@ end, false)
 
 RegisterKeyMapping(Config.Command, 'Open admin menu', 'keyboard', Config.Keybind)
 
+local COMMAND_PERMISSION_WAIT_MS = 750
+
+local function hasCommandPermission(actionId, label)
+    if state.allowed[actionId] == true then
+        return true
+    end
+
+    if state.allowed[actionId] == nil then
+        requestMenuPermissions(true)
+        local deadline = GetGameTimer() + COMMAND_PERMISSION_WAIT_MS
+        while state.allowed[actionId] == nil and GetGameTimer() < deadline do
+            Wait(25)
+        end
+
+        if state.allowed[actionId] == true then
+            return true
+        end
+    end
+
+    notify('error', ('No permission for %s.'):format(label or actionId))
+    return false
+end
+
+local function runCommandAction(actionId, data, label)
+    if not hasCommandPermission(actionId, label) then
+        return
+    end
+
+    if EsAdmin.executeAction then
+        EsAdmin.executeAction(actionId, data or {})
+    end
+end
+
+local function runCommandToggle(actionId, label)
+    if not hasCommandPermission(actionId, label) then
+        return
+    end
+
+    if EsAdmin.toggleAction then
+        EsAdmin.toggleAction(actionId, not EsAdmin.state.toggles[actionId])
+    end
+end
+
+local function runCommandSelect(actionId, value, label)
+    if not hasCommandPermission(actionId, label) then
+        return
+    end
+
+    if EsAdmin.selectAction then
+        EsAdmin.selectAction(actionId, value)
+    end
+end
+
 -- ============================================================================
 -- TELEPORT COMMAND (Smart parsing)
 -- ============================================================================
 
 RegisterCommand('tp', function(_, args)
+    if not hasCommandPermission('teleport.coords', 'teleport') then
+        return
+    end
+
     if #args == 0 then
         notify('error', 'Usage: /tp X Y [Z] or /tp X=-513.2, Y=-1943.2')
         return
@@ -847,19 +931,25 @@ RegisterCommand('tp', function(_, args)
     end
 end, false)
 
+RegisterCommand('tpm', function()
+    runCommandAction('teleport.waypoint', nil, 'waypoint teleport')
+end, false)
+
+RegisterCommand('tpmarker', function()
+    runCommandAction('teleport.marker', nil, 'marker teleport')
+end, false)
+
+RegisterCommand('tpback', function()
+    runCommandAction('teleport.back', nil, 'teleport back')
+end, false)
+
 -- /parachute [0-13] — give parachute + canopy tint (matches Weapons → Parachute menu)
 RegisterCommand('parachute', function(_, args)
-    if not state.allowed['weapons.parachute'] then
-        notify('error', 'No permission for parachute.')
-        return
-    end
     local tint = 0
     if args and args[1] then
         tint = tonumber(args[1]) or 0
     end
-    if EsAdmin.selectAction then
-        EsAdmin.selectAction('weapons.parachute', tint)
-    end
+    runCommandSelect('weapons.parachute', tint, 'parachute')
 end, false)
 
 -- ============================================================================
@@ -868,14 +958,53 @@ end, false)
 
 -- Noclip command
 RegisterCommand('noclip', function()
-    local newState = not EsAdmin.state.toggles['player.noclip']
-    EsAdmin.toggleAction('player.noclip', newState)
+    runCommandToggle('player.noclip', 'noclip')
 end, false)
 
 RegisterKeyMapping('noclip', 'Toggle Noclip', 'keyboard', 'F2')
 
+RegisterCommand('god', function()
+    runCommandToggle('player.godmode', 'god mode')
+end, false)
+
+RegisterCommand('vanish', function()
+    runCommandToggle('player.invisible', 'invisibility')
+end, false)
+
+RegisterCommand('heal', function()
+    runCommandAction('player.heal', nil, 'heal')
+end, false)
+
+RegisterCommand('armor', function()
+    runCommandAction('player.armor', nil, 'armor')
+end, false)
+
+RegisterCommand('revive', function()
+    runCommandAction('player.revive', nil, 'revive')
+end, false)
+
+RegisterCommand('coords', function()
+    runCommandAction('player.copyCoords', nil, 'copy coords')
+end, false)
+
+RegisterCommand('copycoords', function()
+    runCommandAction('player.copyCoords', nil, 'copy coords')
+end, false)
+
+RegisterCommand('heading', function()
+    runCommandAction('player.copyHeading', nil, 'copy heading')
+end, false)
+
+RegisterCommand('copyheading', function()
+    runCommandAction('player.copyHeading', nil, 'copy heading')
+end, false)
+
 -- Delete vehicle command (Optimized with es_lib)
 RegisterCommand('dv', function()
+    if not hasCommandPermission('vehicle.delete', 'delete vehicle') then
+        return
+    end
+
     local ped = PlayerPedId()
     local vehicle = GetVehiclePedIsIn(ped, false)
     
@@ -902,7 +1031,113 @@ RegisterCommand('dv', function()
     end
 end, false)
 
+RegisterCommand('delveh', function()
+    ExecuteCommand('dv')
+end, false)
+
+RegisterCommand('deleteveh', function()
+    ExecuteCommand('dv')
+end, false)
+
+local function spawnVehicleCommand(args)
+    local model = tableConcat(args or {}, ' ')
+    if type(model) == 'string' then
+        model = model:match('^%s*(.-)%s*$')
+    end
+
+    if not model or model == '' then
+        notify('error', 'Usage: /car [vehiclename]')
+        return
+    end
+
+    runCommandAction('vehicle.spawn', { model = model }, 'spawn vehicle')
+end
+
+RegisterCommand('car', function(_, args)
+    spawnVehicleCommand(args)
+end, false)
+
+RegisterCommand('veh', function(_, args)
+    spawnVehicleCommand(args)
+end, false)
+
+RegisterCommand('spawnveh', function(_, args)
+    spawnVehicleCommand(args)
+end, false)
+
+RegisterCommand('fix', function()
+    runCommandAction('vehicle.repair', nil, 'repair vehicle')
+end, false)
+
+RegisterCommand('fixveh', function()
+    runCommandAction('vehicle.repair', nil, 'repair vehicle')
+end, false)
+
+RegisterCommand('repair', function()
+    runCommandAction('vehicle.repair', nil, 'repair vehicle')
+end, false)
+
+RegisterCommand('repairveh', function()
+    runCommandAction('vehicle.repair', nil, 'repair vehicle')
+end, false)
+
+RegisterCommand('clean', function()
+    runCommandAction('vehicle.clean', nil, 'clean vehicle')
+end, false)
+
+RegisterCommand('cleanveh', function()
+    runCommandAction('vehicle.clean', nil, 'clean vehicle')
+end, false)
+
+RegisterCommand('flip', function()
+    runCommandAction('vehicle.flip', nil, 'flip vehicle')
+end, false)
+
+RegisterCommand('maxmods', function()
+    runCommandAction('vehicle.maxMods', nil, 'max vehicle mods')
+end, false)
+
+local function giveWeaponCommand(args)
+    local weapon = tableConcat(args or {}, ' ')
+    if type(weapon) == 'string' then
+        weapon = weapon:match('^%s*(.-)%s*$')
+    end
+
+    if not weapon or weapon == '' then
+        notify('error', 'Usage: /weapon [weapon_name]')
+        return
+    end
+
+    runCommandAction('weapons.giveCustom', { weapon = weapon }, 'give weapon')
+end
+
+RegisterCommand('weapon', function(_, args)
+    giveWeaponCommand(args)
+end, false)
+
+RegisterCommand('giveweapon', function(_, args)
+    giveWeaponCommand(args)
+end, false)
+
+RegisterCommand('ammo', function(_, args)
+    local ammo = args and args[1]
+    if not ammo or ammo == '' then
+        notify('error', 'Usage: /ammo [amount]')
+        return
+    end
+
+    runCommandAction('weapons.setAmmo', { ammo = ammo }, 'set ammo')
+end, false)
+
+RegisterCommand('clearweapons', function()
+    runCommandAction('weapons.removeAll', nil, 'remove weapons')
+end, false)
+
 RegisterCommand('preview', function(_, args)
+    if not hasCommandPermission('vehicle.preview', 'vehicle preview') then
+        return
+    end
+
     local model = tableConcat(args, ' ')
     if type(model) == 'string' then
         model = model:match('^%s*(.-)%s*$')
@@ -1184,12 +1419,17 @@ end
 
 RegisterNetEvent('es_admin:client:permissions', function(allowed)
     state.allowed = allowed or {}
-    sendUiState()
+    if state.open then
+        SendNUIMessage({
+            action = 'es_admin:setState',
+            data = { allowed = state.allowed }
+        })
+    end
 end)
 
 RegisterNetEvent('es_admin:client:setAddonVehicles', function(vehicles)
     cachedData.addonVehicles = normalizeAddonVehicles(vehicles)
-    print(('[es_admin] Received %d addon vehicles from server'):format(#cachedData.addonVehicles))
+    menuDataCache.addonVehiclesLoaded = true
     if state.open then
         SendNUIMessage({
             action = 'es_admin:setState',

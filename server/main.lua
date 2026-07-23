@@ -46,6 +46,8 @@ local allowedResourceActions = {
 }
 
 local uiPresence = {}
+local permissionCache = {}
+local PERMISSION_CACHE_MS = 10000
 
 local function trimString(value, maxLength)
     if type(value) ~= 'string' then
@@ -190,10 +192,22 @@ local function hasPermission(src, actionId)
 end
 
 local function buildPermissionSnapshot(src)
+    local now = GetGameTimer()
+    local cached = permissionCache[src]
+    if cached and now < cached.expiresAt then
+        return cached.allowed
+    end
+
     local allowed = {}
     for _, action in ipairs(Actions.actions) do
         allowed[action.id] = hasPermission(src, action.id)
     end
+
+    permissionCache[src] = {
+        allowed = allowed,
+        expiresAt = now + PERMISSION_CACHE_MS,
+    }
+
     return allowed
 end
 
@@ -371,6 +385,7 @@ end)
 
 AddEventHandler('playerDropped', function()
     uiPresence[source] = nil
+    permissionCache[source] = nil
 end)
 
 -- =============================================================================
@@ -413,6 +428,7 @@ local addonVehiclesCache = {
 }
 
 local ADDON_VEHICLES_CACHE_MS = 60000
+local VEHICLE_META_DATA_TYPE = 'VEHICLE_METADATA_FILE'
 
 local function trim(value)
     if type(value) ~= 'string' then
@@ -441,50 +457,27 @@ end
 local isWindows = package and package.config and package.config:sub(1, 1) == '\\' or false
 
 local function normalizePath(value)
-    return trim(value):gsub('\\', '/')
+    local normalized = trim(value):gsub('\\', '/')
+    normalized = normalized:gsub('/+', '/')
+    return normalized
 end
 
-local function resolveMetaDataSource(ownerResourceName, filePath)
-    local normalizedPath = normalizePath(stripQuotes(filePath))
-    if normalizedPath == '' then
+local function getResourceRoot(resourceName)
+    return normalizePath(GetResourcePath(resourceName) or '')
+end
+
+local function resolveResourceFile(resourceName, rawPath)
+    local path = normalizePath(stripQuotes(rawPath))
+    if path == '' then
         return nil, nil
     end
 
-    local linkedResource, linkedPath = normalizedPath:match('^@([^/\\]+)/(.+)$')
+    local linkedResource, linkedPath = path:match('^@([^/]+)/(.+)$')
     if linkedResource and linkedPath then
-        linkedResource = trim(linkedResource)
-        linkedPath = normalizePath(trim(linkedPath))
-        if linkedResource == '' or linkedPath == '' then
-            return nil, nil
-        end
-        return linkedResource, linkedPath
+        return trim(linkedResource), normalizePath(linkedPath)
     end
 
-    return ownerResourceName, normalizedPath
-end
-
-local function makeMetaTargetKey(dataResourceName, path)
-    return ('%s|%s'):format((dataResourceName or ''):lower(), (path or ''):lower())
-end
-
-local function addUniqueMetaTarget(out, seen, ownerResourceName, dataResourceName, rawPath)
-    local normalizedPath = normalizePath(stripQuotes(rawPath))
-    if normalizedPath == '' or trim(dataResourceName) == '' then
-        return false
-    end
-
-    local key = makeMetaTargetKey(dataResourceName, normalizedPath)
-    if seen[key] then
-        return false
-    end
-
-    seen[key] = true
-    out[#out + 1] = {
-        ownerResource = ownerResourceName,
-        dataResource = dataResourceName,
-        path = normalizedPath,
-    }
-    return true
+    return resourceName, path
 end
 
 local function parseDataFileEntry(entry)
@@ -502,56 +495,21 @@ local function parseDataFileEntry(entry)
     return dataType, filePath
 end
 
-local function buildWildcardFallbackCandidates(wildcardPattern)
-    local candidates = {}
-    local seen = {}
-    local pattern = normalizePath(stripQuotes(wildcardPattern))
-    if pattern == '' then
-        return candidates
+local function parseDataFileExtra(extra)
+    if type(extra) ~= 'string' or extra == '' then
+        return nil
     end
 
-    local basename = pattern:match('([^/]+)$') or 'vehicles.meta'
-    basename = basename:gsub('%*', '')
-    if basename == '' then
-        basename = 'vehicles.meta'
-    end
+    local filePath = extra:match('^%s*%[%s*"([^"]+)"')
+        or extra:match("^%s*%[%s*'([^']+)'")
+        or extra:match('"file"%s*:%s*"([^"]+)"')
+        or extra:match("'file'%s*:%s*'([^']+)'")
+        or extra:match('"filename"%s*:%s*"([^"]+)"')
+        or extra:match("'filename'%s*:%s*'([^']+)'")
+        or extra:match('"path"%s*:%s*"([^"]+)"')
+        or extra:match("'path'%s*:%s*'([^']+)'")
 
-    local compact = pattern
-    compact = compact:gsub('/%*%*/', '/')
-    compact = compact:gsub('%*%*/', '')
-    compact = compact:gsub('/%*', '/')
-    compact = compact:gsub('%*', '')
-    compact = compact:gsub('//+', '/')
-    compact = compact:gsub('^/', '')
-
-    local function push(path)
-        local normalized = normalizePath(path)
-        if normalized == '' then
-            return
-        end
-        local lowerPath = normalized:lower()
-        if seen[lowerPath] then
-            return
-        end
-        seen[lowerPath] = true
-        candidates[#candidates + 1] = normalized
-    end
-
-    if compact ~= '' then
-        push(compact)
-    end
-
-    local folder = compact:match('^(.*)/[^/]*$')
-    if folder and folder ~= '' then
-        push(folder .. '/' .. basename)
-    end
-
-    if basename ~= '' then
-        push('data/' .. basename)
-        push(basename)
-    end
-
-    return candidates
+    return filePath and stripQuotes(filePath) or nil
 end
 
 local function quotePath(path)
@@ -599,230 +557,277 @@ local function listFilesRecursively(absPath)
     return rows
 end
 
-local function pathMatchesWildcard(path, wildcardPattern)
-    local normalizedPath = normalizePath(path):lower()
-    local pattern = normalizePath(wildcardPattern):lower()
-
-    local firstStar = pattern:find('*', 1, true)
-    if not firstStar then
-        return normalizedPath == pattern
+local function getRelativeResourcePath(resourceRoot, absolutePath)
+    local root = normalizePath(resourceRoot)
+    local absolute = normalizePath(absolutePath)
+    if root == '' or absolute == '' then
+        return nil
     end
 
-    local lastStar = firstStar
-    local cursor = firstStar + 1
-    while true do
-        local pos = pattern:find('*', cursor, true)
-        if not pos then
-            break
-        end
-        lastStar = pos
-        cursor = pos + 1
+    if absolute:lower():sub(1, #root) ~= root:lower() then
+        return nil
     end
 
-    local prefix = pattern:sub(1, firstStar - 1)
-    if prefix ~= '' and normalizedPath:sub(1, #prefix) ~= prefix then
+    return normalizePath(absolute:sub(#root + 1):gsub('^/', ''))
+end
+
+local function wildcardToPattern(wildcard)
+    local pattern = normalizePath(wildcard):lower()
+    pattern = pattern:gsub('([%^%$%(%)%%%.%[%]%+%-%?])', '%%%1')
+    pattern = pattern:gsub('%*%*', '\0')
+    pattern = pattern:gsub('%*', '[^/]*')
+    pattern = pattern:gsub('\0', '.*')
+    return '^' .. pattern .. '$'
+end
+
+local function pathMatchesWildcard(path, wildcard)
+    return normalizePath(path):lower():match(wildcardToPattern(wildcard)) ~= nil
+end
+
+local function makeVehicleTargetKey(dataResourceName, path)
+    return ('%s|%s'):format((dataResourceName or ''):lower(), (path or ''):lower())
+end
+
+local function addVehicleMetaTarget(targets, seen, ownerResourceName, dataResourceName, path)
+    local normalized = normalizePath(path)
+    if trim(dataResourceName) == '' or normalized == '' then
         return false
     end
 
-    local suffix = pattern:sub(lastStar + 1)
-    if suffix ~= '' then
-        if #normalizedPath < #suffix then
-            return false
-        end
-        if normalizedPath:sub(-#suffix) ~= suffix then
-            return false
-        end
+    local key = makeVehicleTargetKey(dataResourceName, normalized)
+    if seen[key] then
+        return false
     end
 
+    seen[key] = true
+    targets[#targets + 1] = {
+        ownerResource = ownerResourceName,
+        dataResource = dataResourceName,
+        path = normalized,
+    }
     return true
 end
 
-local function collectWildcardMetaPathsFromMetadata(ownerResourceName, dataResourceName, wildcardPattern, seen, out, stats)
-    local function pushIfMatches(rawPath, sourceResourceName)
-        local resolvedDataResource, resolvedPath = resolveMetaDataSource(sourceResourceName, rawPath)
-        if not resolvedDataResource or not resolvedPath then
+local function getWildcardFallbackPaths(wildcardPath)
+    local paths = {}
+    local seen = {}
+
+    local function push(path)
+        local normalized = normalizePath(path):gsub('^/', '')
+        if normalized == '' or seen[normalized:lower()] then
             return
         end
-
-        local lowerPath = resolvedPath:lower()
-        if lowerPath:find('*', 1, true) then
-            return
-        end
-
-        if pathMatchesWildcard(lowerPath, wildcardPattern) then
-            local added = addUniqueMetaTarget(out, seen, ownerResourceName, resolvedDataResource, resolvedPath)
-            if added and ownerResourceName ~= resolvedDataResource then
-                stats.linkedMetadataTargets = stats.linkedMetadataTargets + 1
-            end
-        end
+        seen[normalized:lower()] = true
+        paths[#paths + 1] = normalized
     end
 
-    local fileKeys = { 'file', 'files' }
-    for i = 1, #fileKeys do
-        local key = fileKeys[i]
-        local count = GetNumResourceMetadata(dataResourceName, key) or 0
-        for index = 0, count - 1 do
-            local value = GetResourceMetadata(dataResourceName, key, index)
-            if type(value) == 'string' then
-                pushIfMatches(value, dataResourceName)
-            end
-        end
-    end
+    local compact = normalizePath(wildcardPath)
+    compact = compact:gsub('/%*%*/', '/')
+    compact = compact:gsub('%*%*/', '')
+    compact = compact:gsub('/%*', '/')
+    compact = compact:gsub('%*', '')
+    compact = compact:gsub('/+', '/')
 
-    local dataFileCount = GetNumResourceMetadata(dataResourceName, 'data_file') or 0
-    for i = 0, dataFileCount - 1 do
-        local entry = GetResourceMetadata(dataResourceName, 'data_file', i)
-        local dataType, filePath = parseDataFileEntry(entry)
-        if dataType == 'VEHICLE_METADATA_FILE' and filePath then
-            pushIfMatches(filePath, dataResourceName)
-        end
-    end
+    push(compact)
+    push('data/vehicles.meta')
+    push('vehicles.meta')
+
+    return paths
 end
 
-local function collectWildcardMetaPaths(ownerResourceName, dataResourceName, wildcardPattern, seen, out, stats)
-    collectWildcardMetaPathsFromMetadata(ownerResourceName, dataResourceName, wildcardPattern, seen, out, stats)
-
-    local resourcePath = normalizePath(GetResourcePath(dataResourceName) or '')
-    if resourcePath == '' then
+local function expandVehicleMetaPattern(ownerResourceName, dataResourceName, wildcardPath, targets, seen, stats)
+    local root = getResourceRoot(dataResourceName)
+    if root == '' then
         return
     end
 
-    local files = listFilesRecursively(resourcePath)
+    local before = #targets
+    local files = listFilesRecursively(root)
     for i = 1, #files do
-        local absolute = normalizePath(files[i])
-        if absolute ~= '' then
-            local lowerAbsolute = absolute:lower()
-            local lowerRoot = resourcePath:lower()
-            if lowerAbsolute:sub(1, #lowerRoot) == lowerRoot then
-                local relative = absolute:sub(#resourcePath + 1):gsub('^/', '')
-                local lowerRelative = relative:lower()
-                if pathMatchesWildcard(lowerRelative, wildcardPattern) then
-                    local added = addUniqueMetaTarget(out, seen, ownerResourceName, dataResourceName, relative)
-                    if added and ownerResourceName ~= dataResourceName then
-                        stats.linkedMetadataTargets = stats.linkedMetadataTargets + 1
-                    end
-                end
+        local relative = getRelativeResourcePath(root, files[i])
+        if relative and pathMatchesWildcard(relative, wildcardPath) then
+            if addVehicleMetaTarget(targets, seen, ownerResourceName, dataResourceName, relative) then
+                stats.resolvedMetaFiles = stats.resolvedMetaFiles + 1
+            end
+        end
+    end
+
+    if #targets > before then
+        return
+    end
+
+    local fallbackPaths = getWildcardFallbackPaths(wildcardPath)
+    for i = 1, #fallbackPaths do
+        local path = fallbackPaths[i]
+        if LoadResourceFile(dataResourceName, path) then
+            if addVehicleMetaTarget(targets, seen, ownerResourceName, dataResourceName, path) then
+                stats.resolvedMetaFiles = stats.resolvedMetaFiles + 1
             end
         end
     end
 end
 
-local function getVehicleMetaTargets(resourceName, stats)
-    local targets = {}
-    local seen = {}
-    local count = GetNumResourceMetadata(resourceName, 'data_file') or 0
-    local hasVehicleMetadataDeclaration = false
+local function collectVehicleMetaTargetsFromManifest(resourceName, targets, seen, stats)
+    local manifest = LoadResourceFile(resourceName, 'fxmanifest.lua')
+        or LoadResourceFile(resourceName, '__resource.lua')
+    if type(manifest) ~= 'string' or manifest == '' then
+        return false
+    end
 
-    for i = 0, count - 1 do
-        local entry = GetResourceMetadata(resourceName, 'data_file', i)
-        local dataType, filePath = parseDataFileEntry(entry)
-        if dataType == 'VEHICLE_METADATA_FILE' and filePath then
-            hasVehicleMetadataDeclaration = true
-            local dataResourceName, resolvedPath = resolveMetaDataSource(resourceName, filePath)
+    local foundDeclaration = false
+    for line in manifest:gmatch('[^\r\n]+') do
+        local dataType, filePath = line:match("data_file%s*%(%s*['\"]([^'\"]+)['\"]%s*,?%s*['\"]([^'\"]+)['\"]")
+        if not dataType then
+            dataType, filePath = line:match("data_file%s+['\"]([^'\"]+)['\"]%s+['\"]([^'\"]+)['\"]")
+        end
 
-            if dataResourceName and resolvedPath and resolvedPath ~= '' then
+        if stripQuotes(dataType):upper() == VEHICLE_META_DATA_TYPE then
+            foundDeclaration = true
+            stats.vehicleMetaDeclarations = stats.vehicleMetaDeclarations + 1
+
+            local dataResourceName, resolvedPath = resolveResourceFile(resourceName, filePath)
+            if dataResourceName and resolvedPath then
                 if resolvedPath:find('*', 1, true) then
-                    local countBefore = #targets
-                    collectWildcardMetaPaths(resourceName, dataResourceName, resolvedPath, seen, targets, stats)
-
-                    if #targets == countBefore then
-                        local fallbackCandidates = buildWildcardFallbackCandidates(resolvedPath)
-                        for idx = 1, #fallbackCandidates do
-                            local candidate = fallbackCandidates[idx]
-                            local content = LoadResourceFile(dataResourceName, candidate)
-                            if content and content ~= '' then
-                                local added = addUniqueMetaTarget(targets, seen, resourceName, dataResourceName, candidate)
-                                if added and resourceName ~= dataResourceName then
-                                    stats.linkedMetadataTargets = stats.linkedMetadataTargets + 1
-                                end
-                            end
-                        end
+                    expandVehicleMetaPattern(resourceName, dataResourceName, resolvedPath, targets, seen, stats)
+                elseif LoadResourceFile(dataResourceName, resolvedPath) then
+                    if addVehicleMetaTarget(targets, seen, resourceName, dataResourceName, resolvedPath) then
+                        stats.resolvedMetaFiles = stats.resolvedMetaFiles + 1
                     end
                 else
-                    local added = addUniqueMetaTarget(targets, seen, resourceName, dataResourceName, resolvedPath)
-                    if added and resourceName ~= dataResourceName then
-                        stats.linkedMetadataTargets = stats.linkedMetadataTargets + 1
-                    end
+                    stats.missingMetaFiles = stats.missingMetaFiles + 1
                 end
             end
         end
     end
 
-    if #targets == 0 and hasVehicleMetadataDeclaration then
-        -- Fallback for wildcard declarations that do not resolve to direct file paths.
-        collectWildcardMetaPaths(resourceName, resourceName, '*vehicles.meta', seen, targets, stats)
-    end
-
-    return targets, hasVehicleMetadataDeclaration
+    return foundDeclaration
 end
 
-local function parseVehiclesMeta(xml, ownerResourceName, dataResourceName, metaPath, byModel, stats, metadataModelsByResource)
+local function collectVehicleMetaTargets(resourceName, targets, seen, stats)
+    local count = GetNumResourceMetadata(resourceName, 'data_file') or 0
+    local foundDeclaration = false
+
+    for i = 0, count - 1 do
+        local rawEntry = GetResourceMetadata(resourceName, 'data_file', i)
+        local dataType, filePath = parseDataFileEntry(rawEntry)
+        if not dataType and type(rawEntry) == 'string' then
+            dataType = stripQuotes(rawEntry):upper()
+            filePath = parseDataFileExtra(GetResourceMetadata(resourceName, 'data_file_extra', i))
+        end
+
+        if dataType == VEHICLE_META_DATA_TYPE and filePath then
+            foundDeclaration = true
+            stats.vehicleMetaDeclarations = stats.vehicleMetaDeclarations + 1
+
+            local dataResourceName, resolvedPath = resolveResourceFile(resourceName, filePath)
+            if dataResourceName and resolvedPath then
+                if resolvedPath:find('*', 1, true) then
+                    expandVehicleMetaPattern(resourceName, dataResourceName, resolvedPath, targets, seen, stats)
+                elseif LoadResourceFile(dataResourceName, resolvedPath) then
+                    if addVehicleMetaTarget(targets, seen, resourceName, dataResourceName, resolvedPath) then
+                        stats.resolvedMetaFiles = stats.resolvedMetaFiles + 1
+                    end
+                else
+                    stats.missingMetaFiles = stats.missingMetaFiles + 1
+                end
+            end
+        end
+    end
+
+    if not foundDeclaration then
+        foundDeclaration = collectVehicleMetaTargetsFromManifest(resourceName, targets, seen, stats)
+    end
+
+    return foundDeclaration
+end
+
+local function readXmlTag(block, tagName)
+    local value = block:match('<%s*' .. tagName .. '%s*>%s*([^<]-)%s*<%s*/%s*' .. tagName .. '%s*>')
+    return trim(value)
+end
+
+local function parseVehiclesMeta(xml, target, byModel, stats, metadataResources)
     if type(xml) ~= 'string' or xml == '' then
         return
     end
 
-    for item in xml:gmatch('<Item.->(.-)</Item>') do
-        local modelName = trim(item:match('<modelName>%s*([^<]+)%s*</modelName>'))
-        if modelName ~= '' then
-            local normalizedModel = modelName:lower()
-            if not byModel[normalizedModel] then
-                local gameName = trim(item:match('<gameName>%s*([^<]+)%s*</gameName>'))
-                local makeName = trim(item:match('<vehicleMakeName>%s*([^<]+)%s*</vehicleMakeName>'))
-                local label = gameName ~= '' and gameName or prettifyModelName(normalizedModel)
+    for item in xml:gmatch('<%s*Item[^>]*>(.-)<%s*/%s*Item%s*>') do
+        local model = readXmlTag(item, 'modelName'):lower()
+        if model ~= '' then
+            if byModel[model] then
+                stats.duplicateModels = stats.duplicateModels + 1
+            else
+                local gameName = readXmlTag(item, 'gameName')
+                local makeName = readXmlTag(item, 'vehicleMakeName')
 
-                byModel[normalizedModel] = {
-                    model = normalizedModel,
-                    name = label,
+                byModel[model] = {
+                    model = model,
+                    name = gameName ~= '' and gameName or prettifyModelName(model),
                     gameName = gameName ~= '' and gameName or nil,
                     makeName = makeName ~= '' and makeName or nil,
-                    resource = dataResourceName,
-                    metaPath = metaPath,
+                    resource = target.ownerResource,
+                    metaPath = target.path,
                     sourceType = 'metadata',
-                    ownerResource = ownerResourceName,
-                    dataResource = dataResourceName,
+                    ownerResource = target.ownerResource,
+                    dataResource = target.dataResource,
                 }
+
                 stats.metadataModels = stats.metadataModels + 1
-                metadataModelsByResource[dataResourceName] = (metadataModelsByResource[dataResourceName] or 0) + 1
-            else
-                stats.duplicateModels = stats.duplicateModels + 1
+                metadataResources[target.ownerResource] = true
             end
         end
     end
 end
 
-local function getStreamVehicleModels(resourceName)
-    local resourcePath = normalizePath(GetResourcePath(resourceName) or '')
-    if resourcePath == '' then
-        return {}
+local function collectStreamFallbackModels(resourceName, byModel, stats)
+    local root = getResourceRoot(resourceName)
+    if root == '' then
+        return
     end
 
-    local models = {}
-    local seenModels = {}
-    local files = listFilesRecursively(resourcePath)
-    local lowerRoot = resourcePath:lower()
-
+    local files = listFilesRecursively(root)
+    local added = 0
     for i = 1, #files do
-        local absolute = normalizePath(files[i])
-        if absolute ~= '' then
-            local lowerAbsolute = absolute:lower()
-            if lowerAbsolute:sub(1, #lowerRoot) == lowerRoot then
-                local relative = absolute:sub(#resourcePath + 1):gsub('^/', '')
-                local lowerRelative = relative:lower()
-                local inStreamFolder = lowerRelative:sub(1, 7) == 'stream/'
-                    or lowerRelative:find('/stream/', 1, true) ~= nil
-                if inStreamFolder and lowerRelative:sub(-4) == '.yft' and lowerRelative:sub(-7) ~= '_hi.yft' then
-                    local modelName = lowerRelative:match('([^/]+)%.yft$')
-                    if modelName and modelName ~= '' and not seenModels[modelName] then
-                        seenModels[modelName] = true
-                        models[#models + 1] = modelName
-                    end
+        local relative = getRelativeResourcePath(root, files[i])
+        local lower = relative and relative:lower() or ''
+        local inStreamFolder = lower:sub(1, 7) == 'stream/' or lower:find('/stream/', 1, true) ~= nil
+        if inStreamFolder and lower:sub(-4) == '.yft' and lower:sub(-7) ~= '_hi.yft' then
+            local model = lower:match('([^/]+)%.yft$')
+            if model and model ~= '' then
+                if byModel[model] then
+                    stats.duplicateModels = stats.duplicateModels + 1
+                else
+                    byModel[model] = {
+                        model = model,
+                        name = prettifyModelName(model),
+                        resource = resourceName,
+                        metaPath = relative,
+                        sourceType = 'stream_fallback',
+                        ownerResource = resourceName,
+                        dataResource = resourceName,
+                    }
+                    stats.streamFallbackModels = stats.streamFallbackModels + 1
+                    added = added + 1
                 end
             end
         end
     end
 
-    table.sort(models)
-    return models
+    if added > 0 then
+        stats.streamFallbackResources = stats.streamFallbackResources + 1
+    end
+end
+
+local function getStartedResources()
+    local resources = {}
+    local count = GetNumResources()
+    for i = 0, count - 1 do
+        local resourceName = GetResourceByFindIndex(i)
+        if resourceName and GetResourceState(resourceName) == 'started' then
+            resources[#resources + 1] = resourceName
+        end
+    end
+    return resources
 end
 
 local function getAddonVehicles(forceRefresh)
@@ -832,80 +837,46 @@ local function getAddonVehicles(forceRefresh)
     end
 
     local byModel = {}
-    local metadataModelsByResource = {}
+    local metadataResources = {}
+    local metaTargets = {}
+    local seenMetaTargets = {}
+    local resourcesWithVehicleMeta = {}
     local stats = {
-        scannedResources = 0,
-        resourcesWithVehicleMetadataDeclaration = 0,
-        resourcesWithResolvedVehicleMeta = 0,
-        parsedVehicleMetaFiles = 0,
+        startedResources = 0,
+        vehicleMetaResources = 0,
+        vehicleMetaDeclarations = 0,
+        resolvedMetaFiles = 0,
+        missingMetaFiles = 0,
+        parsedMetaFiles = 0,
         metadataModels = 0,
         streamFallbackModels = 0,
+        streamFallbackResources = 0,
         duplicateModels = 0,
-        linkedMetadataTargets = 0,
-        fallbackResources = 0,
     }
 
-    local num = GetNumResources()
-    for i = 0, num - 1 do
-        local resourceName = GetResourceByFindIndex(i)
-        if resourceName and GetResourceState(resourceName) == 'started' then
-            stats.scannedResources = stats.scannedResources + 1
-            local metaTargets, hasVehicleMetadataDeclaration = getVehicleMetaTargets(resourceName, stats)
-            if hasVehicleMetadataDeclaration then
-                stats.resourcesWithVehicleMetadataDeclaration = stats.resourcesWithVehicleMetadataDeclaration + 1
-            end
+    local resources = getStartedResources()
+    stats.startedResources = #resources
 
-            if #metaTargets > 0 then
-                stats.resourcesWithResolvedVehicleMeta = stats.resourcesWithResolvedVehicleMeta + 1
-            end
-
-            for idx = 1, #metaTargets do
-                local target = metaTargets[idx]
-                local content = LoadResourceFile(target.dataResource, target.path)
-                if content and content ~= '' then
-                    stats.parsedVehicleMetaFiles = stats.parsedVehicleMetaFiles + 1
-                    parseVehiclesMeta(
-                        content,
-                        target.ownerResource,
-                        target.dataResource,
-                        target.path,
-                        byModel,
-                        stats,
-                        metadataModelsByResource
-                    )
-                end
-            end
+    for i = 1, #resources do
+        local resourceName = resources[i]
+        if collectVehicleMetaTargets(resourceName, metaTargets, seenMetaTargets, stats) then
+            resourcesWithVehicleMeta[resourceName] = true
+            stats.vehicleMetaResources = stats.vehicleMetaResources + 1
         end
     end
 
-    for i = 0, num - 1 do
-        local resourceName = GetResourceByFindIndex(i)
-        if resourceName and GetResourceState(resourceName) == 'started' then
-            local hasMetadataModels = (metadataModelsByResource[resourceName] or 0) > 0
-            if not hasMetadataModels then
-                local streamModels = getStreamVehicleModels(resourceName)
-                if #streamModels > 0 then
-                    stats.fallbackResources = stats.fallbackResources + 1
-                end
+    for i = 1, #metaTargets do
+        local target = metaTargets[i]
+        local content = LoadResourceFile(target.dataResource, target.path)
+        if content and content ~= '' then
+            stats.parsedMetaFiles = stats.parsedMetaFiles + 1
+            parseVehiclesMeta(content, target, byModel, stats, metadataResources)
+        end
+    end
 
-                for idx = 1, #streamModels do
-                    local model = streamModels[idx]
-                    if not byModel[model] then
-                        byModel[model] = {
-                            model = model,
-                            name = prettifyModelName(model),
-                            resource = resourceName,
-                            metaPath = 'stream/*.yft',
-                            sourceType = 'stream_fallback',
-                            ownerResource = resourceName,
-                            dataResource = resourceName,
-                        }
-                        stats.streamFallbackModels = stats.streamFallbackModels + 1
-                    else
-                        stats.duplicateModels = stats.duplicateModels + 1
-                    end
-                end
-            end
+    for resourceName in pairs(resourcesWithVehicleMeta) do
+        if not metadataResources[resourceName] then
+            collectStreamFallbackModels(resourceName, byModel, stats)
         end
     end
 
@@ -925,30 +896,23 @@ local function getAddonVehicles(forceRefresh)
 
     addonVehiclesCache.list = list
     addonVehiclesCache.expiresAt = now + ADDON_VEHICLES_CACHE_MS
-    if #list == 0 then
-        print(('[es_admin] WARNING: Addon vehicle scan found 0 entries (started resources: %d, metadata declarations: %d, resources with resolved metadata paths: %d, parsed vehicles.meta files: %d, linked metadata targets: %d, stream fallback models: %d, duplicates skipped: %d). Verify data_file paths and wildcard support.'):format(
-            stats.scannedResources,
-            stats.resourcesWithVehicleMetadataDeclaration,
-            stats.resourcesWithResolvedVehicleMeta,
-            stats.parsedVehicleMetaFiles,
-            stats.linkedMetadataTargets,
-            stats.streamFallbackModels,
-            stats.duplicateModels
-        ))
-    else
-        print(('[es_admin] Addon vehicle scan indexed %d models (metadata models: %d, stream fallback models: %d, duplicates skipped: %d, started resources: %d, metadata declarations: %d, resources with resolved metadata paths: %d, parsed vehicles.meta files: %d, linked metadata targets: %d, fallback resources: %d)'):format(
+
+    if Config.Debug or #list == 0 then
+        print(('[es_admin] Addon vehicle scan indexed %d models (metadata: %d, stream fallback: %d, duplicates: %d, started resources: %d, vehicle meta resources: %d, declarations: %d, resolved meta files: %d, missing meta files: %d, parsed meta files: %d, fallback resources: %d)'):format(
             #list,
             stats.metadataModels,
             stats.streamFallbackModels,
             stats.duplicateModels,
-            stats.scannedResources,
-            stats.resourcesWithVehicleMetadataDeclaration,
-            stats.resourcesWithResolvedVehicleMeta,
-            stats.parsedVehicleMetaFiles,
-            stats.linkedMetadataTargets,
-            stats.fallbackResources
+            stats.startedResources,
+            stats.vehicleMetaResources,
+            stats.vehicleMetaDeclarations,
+            stats.resolvedMetaFiles,
+            stats.missingMetaFiles,
+            stats.parsedMetaFiles,
+            stats.streamFallbackResources
         ))
     end
+
     return list
 end
 
@@ -1007,13 +971,10 @@ end
 RegisterNetEvent('es_admin:server:requestAddonVehicles', function()
     local src = source
     local canSpawnVehicles = hasPermission(src, 'vehicle.spawn')
-    local playerName = GetPlayerName(src) or 'unknown'
-    if not canSpawnVehicles then
-        print(('[es_admin] requestAddonVehicles: %s (%d) does not have vehicle.spawn permission; sending list for UI visibility only.'):format(playerName, src))
-    end
-
     local vehicles = getAddonVehicles(false)
-    print(('[es_admin] requestAddonVehicles: sending %d addon vehicles to %s (%d)'):format(#vehicles, playerName, src))
+    if not canSpawnVehicles and Config.Debug then
+        print(('[es_admin] requestAddonVehicles: %s (%d) lacks vehicle.spawn; sending UI visibility list.'):format(GetPlayerName(src) or 'unknown', src))
+    end
     TriggerClientEvent('es_admin:client:setAddonVehicles', src, vehicles)
 end)
 

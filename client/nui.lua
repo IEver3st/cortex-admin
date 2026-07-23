@@ -74,6 +74,9 @@ end
 local jsonEncode = json.encode
 local DEBUG_LOG_REL = '.cursor/debug-8d7dac.log'
 local function agentDbg(hypothesisId, location, message, data)
+    if not (Config and Config.Debug) then
+        return
+    end
     local res = GetCurrentResourceName()
     local payload = {
         sessionId = '8d7dac',
@@ -345,8 +348,14 @@ RegisterNUICallback('es_admin:requestResources', function(_, cb)
 end)
 
 RegisterNUICallback('es_admin:requestAddonVehicles', function(_, cb)
-    TriggerServerEvent('es_admin:server:requestAddonVehicles')
-    cb({ ok = true })
+    local requested = false
+    if type(Admin.requestAddonVehiclesIfNeeded) == 'function' then
+        requested = Admin.requestAddonVehiclesIfNeeded(false) == true
+    else
+        TriggerServerEvent('es_admin:server:requestAddonVehicles')
+        requested = true
+    end
+    cb({ ok = true, requested = requested })
 end)
 
 RegisterNUICallback('es_admin:resourceAction', function(data, cb)

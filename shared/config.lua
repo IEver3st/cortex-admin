@@ -4,6 +4,8 @@
 
 Config = Config or {}
 
+Config.Debug = false
+
 Config.Command = 'esadmin'
 Config.Keybind = 'F10'
 Config.WardrobeShareRadius = 8.0
@@ -138,6 +140,7 @@ Config.ActionPermissions = {
     ['world.weatherEditor'] = 'es_admin.world.weather.editor',
     ['world.weatherReload'] = 'es_admin.world.weather.reload',
     ['world.weatherForce'] = 'es_admin.world.weather.force',
+    ['world.weatherForceCurrent'] = 'es_admin.world.weather.force',
     ['world.time'] = 'es_admin.world.time',
     ['world.freezeTime'] = 'es_admin.world.time',
     ['world.blackout'] = 'es_admin.world.blackout',
