@@ -1,4 +1,4 @@
-# es_admin
+# cortex-admin
 
 ![FiveM](https://img.shields.io/badge/FiveM-Resource-orange)
 ![QBX](https://img.shields.io/badge/QBX-Compatible-blue)
@@ -7,7 +7,7 @@
 
 **Admin/dev menu with QBX framework support.**
 
-`es_admin` is a FiveM server-side admin and developer menu built with a React NUI frontend. It provides player, vehicle, world, weapons, teleport, appearance, inventory, garage, dev, recording and server management tools, with optional automatic integration for `qbx_core`, `ox_inventory`, and `qbx_vehicles`.
+`cortex-admin` is a FiveM server-side admin and developer menu built with a React NUI frontend. It provides player, vehicle, world, weapons, teleport, appearance, inventory, garage, dev, recording and server management tools, with optional automatic integration for `qbx_core`, `ox_inventory`, and `qbx_vehicles`.
 
 ## Features
 
@@ -188,12 +188,12 @@ The menu is organized into tabs. The full declarative action catalog lives in `s
 
 ## Installation
 
-1. Make sure `es_lib` is installed and started before `es_admin`.
-2. Place this resource in your server resources directory, for example `resources/[eco]/es_admin`.
-3. Add the permission file to `server.cfg` **before** `ensure es_admin`:
+1. Make sure `es_lib` is installed and started before `cortex-admin`.
+2. Place this resource in your server resources directory, for example `resources/[eco]/cortex-admin`.
+3. Add the permission file to `server.cfg` **before** `ensure cortex-admin`:
    ```
-   exec resources/[eco]/es_admin/permissions.cfg
-   ensure es_admin
+   exec resources/[eco]/cortex-admin/permissions.cfg
+   ensure cortex-admin
    ```
 4. Restart the server.
 
@@ -220,16 +220,16 @@ Server behavior, framework bridging and action handlers are implemented in `serv
 
 Access is controlled entirely by FiveM ACE permissions:
 
-- `es_admin.all` – full menu access.
-- `es_admin.<tab>` – access to a whole tab (`player`, `vehicle`, `world`, etc.).
-- `es_admin.<tab>.<action>` – access to a specific action when fine-grained ACEs are used (see `Config.ActionPermissions`).
+- `cortex-admin.all` – full menu access.
+- `cortex-admin.<tab>` – access to a whole tab (`player`, `vehicle`, `world`, etc.).
+- `cortex-admin.<tab>.<action>` – access to a specific action when fine-grained ACEs are used (see `Config.ActionPermissions`).
 
-When `qbx_core` is running, the QBX groups `god`, `admin`, and `mod` are automatically mapped to the equivalent `es_admin` permissions via `Config.QBXPermissions`. You still need `command.esadmin` (or `command`) in ACE so players can open the menu.
+When `qbx_core` is running, the QBX groups `god`, `admin`, and `mod` are automatically mapped to the equivalent `cortex-admin` permissions via `Config.QBXPermissions`. You still need `command.esadmin` (or `command`) in ACE so players can open the menu.
 
-The bundled `permissions.cfg` grants `es_admin.all` and `command.esadmin` to `group.admin`:
+The bundled `permissions.cfg` grants `cortex-admin.all` and `command.esadmin` to `group.admin`:
 
 ```cfg
-add_ace group.admin "es_admin.all" allow
+add_ace group.admin "cortex-admin.all" allow
 add_ace group.admin "command.esadmin" allow
 ```
 
@@ -279,7 +279,7 @@ The resource registers a large set of convenience chat commands. All commands re
 ### Exports
 
 ```lua
-exports.es_admin:teleportToCoords(x, y, showNotification)
+exports.cortex-admin:teleportToCoords(x, y, showNotification)
 ```
 
 Teleports the local player to the given `x`/`y` coordinates, optionally displaying a notification.
@@ -339,4 +339,4 @@ Copyright (c) 2026 Ever3st.
 
 ## Disclaimer
 
-`es_admin` is an independent FiveM resource and is not affiliated with, endorsed by, or sponsored by Cfx, Rockstar Games, or the QBX project. Trademarks and registered trademarks are the property of their respective owners.
+`cortex-admin` is an independent FiveM resource and is not affiliated with, endorsed by, or sponsored by Cfx, Rockstar Games, or the QBX project. Trademarks and registered trademarks are the property of their respective owners.
