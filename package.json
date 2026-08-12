@@ -2,6 +2,7 @@
   "name": "cortex-admin",
   "private": true,
   "scripts": {
+    "build": "bun run vendor:ui && bun run preview:state",
     "dev": "bun tools/dev-server.ts",
     "preview:state": "bun tools/export-preview-state.mjs",
     "vendor:ui": "bun tools/vendor-ui.mjs"
