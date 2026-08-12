@@ -38,6 +38,6 @@ Bun.serve({
 
 const base = `http://${host}:${port}`;
 console.log(`
-  es_admin UI dev
+  cortex-admin UI dev
   ${base}/?preview=1&debug=1
 `);

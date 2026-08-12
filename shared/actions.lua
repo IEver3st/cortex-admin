@@ -392,6 +392,14 @@ EsAdminActions = {
             type = 'action',
         },
         {
+            id = 'vehicle.liveTuning',
+            label = 'Live Vehicle Tuning',
+            description = 'Edit handling and engine audio on the vehicle you are driving',
+            tab = 'vehicle',
+            type = 'workspace',
+            hidden = true,
+        },
+        {
             id = 'vehicle.personal',
             label = 'Personal Vehicles',
             description = 'Manage your saved vehicles',
@@ -683,13 +691,6 @@ EsAdminActions = {
             id = 'world.blackout',
             label = 'Blackout',
             description = 'Toggle city blackout',
-            tab = 'world',
-            type = 'toggle',
-        },
-        {
-            id = 'world.dynamicWeather',
-            label = 'Dynamic Weather',
-            description = 'Enable weather progression',
             tab = 'world',
             type = 'toggle',
         },

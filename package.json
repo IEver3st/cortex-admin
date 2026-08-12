@@ -1,7 +1,14 @@
 {
-  "name": "es_admin",
+  "name": "cortex-admin",
   "private": true,
   "scripts": {
-    "dev": "bun tools/dev-server.ts"
+    "dev": "bun tools/dev-server.ts",
+    "preview:state": "bun tools/export-preview-state.mjs",
+    "vendor:ui": "bun tools/vendor-ui.mjs"
+  },
+  "dependencies": {
+    "lucide": "0.462.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }

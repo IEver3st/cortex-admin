@@ -3,6 +3,24 @@ local state = Admin.state
 local mathFloor = math.floor
 local tonumber = tonumber
 local type = type
+local nativeRegisterNUICallback = RegisterNUICallback
+
+local function RegisterNUICallback(name, handler)
+    nativeRegisterNUICallback(name, function(data, cb)
+        local replied = false
+        local function reply(payload)
+            if replied then return end
+            replied = true
+            cb(payload)
+        end
+
+        local ok, err = pcall(handler, data, reply)
+        if not ok then
+            print(('[cortex-admin] NUI callback %s failed: %s'):format(name, tostring(err)))
+            reply({ ok = false, error = 'internal_error' })
+        end
+    end)
+end
 
 local function trimString(value, maxLength)
     if type(value) ~= 'string' then
@@ -23,11 +41,13 @@ end
 
 local function toInteger(value, minValue, maxValue)
     local number = tonumber(value)
-    if not number or number ~= number then
+    if not number or number ~= number or number == math.huge or number == -math.huge then
         return nil
     end
 
-    number = mathFloor(number)
+    if number ~= mathFloor(number) then
+        return nil
+    end
 
     if minValue and number < minValue then
         return nil
@@ -42,6 +62,58 @@ end
 
 local function replyError(cb, message)
     cb({ ok = false, error = message or 'invalid_payload' })
+end
+
+local actionIndex = {}
+for _, action in ipairs((EsAdminActions and EsAdminActions.actions) or {}) do
+    actionIndex[action.id] = true
+end
+
+local function canInvokeAction(actionId)
+    local known = actionIndex[actionId] == true
+        or (Config.ActionPermissions and Config.ActionPermissions[actionId] ~= nil)
+    return known and state.allowed[actionId] == true
+end
+
+local function sanitizeSetting(key, value)
+    local booleanSettings = {
+        showTargetInfo = true,
+        doubleClickToRun = true,
+        autoLoadSavedPed = true,
+        restorePedOnDeath = true,
+        defaultToMpPed = true,
+        replacePersonalVehicle = true,
+        disableAircraftTurbulence = true,
+        quitSessionInRockstarEditor = true,
+    }
+    if booleanSettings[key] then
+        if type(value) == 'boolean' then return value end
+        return nil
+    end
+    if key == 'uiScale' then
+        local number = tonumber(value)
+        return number and number == number and number >= 1.0 and number <= 1.6 and number or nil
+    end
+    if key == 'uiOpacity' then
+        local number = tonumber(value)
+        return number and number == number and number >= 0.35 and number <= 1.0 and number or nil
+    end
+    if key == 'menuAccentColor' then
+        return type(value) == 'string' and value:match('^#[%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F]$') and value:lower() or nil
+    end
+    if key == 'menuPosition' then
+        if value == 'left' or value == 'right' then return value end
+        return nil
+    end
+    if key == 'speedHudUnits' then
+        if value == 'mph' or value == 'kph' then return value end
+        return nil
+    end
+    if key == 'speedHudPosition' then
+        local allowed = { ['top-left'] = true, ['top-right'] = true, ['bottom-left'] = true, ['bottom-right'] = true }
+        return allowed[value] and value or nil
+    end
+    return nil
 end
 
 local function buildEmptyAppearancePayload()
@@ -71,32 +143,7 @@ local function buildEmptyAppearancePayload()
     }
 end
 
-local jsonEncode = json.encode
-local DEBUG_LOG_REL = '.cursor/debug-8d7dac.log'
-local function agentDbg(hypothesisId, location, message, data)
-    if not (Config and Config.Debug) then
-        return
-    end
-    local res = GetCurrentResourceName()
-    local payload = {
-        sessionId = '8d7dac',
-        hypothesisId = hypothesisId,
-        location = location,
-        message = message,
-        data = data or {},
-        timestamp = GetGameTimer(),
-    }
-    local line = jsonEncode(payload) .. '\n'
-    local save = SaveResourceFile
-    if type(save) ~= 'function' then
-        return
-    end
-    local prev = LoadResourceFile(res, DEBUG_LOG_REL)
-    if type(prev) == 'string' and prev ~= '' then
-        line = prev .. line
-    end
-    save(res, DEBUG_LOG_REL, line, -1)
-end
+local function agentDbg() end
 
 local function isFavorite(id)
     for i = 1, #state.favorites do
@@ -122,38 +169,43 @@ local function toggleFavorite(id)
     Admin.saveFavorites()
     -- Send only favorites update, not entire state
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { favorites = state.favorites }
     })
 
     return true
 end
 
-RegisterNUICallback('es_admin:ready', function(_, cb)
+RegisterNUICallback('cortex-admin:ready', function(_, cb)
     Admin.sendUiState()
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:close', function(_, cb)
+RegisterNUICallback('cortex-admin:close', function(_, cb)
     Admin.setOpen(false)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:action', function(data, cb)
+RegisterNUICallback('cortex-admin:action', function(data, cb)
     local actionId = trimString(data and data.id, 96)
-    if not actionId then
+    if not actionId or not canInvokeAction(actionId) then
         replyError(cb, 'invalid_action')
         return
     end
 
     local payload = data and data.data
     CreateThread(function()
-        Admin.executeAction(actionId, payload)
+        local ok, err = pcall(Admin.executeAction, actionId, payload)
+        if not ok then
+            print(('[cortex-admin] action %s failed: %s'):format(actionId, tostring(err)))
+            replyError(cb, 'action_failed')
+            return
+        end
         cb({ ok = true })
     end)
 end)
 
-RegisterNUICallback('es_admin:previewVehicle', function(data, cb)
+RegisterNUICallback('cortex-admin:previewVehicle', function(data, cb)
     local model = data and data.model
     if (type(model) ~= 'string' and type(model) ~= 'number') or not Admin.previewVehicle then
         replyError(cb, 'invalid_model')
@@ -172,19 +224,79 @@ RegisterNUICallback('es_admin:previewVehicle', function(data, cb)
     cb({ ok = ok == true })
 end)
 
-RegisterNUICallback('es_admin:clearVehiclePreview', function(_, cb)
+RegisterNUICallback('cortex-admin:clearVehiclePreview', function(_, cb)
     if Admin.clearVehiclePreview then
         Admin.clearVehiclePreview()
     end
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:getPreviewVehicleExtras', function(_, cb)
+RegisterNUICallback('cortex-admin:getPreviewVehicleExtras', function(_, cb)
     local list = Admin.getPreviewVehicleExtras and Admin.getPreviewVehicleExtras() or {}
     cb({ ok = true, extras = list })
 end)
 
-RegisterNUICallback('es_admin:getWeaponAttachments', function(_, cb)
+RegisterNUICallback('cortex-admin:getVehicleTuning', function(_, cb)
+    local payload = Admin.buildVehicleTuningSnapshot and Admin.buildVehicleTuningSnapshot()
+        or { ok = false, error = 'tuning_unavailable', message = 'Live vehicle tuning is unavailable.' }
+    cb(payload)
+end)
+
+RegisterNUICallback('cortex-admin:setVehicleHandling', function(data, cb)
+    local fieldId = trimString(data and data.field, 64)
+    if not fieldId or not data or data.value == nil then
+        replyError(cb, 'invalid_handling_value')
+        return
+    end
+
+    local payload = Admin.setVehicleTuningValue and Admin.setVehicleTuningValue(fieldId, data.value)
+        or { ok = false, error = 'tuning_unavailable', message = 'Live vehicle tuning is unavailable.' }
+    cb(payload)
+end)
+
+RegisterNUICallback('cortex-admin:resetVehicleTuningField', function(data, cb)
+    local fieldId = trimString(data and data.field, 64)
+    if not fieldId then
+        replyError(cb, 'invalid_handling_field')
+        return
+    end
+
+    local payload = Admin.resetVehicleTuningField and Admin.resetVehicleTuningField(fieldId)
+        or { ok = false, error = 'tuning_unavailable', message = 'Live vehicle tuning is unavailable.' }
+    cb(payload)
+end)
+
+RegisterNUICallback('cortex-admin:setVehicleEngineAudio', function(data, cb)
+    local rawSoundName = data and data.soundName
+    if type(rawSoundName) ~= 'string' or #rawSoundName > 64 then
+        replyError(cb, 'invalid_audio_name')
+        return
+    end
+
+    local soundName = trimString(rawSoundName, 64)
+    if not soundName then
+        replyError(cb, 'invalid_audio_name')
+        return
+    end
+
+    local payload = Admin.setVehicleTuningAudio and Admin.setVehicleTuningAudio(soundName)
+        or { ok = false, error = 'tuning_unavailable', message = 'Engine audio switching is unavailable.' }
+    cb(payload)
+end)
+
+RegisterNUICallback('cortex-admin:resetVehicleTuning', function(data, cb)
+    local scope = trimString(data and data.scope, 16) or 'handling'
+    if scope ~= 'handling' and scope ~= 'audio' and scope ~= 'all' then
+        replyError(cb, 'invalid_reset_scope')
+        return
+    end
+
+    local payload = Admin.resetVehicleTuning and Admin.resetVehicleTuning(scope)
+        or { ok = false, error = 'tuning_unavailable', message = 'Live vehicle tuning is unavailable.' }
+    cb(payload)
+end)
+
+RegisterNUICallback('cortex-admin:getWeaponAttachments', function(_, cb)
     local payload = Admin.getWeaponAttachmentList and Admin.getWeaponAttachmentList() or { weaponName = '', components = {} }
     cb({
         ok = true,
@@ -193,7 +305,7 @@ RegisterNUICallback('es_admin:getWeaponAttachments', function(_, cb)
     })
 end)
 
-RegisterNUICallback('es_admin:toggleWeaponAttachment', function(data, cb)
+RegisterNUICallback('cortex-admin:toggleWeaponAttachment', function(data, cb)
     local h = trimString(data and data.componentHash, 192)
     if not h then
         replyError(cb, 'invalid_component')
@@ -204,7 +316,7 @@ RegisterNUICallback('es_admin:toggleWeaponAttachment', function(data, cb)
     cb({ ok = ok == true })
 end)
 
-RegisterNUICallback('es_admin:togglePreviewVehicleExtra', function(data, cb)
+RegisterNUICallback('cortex-admin:togglePreviewVehicleExtra', function(data, cb)
     local id = toInteger(data and data.extraId, 1, 99)
     if not id then
         replyError(cb, 'invalid_extra')
@@ -215,28 +327,34 @@ RegisterNUICallback('es_admin:togglePreviewVehicleExtra', function(data, cb)
     cb({ ok = ok == true })
 end)
 
-RegisterNUICallback('es_admin:setVehiclePreviewShared', function(data, cb)
+RegisterNUICallback('cortex-admin:setVehiclePreviewShared', function(data, cb)
     local ok = Admin.setPreviewShared and Admin.setPreviewShared(data and data.shared == true)
     cb({ ok = ok == true })
 end)
 
-RegisterNUICallback('es_admin:spawnPreviewVehicle', function(_, cb)
+RegisterNUICallback('cortex-admin:spawnPreviewVehicle', function(_, cb)
     CreateThread(function()
-        local ok = Admin.spawnVehicleFromPreview and Admin.spawnVehicleFromPreview() or false
+        local okCall, ok = pcall(function()
+            return Admin.spawnVehicleFromPreview and Admin.spawnVehicleFromPreview() or false
+        end)
+        if not okCall then
+            replyError(cb, 'spawn_failed')
+            return
+        end
         cb({ ok = ok == true })
     end)
 end)
 
-RegisterNUICallback('es_admin:setTypingState', function(data, cb)
+RegisterNUICallback('cortex-admin:setTypingState', function(data, cb)
     if Admin.setTypingLock then
         Admin.setTypingLock(data and data.typing == true)
     end
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:toggle', function(data, cb)
+RegisterNUICallback('cortex-admin:toggle', function(data, cb)
     local actionId = trimString(data and data.id, 96)
-    if not actionId then
+    if not actionId or not canInvokeAction(actionId) then
         replyError(cb, 'invalid_action')
         return
     end
@@ -245,9 +363,9 @@ RegisterNUICallback('es_admin:toggle', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:select', function(data, cb)
+RegisterNUICallback('cortex-admin:select', function(data, cb)
     local actionId = trimString(data and data.id, 96)
-    if not actionId then
+    if not actionId or not canInvokeAction(actionId) then
         replyError(cb, 'invalid_action')
         return
     end
@@ -256,9 +374,9 @@ RegisterNUICallback('es_admin:select', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:favorite', function(data, cb)
+RegisterNUICallback('cortex-admin:favorite', function(data, cb)
     local actionId = trimString(data and data.id, 96)
-    if not actionId then
+    if not actionId or not canInvokeAction(actionId) then
         replyError(cb, 'invalid_action')
         return
     end
@@ -267,18 +385,24 @@ RegisterNUICallback('es_admin:favorite', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:updateSetting', function(data, cb)
+RegisterNUICallback('cortex-admin:updateSetting', function(data, cb)
     local key = trimString(data and data.key, 64)
     if not key then
         replyError(cb, 'invalid_setting')
         return
     end
 
-    state.settings[key] = data.value
+    local value = sanitizeSetting(key, data and data.value)
+    if value == nil then
+        replyError(cb, 'invalid_setting_value')
+        return
+    end
+
+    state.settings[key] = value
     Admin.saveSettings()
     -- Send only settings update
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { settings = state.settings }
     })
     cb({ ok = true })
@@ -286,16 +410,37 @@ end)
 
 local freezeState = {}
 
-RegisterNUICallback('es_admin:playerAction', function(data, cb)
+RegisterNUICallback('cortex-admin:playerAction', function(data, cb)
     local action = trimString(data and data.action, 16)
     local target = toInteger(data and data.target, 1)
-    if not action or not target then
+    local actionPermissions = {
+        goto = 'player.goto',
+        kick = 'player.kick',
+        ban = 'player.ban',
+        freeze = 'player.freeze',
+        bring = 'player.bring',
+    }
+    local actionId = action and actionPermissions[action]
+    if not action or not target or not actionId or not canInvokeAction(actionId) then
         replyError(cb, 'invalid_player_action')
         return
     end
 
     data.action = action
     data.target = target
+
+    if action == 'ban' then
+        local rawDuration = data.duration
+        local duration = 0
+        if rawDuration ~= nil and rawDuration ~= '' then
+            duration = toInteger(rawDuration, 0, 525600)
+            if duration == nil then
+                replyError(cb, 'invalid_ban_duration')
+                return
+            end
+        end
+        data.duration = duration
+    end
 
     if action == 'goto' then
         local targetId = GetPlayerFromServerId(target)
@@ -329,36 +474,36 @@ RegisterNUICallback('es_admin:playerAction', function(data, cb)
         data.enabled = freezeState[target]
     end
 
-    TriggerServerEvent('es_admin:server:playerAction', data)
+    TriggerServerEvent('cortex-admin:server:playerAction', data)
     cb({ ok = true })
 end)
 
 -- Resources
-RegisterNetEvent('es_admin:client:setResources', function(resources)
+RegisterNetEvent('cortex-admin:client:setResources', function(resources)
     state.resources = resources
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { resources = resources }
     })
 end)
 
-RegisterNUICallback('es_admin:requestResources', function(_, cb)
-    TriggerServerEvent('es_admin:server:requestResources')
+RegisterNUICallback('cortex-admin:requestResources', function(_, cb)
+    TriggerServerEvent('cortex-admin:server:requestResources')
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:requestAddonVehicles', function(_, cb)
+RegisterNUICallback('cortex-admin:requestAddonVehicles', function(_, cb)
     local requested = false
     if type(Admin.requestAddonVehiclesIfNeeded) == 'function' then
         requested = Admin.requestAddonVehiclesIfNeeded(false) == true
     else
-        TriggerServerEvent('es_admin:server:requestAddonVehicles')
+        TriggerServerEvent('cortex-admin:server:requestAddonVehicles')
         requested = true
     end
     cb({ ok = true, requested = requested })
 end)
 
-RegisterNUICallback('es_admin:resourceAction', function(data, cb)
+RegisterNUICallback('cortex-admin:resourceAction', function(data, cb)
     local action = trimString(data and data.action, 16)
     local name = trimString(data and data.name, 64)
     if not action or not name then
@@ -367,7 +512,7 @@ RegisterNUICallback('es_admin:resourceAction', function(data, cb)
     end
 
     PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-    TriggerServerEvent('es_admin:server:resourceAction', {
+    TriggerServerEvent('cortex-admin:server:resourceAction', {
         action = action,
         name = name,
     })
@@ -375,11 +520,11 @@ RegisterNUICallback('es_admin:resourceAction', function(data, cb)
 end)
 
 -- Appearance
-RegisterNUICallback('es_admin:getAppearance', function(_, cb)
+RegisterNUICallback('cortex-admin:getAppearance', function(_, cb)
     agentDbg('H4', 'nui.lua:getAppearance', 'enter', {})
     local ok, data = pcall(Admin.getPedAppearance)
     if not ok or type(data) ~= 'table' then
-        print(('[es_admin] WARNING: Failed to build appearance payload: %s'):format(tostring(data)))
+        print(('[cortex-admin] WARNING: Failed to build appearance payload: %s'):format(tostring(data)))
         agentDbg('H4', 'nui.lua:getAppearance', 'error', { error = tostring(data) })
         cb(buildEmptyAppearancePayload())
         return
@@ -389,7 +534,7 @@ RegisterNUICallback('es_admin:getAppearance', function(_, cb)
     cb(data)
 end)
 
-RegisterNUICallback('es_admin:setAppearance', function(data, cb)
+RegisterNUICallback('cortex-admin:setAppearance', function(data, cb)
     if type(data) ~= 'table' then
         replyError(cb, 'invalid_appearance')
         return
@@ -400,11 +545,11 @@ RegisterNUICallback('es_admin:setAppearance', function(data, cb)
 end)
 
 -- Vehicle Customization
-RegisterNUICallback('es_admin:getVehicleCustomization', function(_, cb)
+RegisterNUICallback('cortex-admin:getVehicleCustomization', function(_, cb)
     cb(Admin.getVehicleCustomization())
 end)
 
-RegisterNUICallback('es_admin:setVehicleCustomization', function(data, cb)
+RegisterNUICallback('cortex-admin:setVehicleCustomization', function(data, cb)
     if type(data) ~= 'table' then
         replyError(cb, 'invalid_vehicle_customization')
         return
@@ -414,12 +559,12 @@ RegisterNUICallback('es_admin:setVehicleCustomization', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:getSavedPeds', function(_, cb)
+RegisterNUICallback('cortex-admin:getSavedPeds', function(_, cb)
     CreateThread(function()
         agentDbg('H3', 'nui.lua:getSavedPeds', 'enter', {})
         local ok, data = pcall(Admin.getSavedPeds)
         if not ok or type(data) ~= 'table' then
-            print(('[es_admin] WARNING: Failed to build saved ped list: %s'):format(tostring(data)))
+            print(('[cortex-admin] WARNING: Failed to build saved ped list: %s'):format(tostring(data)))
             agentDbg('H3', 'nui.lua:getSavedPeds', 'error', { error = tostring(data) })
             cb({})
             return
@@ -430,7 +575,7 @@ RegisterNUICallback('es_admin:getSavedPeds', function(_, cb)
     end)
 end)
 
-RegisterNUICallback('es_admin:getWardrobeShareTargets', function(_, cb)
+RegisterNUICallback('cortex-admin:getWardrobeShareTargets', function(_, cb)
     if type(Admin.getNearbyWardrobeShareTargets) ~= 'function' then
         replyError(cb, 'wardrobe_share_unavailable')
         return
@@ -438,7 +583,11 @@ RegisterNUICallback('es_admin:getWardrobeShareTargets', function(_, cb)
 
     CreateThread(function()
         agentDbg('H1', 'nui.lua:getWardrobeShareTargets', 'enter', {})
-        local targets = Admin.getNearbyWardrobeShareTargets()
+        local ok, targets = pcall(Admin.getNearbyWardrobeShareTargets)
+        if not ok or type(targets) ~= 'table' then
+            replyError(cb, 'wardrobe_share_unavailable')
+            return
+        end
         agentDbg('H1', 'nui.lua:getWardrobeShareTargets', 'exit', { n = type(targets) == 'table' and #targets or -1 })
         cb({
             ok = true,
@@ -447,7 +596,7 @@ RegisterNUICallback('es_admin:getWardrobeShareTargets', function(_, cb)
     end)
 end)
 
-RegisterNUICallback('es_admin:shareWardrobe', function(data, cb)
+RegisterNUICallback('cortex-admin:shareWardrobe', function(data, cb)
     local target = toInteger(data and data.target, 1)
     if not target then
         replyError(cb, 'invalid_target')
@@ -460,7 +609,7 @@ RegisterNUICallback('es_admin:shareWardrobe', function(data, cb)
     end)
 end)
 
-RegisterNUICallback('es_admin:acceptWardrobeShare', function(data, cb)
+RegisterNUICallback('cortex-admin:acceptWardrobeShare', function(data, cb)
     local shareId = trimString(data and data.shareId, 96)
     if not shareId or type(Admin.acceptWardrobeShare) ~= 'function' then
         replyError(cb, 'invalid_share')
@@ -470,7 +619,7 @@ RegisterNUICallback('es_admin:acceptWardrobeShare', function(data, cb)
     cb({ ok = Admin.acceptWardrobeShare(shareId) == true })
 end)
 
-RegisterNUICallback('es_admin:saveWardrobeShare', function(data, cb)
+RegisterNUICallback('cortex-admin:saveWardrobeShare', function(data, cb)
     local shareId = trimString(data and data.shareId, 96)
     if not shareId or type(Admin.saveWardrobeShare) ~= 'function' then
         replyError(cb, 'invalid_share')
@@ -480,7 +629,7 @@ RegisterNUICallback('es_admin:saveWardrobeShare', function(data, cb)
     cb({ ok = Admin.saveWardrobeShare(shareId) == true })
 end)
 
-RegisterNUICallback('es_admin:dismissWardrobeShare', function(data, cb)
+RegisterNUICallback('cortex-admin:dismissWardrobeShare', function(data, cb)
     local shareId = trimString(data and data.shareId, 96)
     if not shareId or type(Admin.dismissWardrobeShare) ~= 'function' then
         replyError(cb, 'invalid_share')
@@ -490,7 +639,7 @@ RegisterNUICallback('es_admin:dismissWardrobeShare', function(data, cb)
     cb({ ok = Admin.dismissWardrobeShare(shareId) == true })
 end)
 
-RegisterNUICallback('es_admin:getSavedTeleportLocations', function(_, cb)
+RegisterNUICallback('cortex-admin:getSavedTeleportLocations', function(_, cb)
     if type(Admin.getSavedTeleportLocations) ~= 'function' then
         replyError(cb, 'teleport_locations_unavailable')
         return
@@ -499,7 +648,7 @@ RegisterNUICallback('es_admin:getSavedTeleportLocations', function(_, cb)
     cb(Admin.getSavedTeleportLocations())
 end)
 
-RegisterNUICallback('es_admin:saveCurrentTeleportLocation', function(data, cb)
+RegisterNUICallback('cortex-admin:saveCurrentTeleportLocation', function(data, cb)
     if type(Admin.saveCurrentTeleportLocation) ~= 'function' then
         replyError(cb, 'teleport_locations_unavailable')
         return
@@ -510,7 +659,7 @@ RegisterNUICallback('es_admin:saveCurrentTeleportLocation', function(data, cb)
     cb({ ok = ok == true })
 end)
 
-RegisterNUICallback('es_admin:loadSavedTeleportLocation', function(data, cb)
+RegisterNUICallback('cortex-admin:loadSavedTeleportLocation', function(data, cb)
     if type(Admin.loadSavedTeleportLocation) ~= 'function' then
         replyError(cb, 'teleport_locations_unavailable')
         return
@@ -521,7 +670,7 @@ RegisterNUICallback('es_admin:loadSavedTeleportLocation', function(data, cb)
     cb({ ok = ok == true })
 end)
 
-RegisterNUICallback('es_admin:deleteSavedTeleportLocation', function(data, cb)
+RegisterNUICallback('cortex-admin:deleteSavedTeleportLocation', function(data, cb)
     if type(Admin.deleteSavedTeleportLocation) ~= 'function' then
         replyError(cb, 'teleport_locations_unavailable')
         return
@@ -536,28 +685,28 @@ end)
 -- INVENTORY (QBX / ox_inventory)
 -- ============================================================================
 
-RegisterNUICallback('es_admin:requestItems', function(_, cb)
-    TriggerServerEvent('es_admin:server:getItems')
+RegisterNUICallback('cortex-admin:requestItems', function(_, cb)
+    TriggerServerEvent('cortex-admin:server:getItems')
     cb({ ok = true })
 end)
 
-RegisterNetEvent('es_admin:client:setItems', function(items)
+RegisterNetEvent('cortex-admin:client:setItems', function(items)
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { inventoryItems = items or {} }
     })
 end)
 
-RegisterNUICallback('es_admin:giveItem', function(data, cb)
+RegisterNUICallback('cortex-admin:giveItem', function(data, cb)
     local target = toInteger(data and data.target, 1)
     local item = trimString(data and data.item, 64)
-    local amount = toInteger(data and data.amount, 1, 10000) or 1
-    if not target or not item then
+    local amount = toInteger(data and data.amount, 1, 10000)
+    if not target or not item or not amount then
         replyError(cb, 'invalid_item_request')
         return
     end
 
-    TriggerServerEvent('es_admin:server:giveItem', {
+    TriggerServerEvent('cortex-admin:server:giveItem', {
         target = target,
         item = item,
         amount = amount,
@@ -569,26 +718,26 @@ end)
 -- GARAGE (QBX / qbx_vehicles)
 -- ============================================================================
 
-RegisterNUICallback('es_admin:requestGarage', function(_, cb)
-    TriggerServerEvent('es_admin:server:getPlayerGarage')
+RegisterNUICallback('cortex-admin:requestGarage', function(_, cb)
+    TriggerServerEvent('cortex-admin:server:getPlayerGarage')
     cb({ ok = true })
 end)
 
-RegisterNetEvent('es_admin:client:setGarageVehicles', function(vehicles)
+RegisterNetEvent('cortex-admin:client:setGarageVehicles', function(vehicles)
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { garageVehicles = vehicles or {} }
     })
 end)
 
-RegisterNUICallback('es_admin:spawnGarageVehicle', function(data, cb)
+RegisterNUICallback('cortex-admin:spawnGarageVehicle', function(data, cb)
     local vehicleId = toInteger(data and data.vehicleId, 1)
     if not vehicleId then
         replyError(cb, 'invalid_vehicle')
         return
     end
 
-    TriggerServerEvent('es_admin:server:spawnGarageVehicle', {
+    TriggerServerEvent('cortex-admin:server:spawnGarageVehicle', {
         vehicleId = vehicleId,
     })
     cb({ ok = true })
@@ -598,34 +747,35 @@ end)
 -- QBX PLAYER MANAGEMENT NUI CALLBACKS
 -- ============================================================================
 
-RegisterNUICallback('es_admin:killPlayer', function(data, cb)
+RegisterNUICallback('cortex-admin:killPlayer', function(data, cb)
     local target = toInteger(data and data.target, 1)
     if not target then replyError(cb, 'invalid_target') return end
-    TriggerServerEvent('es_admin:server:killPlayer', { target = target })
+    TriggerServerEvent('cortex-admin:server:killPlayer', { target = target })
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:revivePlayer', function(data, cb)
+RegisterNUICallback('cortex-admin:revivePlayer', function(data, cb)
     local target = toInteger(data and data.target, 1)
     if not target then replyError(cb, 'invalid_target') return end
-    TriggerServerEvent('es_admin:server:revivePlayer', { target = target })
+    TriggerServerEvent('cortex-admin:server:revivePlayer', { target = target })
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:sitInVehicle', function(data, cb)
+RegisterNUICallback('cortex-admin:sitInVehicle', function(data, cb)
     local target = toInteger(data and data.target, 1)
     if not target then replyError(cb, 'invalid_target') return end
-    TriggerServerEvent('es_admin:server:sitInVehicle', { target = target })
+    TriggerServerEvent('cortex-admin:server:sitInVehicle', { target = target })
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:setJob', function(data, cb)
+RegisterNUICallback('cortex-admin:setJob', function(data, cb)
     local target = toInteger(data and data.target, 1)
     local job = trimString(data and data.job, 64)
-    local grade = toInteger(data and data.grade, 0, 99) or 0
-    if not target or not job then replyError(cb, 'invalid_job') return end
+    local rawGrade = data and data.grade
+    local grade = (rawGrade == nil or rawGrade == '') and 0 or toInteger(rawGrade, 0, 99)
+    if not target or not job or grade == nil then replyError(cb, 'invalid_job') return end
 
-    TriggerServerEvent('es_admin:server:setJob', {
+    TriggerServerEvent('cortex-admin:server:setJob', {
         target = target,
         job = job,
         grade = grade,
@@ -633,13 +783,14 @@ RegisterNUICallback('es_admin:setJob', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:setGang', function(data, cb)
+RegisterNUICallback('cortex-admin:setGang', function(data, cb)
     local target = toInteger(data and data.target, 1)
     local gang = trimString(data and data.gang, 64)
-    local grade = toInteger(data and data.grade, 0, 99) or 0
-    if not target or not gang then replyError(cb, 'invalid_gang') return end
+    local rawGrade = data and data.grade
+    local grade = (rawGrade == nil or rawGrade == '') and 0 or toInteger(rawGrade, 0, 99)
+    if not target or not gang or grade == nil then replyError(cb, 'invalid_gang') return end
 
-    TriggerServerEvent('es_admin:server:setGang', {
+    TriggerServerEvent('cortex-admin:server:setGang', {
         target = target,
         gang = gang,
         grade = grade,
@@ -647,14 +798,14 @@ RegisterNUICallback('es_admin:setGang', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:setMoney', function(data, cb)
+RegisterNUICallback('cortex-admin:setMoney', function(data, cb)
     local target = toInteger(data and data.target, 1)
     local amount = toInteger(data and data.amount, 0, 1000000000)
     local moneyType = trimString(data and data.moneyType, 32) or 'cash'
     local actionId = trimString(data and data.actionId, 64) or 'player.setCash'
     if not target or amount == nil then replyError(cb, 'invalid_money') return end
 
-    TriggerServerEvent('es_admin:server:setMoney', {
+    TriggerServerEvent('cortex-admin:server:setMoney', {
         target = target,
         moneyType = moneyType,
         amount = amount,
@@ -663,13 +814,13 @@ RegisterNUICallback('es_admin:setMoney', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:giveMoney', function(data, cb)
+RegisterNUICallback('cortex-admin:giveMoney', function(data, cb)
     local target = toInteger(data and data.target, 1)
     local amount = toInteger(data and data.amount, 1, 1000000000)
     local moneyType = trimString(data and data.moneyType, 32) or 'cash'
     if not target or not amount then replyError(cb, 'invalid_money') return end
 
-    TriggerServerEvent('es_admin:server:giveMoney', {
+    TriggerServerEvent('cortex-admin:server:giveMoney', {
         target = target,
         moneyType = moneyType,
         amount = amount,
@@ -677,13 +828,13 @@ RegisterNUICallback('es_admin:giveMoney', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:setMetadata', function(data, cb)
+RegisterNUICallback('cortex-admin:setMetadata', function(data, cb)
     local target = toInteger(data and data.target, 1)
     local key = trimString(data and data.key, 64)
     local actionId = trimString(data and data.actionId, 64)
     if not target or not key then replyError(cb, 'invalid_metadata') return end
 
-    TriggerServerEvent('es_admin:server:setMetadata', {
+    TriggerServerEvent('cortex-admin:server:setMetadata', {
         target = target,
         key = key,
         value = data and data.value,
@@ -692,34 +843,34 @@ RegisterNUICallback('es_admin:setMetadata', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:openInventory', function(data, cb)
+RegisterNUICallback('cortex-admin:openInventory', function(data, cb)
     local target = toInteger(data and data.target, 1)
     if not target then replyError(cb, 'invalid_target') return end
-    TriggerServerEvent('es_admin:server:openInventory', { target = target })
+    TriggerServerEvent('cortex-admin:server:openInventory', { target = target })
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:setRoutingBucket', function(data, cb)
+RegisterNUICallback('cortex-admin:setRoutingBucket', function(data, cb)
     local target = toInteger(data and data.target, 1)
-    local bucket = toInteger(data and data.bucket, 0, 65535) or 0
-    if not target then replyError(cb, 'invalid_bucket') return end
+    local bucket = toInteger(data and data.bucket, 0, 65535)
+    if not target or bucket == nil then replyError(cb, 'invalid_bucket') return end
 
-    TriggerServerEvent('es_admin:server:setRoutingBucket', {
+    TriggerServerEvent('cortex-admin:server:setRoutingBucket', {
         target = target,
         bucket = bucket,
     })
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:adminCar', function(_, cb)
-    TriggerServerEvent('es_admin:server:adminCar')
+RegisterNUICallback('cortex-admin:adminCar', function(_, cb)
+    TriggerServerEvent('cortex-admin:server:adminCar')
     cb({ ok = true })
 end)
 
-RegisterNUICallback('es_admin:pullStash', function(data, cb)
+RegisterNUICallback('cortex-admin:pullStash', function(data, cb)
     local stash = trimString(data and data.stash, 80)
     if not stash then replyError(cb, 'invalid_stash') return end
-    TriggerServerEvent('es_admin:server:pullStash', { stash = stash })
+    TriggerServerEvent('cortex-admin:server:pullStash', { stash = stash })
     cb({ ok = true })
 end)
 
@@ -727,12 +878,12 @@ end)
 -- QBX CLIENT-SIDE EVENT HANDLERS
 -- ============================================================================
 
-RegisterNetEvent('es_admin:client:killPed', function()
+RegisterNetEvent('cortex-admin:client:killPed', function()
     local ped = PlayerPedId()
     SetEntityHealth(ped, 0)
 end)
 
-RegisterNetEvent('es_admin:client:revivePed', function()
+RegisterNetEvent('cortex-admin:client:revivePed', function()
     local ped = PlayerPedId()
     local coords = GetEntityCoords(ped)
 
@@ -761,10 +912,11 @@ RegisterNetEvent('es_admin:client:revivePed', function()
     ClearPedTasksImmediately(ped)
 end)
 
-RegisterNetEvent('es_admin:client:sitInVehicle', function(netId)
+RegisterNetEvent('cortex-admin:client:sitInVehicle', function(netId)
+    netId = toInteger(netId, 1, 65535)
     if not netId then return end
     local vehicle = NetworkGetEntityFromNetworkId(netId)
-    if not DoesEntityExist(vehicle) then
+    if not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then
         Admin.notify('error', 'Vehicle not found')
         return
     end
@@ -780,7 +932,7 @@ RegisterNetEvent('es_admin:client:sitInVehicle', function(netId)
     Admin.notify('error', 'No empty seats')
 end)
 
-RegisterNetEvent('es_admin:client:getVehicleProps', function()
+RegisterNetEvent('cortex-admin:client:getVehicleProps', function()
     local ped = PlayerPedId()
     local vehicle = GetVehiclePedIsIn(ped, false)
     if vehicle == 0 then
@@ -804,13 +956,13 @@ RegisterNetEvent('es_admin:client:getVehicleProps', function()
         }
     end
 
-    TriggerServerEvent('es_admin:server:adminCarSave', {
+    TriggerServerEvent('cortex-admin:server:adminCarSave', {
         model = model,
         props = props,
     })
 end)
 
-RegisterNUICallback('es_admin:deleteSavedPed', function(data, cb)
+RegisterNUICallback('cortex-admin:deleteSavedPed', function(data, cb)
     if not data then
         replyError(cb, 'invalid_entry')
         return
@@ -818,12 +970,12 @@ RegisterNUICallback('es_admin:deleteSavedPed', function(data, cb)
 
     local ref = (data and data.entry) or data
     CreateThread(function()
-        Admin.deleteSavedPed(ref)
-        cb({ ok = true })
+        local ok = pcall(Admin.deleteSavedPed, ref)
+        cb({ ok = ok == true })
     end)
 end)
 
-RegisterNUICallback('es_admin:renameSavedPed', function(data, cb)
+RegisterNUICallback('cortex-admin:renameSavedPed', function(data, cb)
     local newName = trimString(data and data.newName, 64)
     if not data or not newName then
         replyError(cb, 'invalid_name')
@@ -832,12 +984,12 @@ RegisterNUICallback('es_admin:renameSavedPed', function(data, cb)
 
     local entry = (data and data.entry) or data
     CreateThread(function()
-        Admin.renameSavedPed(entry, newName)
-        cb({ ok = true })
+        local ok = pcall(Admin.renameSavedPed, entry, newName)
+        cb({ ok = ok == true })
     end)
 end)
 
-RegisterNUICallback('es_admin:cloneSavedPed', function(data, cb)
+RegisterNUICallback('cortex-admin:cloneSavedPed', function(data, cb)
     local entry = (data and data.entry) or data
     local fallbackName = entry and entry.name and (entry.name .. '_clone') or nil
     local newName = trimString(data and data.newName, 64) or trimString(fallbackName, 64)
@@ -847,12 +999,12 @@ RegisterNUICallback('es_admin:cloneSavedPed', function(data, cb)
     end
 
     CreateThread(function()
-        Admin.cloneSavedPed(entry, newName)
-        cb({ ok = true })
+        local ok = pcall(Admin.cloneSavedPed, entry, newName)
+        cb({ ok = ok == true })
     end)
 end)
 
-RegisterNUICallback('es_admin:importVmenuSavedPeds', function(_, cb)
+RegisterNUICallback('cortex-admin:importVmenuSavedPeds', function(_, cb)
     if type(Admin.importVmenuSavedPeds) ~= 'function' then
         replyError(cb, 'import_unavailable')
         return
@@ -861,7 +1013,7 @@ RegisterNUICallback('es_admin:importVmenuSavedPeds', function(_, cb)
     CreateThread(function()
         local okCall, ok, result = pcall(Admin.importVmenuSavedPeds)
         if not okCall then
-            print(('[es_admin] WARNING: vMenu ped import crashed: %s'):format(tostring(ok)))
+            print(('[cortex-admin] WARNING: vMenu ped import crashed: %s'):format(tostring(ok)))
             cb({
                 ok = false,
                 result = { reason = 'exception', message = tostring(ok) },
@@ -876,7 +1028,7 @@ RegisterNUICallback('es_admin:importVmenuSavedPeds', function(_, cb)
     end)
 end)
 
-RegisterNUICallback('es_admin:getVmenuMigrationSnapshot', function(_, cb)
+RegisterNUICallback('cortex-admin:getVmenuMigrationSnapshot', function(_, cb)
     if type(Admin.getVmenuMigrationSnapshot) ~= 'function' then
         replyError(cb, 'migration_unavailable')
         return
@@ -886,7 +1038,7 @@ RegisterNUICallback('es_admin:getVmenuMigrationSnapshot', function(_, cb)
         agentDbg('H3', 'nui.lua:getVmenuMigrationSnapshot', 'enter', {})
         local ok, snap = pcall(Admin.getVmenuMigrationSnapshot)
         if not ok or type(snap) ~= 'table' then
-            print(('[es_admin] WARNING: Failed to build vMenu migration snapshot: %s'):format(tostring(snap)))
+            print(('[cortex-admin] WARNING: Failed to build vMenu migration snapshot: %s'):format(tostring(snap)))
             cb({
                 vmenuRunning = GetResourceState('vMenu') == 'started',
                 peds = {
@@ -914,7 +1066,7 @@ RegisterNUICallback('es_admin:getVmenuMigrationSnapshot', function(_, cb)
     end)
 end)
 
-RegisterNUICallback('es_admin:importVmenuMigrationData', function(_, cb)
+RegisterNUICallback('cortex-admin:importVmenuMigrationData', function(_, cb)
     if type(Admin.importVmenuMigrationData) ~= 'function' then
         replyError(cb, 'migration_unavailable')
         return
@@ -923,7 +1075,7 @@ RegisterNUICallback('es_admin:importVmenuMigrationData', function(_, cb)
     CreateThread(function()
         local okCall, ok, result = pcall(Admin.importVmenuMigrationData)
         if not okCall then
-            print(('[es_admin] WARNING: vMenu migration import crashed: %s'):format(tostring(ok)))
+            print(('[cortex-admin] WARNING: vMenu migration import crashed: %s'):format(tostring(ok)))
             cb({
                 ok = false,
                 result = { reason = 'exception', message = tostring(ok) },

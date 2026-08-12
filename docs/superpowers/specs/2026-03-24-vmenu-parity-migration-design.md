@@ -4,13 +4,13 @@
 
 **Goal**
 
-Turn `es_admin` into a vMenu-class admin menu while preserving its current QBX/es_admin advantages, and provide a one-click migration path that permanently imports durable vMenu data into `es_admin` so vMenu can be removed afterward.
+Turn `cortex-admin` into a vMenu-class admin menu while preserving its current QBX/cortex-admin advantages, and provide a one-click migration path that permanently imports durable vMenu data into `cortex-admin` so vMenu can be removed afterward.
 
 ## Product Direction
 
-- `es_admin` becomes the primary admin menu and long-term replacement for vMenu.
-- `vMenu` can run alongside `es_admin` during transition.
-- Durable vMenu data is imported into `es_admin` storage.
+- `cortex-admin` becomes the primary admin menu and long-term replacement for vMenu.
+- `vMenu` can run alongside `cortex-admin` during transition.
+- Durable vMenu data is imported into `cortex-admin` storage.
 - ACE permissions remain the source of truth and retain vMenu-compatible behavior.
 - Non-durable local settings are not imported.
 
@@ -32,18 +32,18 @@ Turn `es_admin` into a vMenu-class admin menu while preserving its current QBX/e
 
 ### 1. Compatibility Layer
 
-Add a dedicated vMenu compatibility layer inside `es_admin` that can:
+Add a dedicated vMenu compatibility layer inside `cortex-admin` that can:
 
 - read live vMenu exports when vMenu is running,
 - fall back to existing KVP snapshot parsing where possible,
-- normalize vMenu schemas into `es_admin` schemas,
+- normalize vMenu schemas into `cortex-admin` schemas,
 - import data idempotently,
 - track provenance for imported entries.
 
 ### 2. Permissions Model
 
 - Keep ACE permissions as the authority.
-- Expand `es_admin` permission mapping to cover vMenu-equivalent actions.
+- Expand `cortex-admin` permission mapping to cover vMenu-equivalent actions.
 - Preserve compatibility with existing `permissions.cfg` / ACE setups.
 
 ### 3. UI Model
@@ -69,7 +69,7 @@ Add a visible migration surface with:
 
 ### Phase 2: Permissions Parity
 
-- Audit all `es_admin` actions against vMenu-equivalent ACE behavior
+- Audit all `cortex-admin` actions against vMenu-equivalent ACE behavior
 - Add missing action-level permission mappings
 - Validate parity under mixed admin/mod role setups
 
@@ -97,7 +97,7 @@ Add a visible migration surface with:
 
 ### Phase 6: Standalone Validation
 
-- Verify `es_admin` functions without vMenu, except for ACE config still being present in the server environment
+- Verify `cortex-admin` functions without vMenu, except for ACE config still being present in the server environment
 - Audit imported data correctness and parity gaps
 
 ## Risks
@@ -111,6 +111,6 @@ Add a visible migration surface with:
 Use a **Bridge-First Migration** strategy:
 
 1. keep both resources running,
-2. import durable data into `es_admin`,
+2. import durable data into `cortex-admin`,
 3. complete parity domain-by-domain,
 4. remove vMenu once imports and parity are verified.

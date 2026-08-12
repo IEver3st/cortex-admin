@@ -4,6 +4,9 @@ local snapshotCache = {
     expiresAt = 0,
     data = nil,
 }
+local requestRateBySource = {}
+local REQUEST_WINDOW_MS = 10000
+local REQUEST_LIMIT = 4
 
 local VMENU_DISK_PREFIX = 'res:vMenu:'
 local VMENU_PED_DISK_PREFIX = VMENU_DISK_PREFIX .. 'mp_ped_'
@@ -90,7 +93,7 @@ local function getKvsPath()
         return configured
     end
 
-    local convarPath = trim(GetConvar('es_admin_vmenu_kvs_path', ''))
+    local convarPath = trim(GetConvar('cortex-admin_vmenu_kvs_path', ''))
     if convarPath ~= '' then
         return convarPath
     end
@@ -378,8 +381,7 @@ local function canUseFallback(src)
     end
 
     if IsPlayerAceAllowed(src, 'command.' .. Config.Command)
-        or IsPlayerAceAllowed(src, 'command.esadmin')
-        or IsPlayerAceAllowed(src, 'command') then
+        or IsPlayerAceAllowed(src, 'command.esadmin') then
         return true
     end
 
@@ -390,14 +392,33 @@ local function canUseFallback(src)
     return false
 end
 
-RegisterNetEvent('es_admin:server:requestVmenuKvpSnapshot', function(requestId, forceRefresh)
+local function allowSnapshotRequest(src)
+    local now = GetGameTimer()
+    local bucket = requestRateBySource[src]
+    if not bucket or now < bucket.startedAt or now - bucket.startedAt >= REQUEST_WINDOW_MS then
+        requestRateBySource[src] = { startedAt = now, count = 1 }
+        return true
+    end
+
+    if bucket.count >= REQUEST_LIMIT then
+        return false
+    end
+
+    bucket.count = bucket.count + 1
+    return true
+end
+
+RegisterNetEvent('cortex-admin:server:requestVmenuKvpSnapshot', function(requestId, forceRefresh)
     local src = source
-    if type(requestId) ~= 'string' or requestId == '' then
+    if not allowSnapshotRequest(src)
+        or type(requestId) ~= 'string'
+        or requestId == ''
+        or #requestId > 96 then
         return
     end
 
     if not canUseFallback(src) then
-        TriggerClientEvent('es_admin:client:receiveVmenuKvpSnapshot', src, requestId, {
+        TriggerClientEvent('cortex-admin:client:receiveVmenuKvpSnapshot', src, requestId, {
             ok = false,
             reason = 'forbidden',
             peds = {},
@@ -409,5 +430,9 @@ RegisterNetEvent('es_admin:server:requestVmenuKvpSnapshot', function(requestId, 
     end
 
     local snapshot = EsAdminVmenuFallback.getSnapshot(forceRefresh == true)
-    TriggerClientEvent('es_admin:client:receiveVmenuKvpSnapshot', src, requestId, snapshot)
+    TriggerClientEvent('cortex-admin:client:receiveVmenuKvpSnapshot', src, requestId, snapshot)
+end)
+
+AddEventHandler('playerDropped', function()
+    requestRateBySource[source] = nil
 end)

@@ -81,7 +81,7 @@ function EsAdminBridge.getAllItems()
     end)
 
     if not ok or not rawItems then
-        print('[es_admin] Failed to fetch items from ox_inventory')
+        print('[cortex-admin] Failed to fetch items from ox_inventory')
         return cachedItems or {}
     end
 
@@ -103,7 +103,7 @@ function EsAdminBridge.getAllItems()
 
     cachedItems = items
     cachedItemsTime = now
-    print(('[es_admin] Cached %d items from ox_inventory'):format(#items))
+    print(('[cortex-admin] Cached %d items from ox_inventory'):format(#items))
     return items
 end
 
@@ -176,7 +176,7 @@ function EsAdminBridge.getPlayerVehicles(citizenid)
     end)
 
     if not ok or not vehicles then
-        print('[es_admin] Failed to fetch player vehicles from qbx_vehicles')
+        print('[cortex-admin] Failed to fetch player vehicles from qbx_vehicles')
         return {}
     end
 
@@ -253,6 +253,7 @@ end
 --- Cache of resolved QBX permission groups per player source
 --- Cleared when a player drops
 local qbxPermCache = {}
+local QBX_PERMISSION_CACHE_MS = 10000
 
 --- Determine which QBX permission group a player belongs to (if any)
 --- Returns the first matching group config from Config.QBXPermissions
@@ -279,9 +280,11 @@ function EsAdminBridge.getQBXPermissionGroup(src)
     if not Config.QBXPermissions then return nil, nil end
 
     -- Check cache first
-    if qbxPermCache[src] ~= nil then
-        if qbxPermCache[src] == false then return nil, nil end
-        return qbxPermCache[src].config, qbxPermCache[src].name
+    local now = GetGameTimer()
+    local cached = qbxPermCache[src]
+    if cached and now < cached.expiresAt then
+        if cached.config == false then return nil, nil end
+        return cached.config, cached.name
     end
 
     -- Check groups in priority order: god > admin > mod
@@ -293,7 +296,7 @@ function EsAdminBridge.getQBXPermissionGroup(src)
         if groupConfig then
             checked[groupName] = true
             if matchesGroupPerms(src, groupConfig) then
-                qbxPermCache[src] = { config = groupConfig, name = groupName }
+                qbxPermCache[src] = { config = groupConfig, name = groupName, expiresAt = now + QBX_PERMISSION_CACHE_MS }
                 return groupConfig, groupName
             end
         end
@@ -303,14 +306,14 @@ function EsAdminBridge.getQBXPermissionGroup(src)
     for groupName, groupConfig in pairs(Config.QBXPermissions) do
         if not checked[groupName] then
             if matchesGroupPerms(src, groupConfig) then
-                qbxPermCache[src] = { config = groupConfig, name = groupName }
+                qbxPermCache[src] = { config = groupConfig, name = groupName, expiresAt = now + QBX_PERMISSION_CACHE_MS }
                 return groupConfig, groupName
             end
         end
     end
 
     -- No matching group
-    qbxPermCache[src] = false
+    qbxPermCache[src] = { config = false, expiresAt = now + QBX_PERMISSION_CACHE_MS }
     return nil, nil
 end
 
@@ -386,4 +389,4 @@ AddEventHandler('playerDropped', function()
     end
 end)
 
-print('[es_admin] Server bridge loaded')
+print('[cortex-admin] Server bridge loaded')

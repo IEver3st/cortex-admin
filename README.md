@@ -11,11 +11,12 @@
 
 ## Features
 
-The menu is organized into tabs. The full declarative action catalog lives in `shared/actions.lua` and currently ships **130 actions**.
+The menu is organized into tabs. The full declarative action catalog lives in `shared/actions.lua` and currently ships **130 actions and workspaces**.
 
 - **Player** – god mode, invisibility, noclip, super jump, fast run/swim, infinite stamina, no ragdoll, heal, armor, revive, wanted level, freeze, clean/dry/wet player, ped model swap, save/load MP peds.
 - **Vehicle** – spawn, preview, save personal vehicles, repair, clean, delete, flip, engine toggle, vehicle godmode, speed limiter, torque/power multipliers, plate text, bike seatbelt, max performance mods.
-- **World** – set weather (with zone editor), set time, freeze time, blackout, dynamic weather, disable NPCs/traffic, clear area/vehicles/peds/objects.
+- **Live Vehicle Tuning** – edit powertrain, braking, grip, suspension, chassis and engine audio on the vehicle you are driving; captured handling values can be restored at any time.
+- **World** – set weather (with zone editor), set time, freeze time, blackout, disable NPCs/traffic, clear area/vehicles/peds/objects.
 - **Weapons** – give weapon, give all, remove all, save/load/delete loadouts, infinite ammo, set ammo, attachments, tints, parachute.
 - **Teleport** – waypoint, marker, coordinates, back, save/load/delete custom locations.
 - **Appearance** – randomize MP face, clear ped tattoos, set default outfit.
@@ -135,6 +136,7 @@ The menu is organized into tabs. The full declarative action catalog lives in `s
 ### vehicle
 - Spawn Vehicle
 - Vehicle Preview
+- Live Vehicle Tuning
 - Personal Vehicles
 - Save Current Vehicle
 - Repair Vehicle
@@ -178,7 +180,6 @@ The menu is organized into tabs. The full declarative action catalog lives in `s
 - Set Time
 - Freeze Time
 - Blackout
-- Dynamic Weather
 - Disable NPCs & Traffic
 - Clear Area
 - Delete Vehicles
@@ -188,7 +189,7 @@ The menu is organized into tabs. The full declarative action catalog lives in `s
 
 ## Installation
 
-1. Make sure `es_lib` is installed and started before `cortex-admin`.
+1. Make sure `cortex-lib` is installed and started before `cortex-admin`.
 2. Place this resource in your server resources directory, for example `resources/[eco]/cortex-admin`.
 3. Add the permission file to `server.cfg` **before** `ensure cortex-admin`:
    ```
@@ -224,7 +225,7 @@ Access is controlled entirely by FiveM ACE permissions:
 - `cortex-admin.<tab>` – access to a whole tab (`player`, `vehicle`, `world`, etc.).
 - `cortex-admin.<tab>.<action>` – access to a specific action when fine-grained ACEs are used (see `Config.ActionPermissions`).
 
-When `qbx_core` is running, the QBX groups `god`, `admin`, and `mod` are automatically mapped to the equivalent `cortex-admin` permissions via `Config.QBXPermissions`. You still need `command.esadmin` (or `command`) in ACE so players can open the menu.
+When `qbx_core` is running, the QBX groups `god`, `admin`, and `mod` are automatically mapped to the equivalent `cortex-admin` permissions via `Config.QBXPermissions`. Grant `command.esadmin` (or the configured `command.<Config.Command>` ACE) so players can open the menu; the broad `command` ACE is intentionally not accepted.
 
 The bundled `permissions.cfg` grants `cortex-admin.all` and `command.esadmin` to `group.admin`:
 
@@ -279,14 +280,14 @@ The resource registers a large set of convenience chat commands. All commands re
 ### Exports
 
 ```lua
-exports.cortex-admin:teleportToCoords(x, y, showNotification)
+exports['cortex-admin']:teleportToCoords(x, y, showNotification)
 ```
 
 Teleports the local player to the given `x`/`y` coordinates, optionally displaying a notification.
 
 ## Architecture
 
-- `fxmanifest.lua` – resource manifest; declares scripts, files, `es_lib` dependency, the `teleportToCoords` export and the `ui_page`.
+- `fxmanifest.lua` – resource manifest; declares scripts, files, `cortex-lib` dependency, the `teleportToCoords` export and the `ui_page`.
 - `shared/bridge.lua` – runtime detection for `qbx_core`, `ox_inventory`, and `qbx_vehicles`.
 - `shared/config.lua` – central configuration, permission strings, and QBX permission mapping.
 - `shared/actions.lua` – declarative catalog of 130 menu actions used by both client and server.
@@ -307,7 +308,7 @@ The UI can be previewed in a normal browser:
 
 1. (Optional) Regenerate the preview state when `shared/actions.lua` changes:
    ```bash
-   node tools/export-preview-state.mjs
+   bun run preview:state
    ```
 2. Start the local dev server:
    ```bash
@@ -322,10 +323,10 @@ The UI can be previewed in a normal browser:
 
 ## Limitations
 
-- Requires `es_lib` to be installed and started first.
+- Requires `cortex-lib` to be installed and started first.
 - QBX-branded tabs and actions (`Inventory`, `Garage`, `Give Money`, `Set Job/Gang`, `Admin Car`, etc.) require `qbx_core`, `ox_inventory`, or `qbx_vehicles` and will not function on a standalone server.
 - Permissions are enforced through FiveM ACE; misconfiguring `permissions.cfg` can grant unintended access.
-- The NUI frontend loads React, ReactDOM, Lucide icons, and Google Fonts from public CDNs. Servers or clients without internet access, or with a strict CSP, may fail to render the menu.
+- The NUI frontend vendors its React, ReactDOM, and Lucide runtime locally and uses system font stacks, so the menu does not require internet access at runtime.
 - Vehicle preview and customizer features rely on live NUI messages and native vehicle spawning; addon vehicles are discovered by scanning other resources’ `vehicles.meta` declarations and stream files.
 - vMenu migration depends on local vMenu KVP data being readable from the server’s `APPDATA`/`HOME` paths.
 - Some vehicle/appearance parity features are still being expanded; see `docs/superpowers` for the design backlog.

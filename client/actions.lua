@@ -4,32 +4,7 @@ local getHeadBlend
 local applyHeadBlend
 local applyPedOverlay
 
-local jsonEncode = json.encode
-local DEBUG_LOG_REL = '.cursor/debug-8d7dac.log'
-function agentDbg(hypothesisId, location, message, data)
-    if not (Config and Config.Debug) then
-        return
-    end
-    local res = GetCurrentResourceName()
-    local payload = {
-        sessionId = '8d7dac',
-        hypothesisId = hypothesisId,
-        location = location,
-        message = message,
-        data = data or {},
-        timestamp = GetGameTimer(),
-    }
-    local line = jsonEncode(payload) .. '\n'
-    local save = SaveResourceFile
-    if type(save) ~= 'function' then
-        return
-    end
-    local prev = LoadResourceFile(res, DEBUG_LOG_REL)
-    if type(prev) == 'string' and prev ~= '' then
-        line = prev .. line
-    end
-    save(res, DEBUG_LOG_REL, line, -1)
-end
+Admin.debugTrace = Admin.debugTrace or function() end
 
 function getPed()
     return PlayerPedId()
@@ -81,7 +56,7 @@ end
 
 function copyToClipboard(text)
     SendNUIMessage({
-        action = 'es_admin:copyText',
+        action = 'cortex-admin:copyText',
         data = { text = text }
     })
 end
@@ -119,7 +94,7 @@ end
 function setToggle(id, enabled)
     state.toggles[id] = enabled
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { toggles = state.toggles }
     })
 end
@@ -144,38 +119,38 @@ end
 
 function saveKvpJson(key, data)
     if not key or key == '' then
-        print('[es_admin] ERROR: saveKvpJson called with empty key')
+        print('[cortex-admin] ERROR: saveKvpJson called with empty key')
         return false
     end
     
     local ok, encoded = pcall(json.encode, data)
     if not ok then
-        print('[es_admin] ERROR: Failed to encode data for key: ' .. key)
+        print('[cortex-admin] ERROR: Failed to encode data for key: ' .. key)
         return false
     end
     
     SetResourceKvp(key, encoded)
-    print(('[es_admin] Saved KVP: %s (%d bytes)'):format(key, #encoded))
+    print(('[cortex-admin] Saved KVP: %s (%d bytes)'):format(key, #encoded))
     return true
 end
 
 local C = {
     MP_PED_KEY_PREFIX = 'mp_ped_',
-    MP_PED_SOURCE_ES_ADMIN = 'es_admin',
+    MP_PED_SOURCE_ES_ADMIN = 'cortex-admin',
     MP_PED_SOURCE_VMENU = 'vmenu',
     MODEL_HASH_MP_M = joaat('mp_m_freemode_01'),
     MODEL_HASH_MP_F = joaat('mp_f_freemode_01'),
-    LAST_PED_NAME_KEY = 'es_admin_last_ped',
-    LAST_PED_SOURCE_KEY = 'es_admin_last_ped_source',
-    LAST_PED_SOURCE_REF_KEY = 'es_admin_last_ped_source_key',
-    DEFAULT_PED_SOURCE_KEY = 'es_admin_default_ped_source',
-    DEFAULT_PED_SOURCE_REF_KEY = 'es_admin_default_ped_source_key',
-    TELEPORT_LOCATIONS_KEY = 'es_admin_teleport_locations',
-    WEAPON_LOADOUTS_KEY = 'es_admin_weapon_loadouts',
-    PERSONAL_VEHICLES_KEY = 'es_admin_personal_vehicles_v2',
-    PERSONAL_VEHICLES_LEGACY_KEY = 'es_admin_personal_vehicles',
+    LAST_PED_NAME_KEY = 'cortex-admin_last_ped',
+    LAST_PED_SOURCE_KEY = 'cortex-admin_last_ped_source',
+    LAST_PED_SOURCE_REF_KEY = 'cortex-admin_last_ped_source_key',
+    DEFAULT_PED_SOURCE_KEY = 'cortex-admin_default_ped_source',
+    DEFAULT_PED_SOURCE_REF_KEY = 'cortex-admin_default_ped_source_key',
+    TELEPORT_LOCATIONS_KEY = 'cortex-admin_teleport_locations',
+    WEAPON_LOADOUTS_KEY = 'cortex-admin_weapon_loadouts',
+    PERSONAL_VEHICLES_KEY = 'cortex-admin_personal_vehicles_v2',
+    PERSONAL_VEHICLES_LEGACY_KEY = 'cortex-admin_personal_vehicles',
     VMENU_VEHICLE_KEY_PREFIX = 'veh_',
-    PERSONAL_VEHICLE_SOURCE_ES_ADMIN = 'es_admin',
+    PERSONAL_VEHICLE_SOURCE_ES_ADMIN = 'cortex-admin',
     PERSONAL_VEHICLE_SOURCE_VMENU = 'vmenu',
 }
 
@@ -384,7 +359,7 @@ local vmenuFallbackSnapshotCache = {
 local pendingVmenuFallbackRequests = {}
 local pendingWardrobeShareTargetRequests = {}
 
-RegisterNetEvent('es_admin:client:receiveVmenuKvpSnapshot', function(requestId, payload)
+RegisterNetEvent('cortex-admin:client:receiveVmenuKvpSnapshot', function(requestId, payload)
     local pending = pendingVmenuFallbackRequests[requestId]
     if not pending then
         return
@@ -394,7 +369,7 @@ RegisterNetEvent('es_admin:client:receiveVmenuKvpSnapshot', function(requestId, 
     pending:resolve(payload)
 end)
 
-RegisterNetEvent('es_admin:client:receiveWardrobeShareTargets', function(requestId, payload)
+RegisterNetEvent('cortex-admin:client:receiveWardrobeShareTargets', function(requestId, payload)
     local pending = pendingWardrobeShareTargetRequests[requestId]
     if not pending then
         return
@@ -440,7 +415,7 @@ function getVmenuFallbackSnapshot(forceRefresh)
     local pending = promise.new()
     pendingVmenuFallbackRequests[requestId] = pending
 
-    TriggerServerEvent('es_admin:server:requestVmenuKvpSnapshot', requestId, forceRefresh == true)
+    TriggerServerEvent('cortex-admin:server:requestVmenuKvpSnapshot', requestId, forceRefresh == true)
 
     SetTimeout(tonumber(Config.VmenuFallback.requestTimeoutMs) or 2500, function()
         if pendingVmenuFallbackRequests[requestId] then
@@ -449,9 +424,9 @@ function getVmenuFallbackSnapshot(forceRefresh)
         end
     end)
 
-    agentDbg('H3', 'actions.lua:getVmenuFallbackSnapshot', 'before_await', { requestId = requestId })
+    Admin.debugTrace('vmenu_snapshot', 'before_await', { requestId = requestId })
     local payload = Citizen.Await(pending)
-    agentDbg('H3', 'actions.lua:getVmenuFallbackSnapshot', 'after_await', { ok = type(payload) == 'table' })
+    Admin.debugTrace('vmenu_snapshot', 'after_await', { ok = type(payload) == 'table' })
     if type(payload) ~= 'table' then
         return nil
     end
@@ -483,7 +458,7 @@ function getWardrobeShareTargetIds()
     local pending = promise.new()
     pendingWardrobeShareTargetRequests[requestId] = pending
 
-    TriggerServerEvent('es_admin:server:requestWardrobeShareTargets', requestId)
+    TriggerServerEvent('cortex-admin:server:requestWardrobeShareTargets', requestId)
 
     SetTimeout(2000, function()
         if pendingWardrobeShareTargetRequests[requestId] then
@@ -492,9 +467,9 @@ function getWardrobeShareTargetIds()
         end
     end)
 
-    agentDbg('H1', 'actions.lua:getWardrobeShareTargetIds', 'before_await', { requestId = requestId })
+    Admin.debugTrace('wardrobe_targets', 'before_await', { requestId = requestId })
     local payload = Citizen.Await(pending)
-    agentDbg('H1', 'actions.lua:getWardrobeShareTargetIds', 'after_await', { ok = type(payload) == 'table' })
+    Admin.debugTrace('wardrobe_targets', 'after_await', { ok = type(payload) == 'table' })
     if type(payload) ~= 'table' then
         return {}
     end
@@ -585,12 +560,12 @@ function setPedComponent(ped, componentId, drawable, texture)
     local componentIndex = tonumber(componentId)
     local safeDrawable, safeTexture, adjusted = resolveComponentVariation(ped, componentId, drawable, texture)
     if safeDrawable == nil or componentIndex == nil then
-        print(('[es_admin] Skipped invalid component variation component=%s drawable=%s texture=%s'):format(componentId, drawable, texture))
+        print(('[cortex-admin] Skipped invalid component variation component=%s drawable=%s texture=%s'):format(componentId, drawable, texture))
         return
     end
 
     if adjusted then
-        print(('[es_admin] Adjusted component variation component=%s drawable=%s->%s texture=%s->%s'):format(
+        print(('[cortex-admin] Adjusted component variation component=%s drawable=%s->%s texture=%s->%s'):format(
             componentId,
             tostring(drawable),
             tostring(safeDrawable),
@@ -606,7 +581,7 @@ function setPedProp(ped, propId, drawable, texture)
     local propIndex = tonumber(propId)
     local safeDrawable, safeTexture, adjusted = resolvePropVariation(ped, propId, drawable, texture)
     if safeDrawable == nil or propIndex == nil then
-        print(('[es_admin] Skipped invalid prop variation prop=%s drawable=%s texture=%s'):format(propId, drawable, texture))
+        print(('[cortex-admin] Skipped invalid prop variation prop=%s drawable=%s texture=%s'):format(propId, drawable, texture))
         return
     end
 
@@ -614,7 +589,7 @@ function setPedProp(ped, propId, drawable, texture)
         ClearPedProp(ped, propIndex)
     else
         if adjusted then
-            print(('[es_admin] Adjusted prop variation prop=%s drawable=%s->%s texture=%s->%s'):format(
+            print(('[cortex-admin] Adjusted prop variation prop=%s drawable=%s->%s texture=%s->%s'):format(
                 propId,
                 tostring(drawable),
                 tostring(safeDrawable),
@@ -786,10 +761,10 @@ function readPedOverlaySafely(ped, overlayId)
 end
 
 Admin.getPedAppearance = function()
-    agentDbg('H4', 'actions.lua:getPedAppearance', 'enter', {})
+    Admin.debugTrace('ped_appearance', 'enter', {})
     local ped = getPed()
     if ped == 0 or not DoesEntityExist(ped) then
-        agentDbg('H4', 'actions.lua:getPedAppearance', 'invalid_ped', {})
+        Admin.debugTrace('ped_appearance', 'invalid_ped', {})
         return buildEmptyAppearanceData()
     end
 
@@ -807,7 +782,7 @@ Admin.getPedAppearance = function()
             textures = math.max(0, safeNativeWholeNumber(GetNumberOfPedTextureVariations, 0, ped, i, drawable))
         }
     end
-    agentDbg('H4', 'actions.lua:getPedAppearance', 'after_component_loop', {})
+    Admin.debugTrace('ped_appearance', 'after_component_loop', {})
 
     for i = 0, 7 do
         local currentPropDrawable = safeNativeWholeNumber(GetPedPropIndex, -1, ped, i)
@@ -820,7 +795,7 @@ Admin.getPedAppearance = function()
             textures = currentPropDrawable >= 0 and math.max(0, safeNativeWholeNumber(GetNumberOfPedPropTextureVariations, 0, ped, i, currentPropDrawable)) or 0
         }
     end
-    agentDbg('H4', 'actions.lua:getPedAppearance', 'after_prop_loop', {})
+    Admin.debugTrace('ped_appearance', 'after_prop_loop', {})
 
     if data.isFreemode then
         for i = 0, 19 do
@@ -847,7 +822,7 @@ Admin.getPedAppearance = function()
         end
     end
 
-    agentDbg('H4', 'actions.lua:getPedAppearance', 'exit', { isFreemode = data.isFreemode == true })
+    Admin.debugTrace('ped_appearance', 'exit', { isFreemode = data.isFreemode == true })
     return data
 end
 
@@ -1637,7 +1612,7 @@ end
 
 function syncWardrobeShareRequests()
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { wardrobeShareRequests = state.wardrobeShareRequests or {} }
     })
 end
@@ -1665,7 +1640,7 @@ function removeWardrobeShareRequest(shareId)
     return true
 end
 
-RegisterNetEvent('es_admin:client:receiveWardrobeShare', function(payload)
+RegisterNetEvent('cortex-admin:client:receiveWardrobeShare', function(payload)
     if type(payload) ~= 'table' or type(payload.shareId) ~= 'string' or type(payload.outfit) ~= 'table' then
         return
     end
@@ -1683,7 +1658,7 @@ RegisterNetEvent('es_admin:client:receiveWardrobeShare', function(payload)
 end)
 
 Admin.getNearbyWardrobeShareTargets = function()
-    agentDbg('H1', 'actions.lua:getNearbyWardrobeShareTargets', 'enter', {})
+    Admin.debugTrace('wardrobe_targets', 'enter', {})
     local openTargetIds = getWardrobeShareTargetIds()
     local openLookup = {}
     for i = 1, #openTargetIds do
@@ -1727,7 +1702,7 @@ Admin.getNearbyWardrobeShareTargets = function()
         return (a.distance or 0.0) < (b.distance or 0.0)
     end)
 
-    agentDbg('H1', 'actions.lua:getNearbyWardrobeShareTargets', 'exit', { n = #nearby })
+    Admin.debugTrace('wardrobe_targets', 'exit', { n = #nearby })
     return nearby
 end
 
@@ -1752,7 +1727,7 @@ Admin.shareCurrentWardrobe = function(targetServerId)
         return false
     end
 
-    TriggerServerEvent('es_admin:server:shareWardrobe', {
+    TriggerServerEvent('cortex-admin:server:shareWardrobe', {
         target = target,
         title = 'Current Outfit',
         outfit = buildSharedWardrobeData(getPed()),
@@ -1952,7 +1927,7 @@ Admin.deleteSavedPed = function(target)
 
         local deleted, result = callVmenuBridge('DeleteSavedMpCharacterForEsAdmin', entry.sourceKey)
         if not deleted then
-            print(('[es_admin] vMenu outfit delete failed: %s'):format(tostring(result)))
+            print(('[cortex-admin] vMenu outfit delete failed: %s'):format(tostring(result)))
             notify('error', 'Failed to delete vMenu outfit.')
             return
         end
@@ -1985,7 +1960,7 @@ Admin.renameSavedPed = function(target, newName)
 
         local renamed, result = callVmenuBridge('RenameSavedMpCharacterForEsAdmin', entry.sourceKey, newKey)
         if not renamed then
-            print(('[es_admin] vMenu outfit rename failed: %s'):format(tostring(result)))
+            print(('[cortex-admin] vMenu outfit rename failed: %s'):format(tostring(result)))
             notify('error', 'Failed to rename vMenu outfit.')
             return
         end
@@ -2057,7 +2032,7 @@ Admin.cloneSavedPed = function(target, newName)
 
         local saved, result = callVmenuBridge('UpsertSavedMpCharacterForEsAdmin', newKey, clonedData, false)
         if not saved then
-            print(('[es_admin] vMenu outfit clone failed: %s'):format(tostring(result)))
+            print(('[cortex-admin] vMenu outfit clone failed: %s'):format(tostring(result)))
             notify('error', 'Failed to clone vMenu outfit.')
             return
         end
@@ -2139,11 +2114,11 @@ getHeadBlend = function(ped)
     blend, hasData = readPedHeadBlendSafely(ped)
 
     if hasData then
-        print(('[es_admin] Head blend captured - Mother: %d, Father: %d, ShapeMix: %.2f, SkinMix: %.2f'):format(
+        print(('[cortex-admin] Head blend captured - Mother: %d, Father: %d, ShapeMix: %.2f, SkinMix: %.2f'):format(
             blend.shapeFirstID or 0, blend.shapeSecondID or 0, blend.shapeMix or 0, blend.skinMix or 0
         ))
     else
-        print('[es_admin] WARNING: No head blend data found on ped')
+        print('[cortex-admin] WARNING: No head blend data found on ped')
     end
 
     return blend
@@ -2168,7 +2143,7 @@ applyHeadBlend = function(ped, data)
 end
 
 function captureMpPedData(ped, saveName)
-    print('[es_admin] Capturing MP Ped data...')
+    print('[cortex-admin] Capturing MP Ped data...')
     
     local headBlend = getHeadBlend(ped)
     
@@ -2191,9 +2166,9 @@ function captureMpPedData(ped, saveName)
     end
     
     if hasNonZeroFeatures then
-        print('[es_admin] Face features captured (has custom values)')
+        print('[cortex-admin] Face features captured (has custom values)')
     else
-        print('[es_admin] Face features captured (all default/zero)')
+        print('[cortex-admin] Face features captured (all default/zero)')
     end
 
     local hairColor, hairHighlightColor = getCurrentHairColors(ped)
@@ -2277,12 +2252,12 @@ end
 function applyMpPedData(ped, data)
     if not data then return end
     
-    print('[es_admin] Applying MP Ped data...')
+    print('[cortex-admin] Applying MP Ped data...')
 
     if data.ModelHash and data.ModelHash ~= 0 then
         local currentModel = GetEntityModel(ped)
         if currentModel ~= data.ModelHash then
-            if exports.es_lib:requestModel(data.ModelHash, 5000) then
+            if exports['cortex-lib']:requestModel(data.ModelHash, 5000) then
                 SetPlayerModel(PlayerId(), data.ModelHash)
                 SetModelAsNoLongerNeeded(data.ModelHash)
             ped = getPed()
@@ -2295,7 +2270,7 @@ function applyMpPedData(ped, data)
 
     if freemodePed and data.PedHeadBlendData then
         applyHeadBlend(ped, data.PedHeadBlendData)
-        print('[es_admin] Applied head blend data')
+        print('[cortex-admin] Applied head blend data')
     elseif freemodePed then
         SetPedHeadBlendData(ped, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.0, false)
     end
@@ -2304,21 +2279,21 @@ function applyMpPedData(ped, data)
         for featureId, value in pairs(data.FaceShapeFeatures.features) do
             SetPedFaceFeature(ped, tonumber(featureId), value)
         end
-        print('[es_admin] Applied face features')
+        print('[cortex-admin] Applied face features')
     end
 
     if data.DrawableVariations and data.DrawableVariations.clothes then
         for componentId, values in pairs(data.DrawableVariations.clothes) do
             setPedComponent(ped, tonumber(componentId), values[1], values[2])
         end
-        print('[es_admin] Applied clothing')
+        print('[cortex-admin] Applied clothing')
     end
 
     if data.PropVariations and data.PropVariations.props then
         for propId, values in pairs(data.PropVariations.props) do
             setPedProp(ped, tonumber(propId), values[1], values[2])
         end
-        print('[es_admin] Applied props')
+        print('[cortex-admin] Applied props')
     end
 
     if freemodePed and data.HairColor ~= nil then
@@ -2343,7 +2318,7 @@ function applyMpPedData(ped, data)
                 end
             end
         end
-        print('[es_admin] Applied head overlays (new format)')
+        print('[cortex-admin] Applied head overlays (new format)')
     elseif freemodePed and data.PedAppearance then
         local appearance = data.PedAppearance
 
@@ -2361,7 +2336,7 @@ function applyMpPedData(ped, data)
             }
             applyPedOverlay(ped, overlay.id, overlayData)
         end
-        print('[es_admin] Applied head overlays (legacy format)')
+        print('[cortex-admin] Applied head overlays (legacy format)')
     end
 
     ClearPedDecorations(ped)
@@ -2372,7 +2347,7 @@ function applyMpPedData(ped, data)
                 AddPedDecorationFromHashes(ped, tattoo.collection, tattoo.overlay)
             end
         end
-        print(('[es_admin] Applied %d tattoos'):format(#data.Tattoos))
+        print(('[cortex-admin] Applied %d tattoos'):format(#data.Tattoos))
     else
         local legacyPedTattoos = data.PedTattoos or data.PedTatttoos
         if type(legacyPedTattoos) == 'table' then
@@ -2391,12 +2366,12 @@ function applyMpPedData(ped, data)
             end
         end
         if count > 0 then
-            print(('[es_admin] Applied %d tattoos (legacy format)'):format(count))
+            print(('[cortex-admin] Applied %d tattoos (legacy format)'):format(count))
         end
         end
     end
     
-    print('[es_admin] MP Ped data applied successfully')
+    print('[cortex-admin] MP Ped data applied successfully')
 end
 
 -- Register early so startup restore in main.lua can use this even if later init code fails.
@@ -2666,7 +2641,7 @@ Admin.giveKeysForVehicle = function(vehicle, silent)
         end
     end
 
-    TriggerServerEvent('es_admin:server:giveVehicleKeys', {
+    TriggerServerEvent('cortex-admin:server:giveVehicleKeys', {
         netId = netId ~= 0 and netId or nil,
         silent = silent == true,
     })
@@ -2692,7 +2667,7 @@ function spawnVehicleWithProps(props)
 
     deleteOccupiedVehicleIfReplaceSpawnEnabled()
 
-    if not exports.es_lib:requestModel(props.model, 5000) then
+    if not exports['cortex-lib']:requestModel(props.model, 5000) then
         notify('error', 'Unable to load vehicle model.')
         return
     end
@@ -3161,7 +3136,7 @@ Admin.importVmenuSavedVehicles = function(options)
 
     if Admin.getPersonalVehiclesCache then
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { personalVehicles = Admin.getPersonalVehiclesCache() }
         })
     end
@@ -3200,7 +3175,7 @@ Admin.loadPersonalVehicles = loadPersonalVehicles
 if Admin.refreshPersonalVehiclesCache then
     local ok, err = pcall(Admin.refreshPersonalVehiclesCache)
     if not ok then
-        print(('[es_admin] WARNING: Failed to refresh personal vehicle cache during actions init: %s'):format(tostring(err)))
+        print(('[cortex-admin] WARNING: Failed to refresh personal vehicle cache during actions init: %s'):format(tostring(err)))
     end
 end
 
@@ -3300,13 +3275,13 @@ function actionSavePersonalVehicle(data)
         if updated and result == true then
             notify('success', 'vMenu vehicle updated.')
         else
-            print(('[es_admin] vMenu update failed: %s'):format(tostring(result)))
+            print(('[cortex-admin] vMenu update failed: %s'):format(tostring(result)))
             notify('error', 'Failed to update vMenu vehicle.')
         end
 
         Admin.refreshPersonalVehiclesCache()
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { personalVehicles = Admin.getPersonalVehiclesCache() }
         })
         return
@@ -3335,7 +3310,7 @@ function actionSavePersonalVehicle(data)
 
     Admin.refreshPersonalVehiclesCache()
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { personalVehicles = Admin.getPersonalVehiclesCache() }
     })
 end
@@ -3371,14 +3346,14 @@ function actionRemovePersonalVehicle(data)
         if deleted and result == true then
             notify('success', 'Removed vMenu saved vehicle.')
         else
-            print(('[es_admin] vMenu delete failed: %s'):format(tostring(result)))
+            print(('[cortex-admin] vMenu delete failed: %s'):format(tostring(result)))
             notify('error', 'Failed to remove vMenu saved vehicle.')
             return
         end
 
         Admin.refreshPersonalVehiclesCache()
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { personalVehicles = Admin.getPersonalVehiclesCache() }
         })
         return
@@ -3391,7 +3366,7 @@ function actionRemovePersonalVehicle(data)
 
     Admin.refreshPersonalVehiclesCache()
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { personalVehicles = Admin.getPersonalVehiclesCache() }
     })
 end
@@ -3450,7 +3425,7 @@ function actionSaveMpPed(data)
 
         local saved, result = callVmenuBridge('UpsertSavedMpCharacterForEsAdmin', entry.sourceKey, merged, true)
         if not saved then
-            print(('[es_admin] vMenu outfit overwrite failed: %s'):format(tostring(result)))
+            print(('[cortex-admin] vMenu outfit overwrite failed: %s'):format(tostring(result)))
             notify('error', 'Failed to overwrite vMenu outfit.')
             return
         end
@@ -3467,7 +3442,7 @@ function actionSaveMpPed(data)
     local key = (entry and entry.sourceKey) or kvpKey(C.MP_PED_KEY_PREFIX, name)
     mpData.SaveName = name
 
-    print(('[es_admin] Saving MP Ped: %s to key: %s'):format(name, key))
+    print(('[cortex-admin] Saving MP Ped: %s to key: %s'):format(name, key))
 
     if not saveKvpJson(key, mpData) then
         notify('error', 'Failed to save MP ped.')
@@ -3541,7 +3516,7 @@ function actionLoadPed(data)
         return
     end
 
-    if not exports.es_lib:requestModel(payload.ModelHash, 5000) then
+    if not exports['cortex-lib']:requestModel(payload.ModelHash, 5000) then
         notify('error', 'Failed to load model.')
         return
     end
@@ -3816,8 +3791,8 @@ function setFreecam(enabled, silent)
         SetEntityVisible(ped, true, false)
         ResetEntityAlpha(ped)
         ClearFocus()
-        if exports.es_lib and exports.es_lib.hideHelp then
-            exports.es_lib:hideHelp()
+        if exports['cortex-lib'] and exports['cortex-lib'].hideHelp then
+            exports['cortex-lib']:hideHelp()
         end
         if not silent then
             notify('info', 'Freecam off.')
@@ -3844,8 +3819,8 @@ function setFreecam(enabled, silent)
     SetCamActive(freecam.cam, true)
     RenderScriptCams(true, true, 400, true, false)
 
-    if exports.es_lib and exports.es_lib.showHelp then
-        exports.es_lib:showHelp({
+    if exports['cortex-lib'] and exports['cortex-lib'].showHelp then
+        exports['cortex-lib']:showHelp({
             { label = 'Move', value = 'W S A D' },
             { label = 'Up / Down', value = 'Space Q' },
             { label = 'Look', value = 'Mouse' },
@@ -3988,7 +3963,7 @@ function setNoclip(enabled)
     if enabled then
         notify('info', 'Noclip enabled')
 
-        exports.es_lib:showHelp({
+        exports['cortex-lib']:showHelp({
             { label = 'Fwd/Back', value = 'W S' },
             { label = 'Left/Right', value = 'A D' },
             { label = 'Up', value = 'Space' },
@@ -4080,7 +4055,7 @@ function setNoclip(enabled)
             end
         end)
     else
-        exports.es_lib:hideHelp()
+        exports['cortex-lib']:hideHelp()
 
         if vehicle ~= 0 then
             FreezeEntityPosition(vehicle, false)
@@ -4334,7 +4309,7 @@ function actionSetModel(data)
         return
     end
 
-    if not exports.es_lib:requestModel(model, 5000) then
+    if not exports['cortex-lib']:requestModel(model, 5000) then
         notify('error', 'Failed to load model.')
         return
     end
@@ -4423,7 +4398,7 @@ function syncPreviewExtrasStatebag()
     end
     local ent = Entity(previewVehicle)
     if ent and ent.state then
-        ent.state:set('es_admin_pv_ex', collectPreviewExtraStates(), true)
+        ent.state:set('cortex-admin_pv_ex', collectPreviewExtraStates(), true)
     end
 end
 
@@ -4479,7 +4454,7 @@ function spawnPreviewVehicleEntity(model, networkShared, transform)
     if not model or model == '' then
         return false
     end
-    if not exports.es_lib:requestModel(model, 5000) then
+    if not exports['cortex-lib']:requestModel(model, 5000) then
         notify('error', 'Unable to load vehicle model.')
         return false
     end
@@ -4512,7 +4487,7 @@ function spawnVehicleAtPedWithExtras(model, extraStates)
         return false
     end
 
-    if not exports.es_lib:requestModel(model, 5000) then
+    if not exports['cortex-lib']:requestModel(model, 5000) then
         notify('error', 'Unable to load vehicle model.')
         return false
     end
@@ -4736,9 +4711,310 @@ function actionMaxMods()
     notify('success', 'Max mods applied.')
 end
 
+Admin.vehicleTuning = Admin.vehicleTuning or {
+    sessions = {},
+    fields = {
+        { id = 'fInitialDriveForce', label = 'Drive force', description = 'Acceleration delivered through the drivetrain', group = 'Powertrain', min = 0.01, max = 2.0, step = 0.01, precision = 2 },
+        { id = 'fDriveInertia', label = 'Drive inertia', description = 'How quickly the engine builds and sheds revs', group = 'Powertrain', min = 0.1, max = 5.0, step = 0.05, precision = 2 },
+        { id = 'fInitialDriveMaxFlatVel', label = 'Max flat velocity', description = 'Base transmission speed target from handling data', group = 'Powertrain', min = 10.0, max = 500.0, step = 1.0, precision = 0 },
+        { id = 'fClutchChangeRateScaleUpShift', label = 'Upshift rate', description = 'Clutch speed while shifting into a higher gear', group = 'Powertrain', min = 0.1, max = 20.0, step = 0.1, precision = 1 },
+        { id = 'fClutchChangeRateScaleDownShift', label = 'Downshift rate', description = 'Clutch speed while shifting into a lower gear', group = 'Powertrain', min = 0.1, max = 20.0, step = 0.1, precision = 1 },
+        { id = 'fInitialDragCoeff', label = 'Drag coefficient', description = 'Aerodynamic resistance as speed increases', group = 'Powertrain', min = 0.1, max = 100.0, step = 0.1, precision = 1 },
+
+        { id = 'fBrakeForce', label = 'Brake force', description = 'Overall service-brake strength', group = 'Control', min = 0.01, max = 5.0, step = 0.01, precision = 2 },
+        { id = 'fBrakeBiasFront', label = 'Front brake bias', description = '0 sends braking rearward; 1 sends it forward', group = 'Control', min = 0.0, max = 1.0, step = 0.01, precision = 2 },
+        { id = 'fHandBrakeForce', label = 'Handbrake force', description = 'Rear-wheel lock strength for the handbrake', group = 'Control', min = 0.0, max = 5.0, step = 0.05, precision = 2 },
+        { id = 'fSteeringLock', label = 'Steering lock', description = 'Maximum steering angle', group = 'Control', min = 5.0, max = 90.0, step = 0.5, precision = 1, unit = 'deg' },
+        { id = 'fDriveBiasFront', label = 'Front drive bias', description = '0 is rear-wheel drive, 1 is front-wheel drive', group = 'Control', min = 0.0, max = 1.0, step = 0.01, precision = 2 },
+
+        { id = 'fTractionCurveMax', label = 'Peak grip', description = 'Maximum tyre grip before slip begins', group = 'Grip', min = 0.1, max = 10.0, step = 0.01, precision = 2 },
+        { id = 'fTractionCurveMin', label = 'Sliding grip', description = 'Tyre grip retained while the vehicle is sliding', group = 'Grip', min = 0.1, max = 10.0, step = 0.01, precision = 2 },
+        { id = 'fTractionCurveLateral', label = 'Lateral curve', description = 'Slip angle where the tyre reaches peak grip', group = 'Grip', min = 1.0, max = 45.0, step = 0.1, precision = 1 },
+        { id = 'fLowSpeedTractionLossMult', label = 'Launch slip', description = 'Low-speed wheelspin multiplier', group = 'Grip', min = 0.0, max = 5.0, step = 0.05, precision = 2 },
+        { id = 'fTractionBiasFront', label = 'Front traction bias', description = 'How available grip is distributed front to rear', group = 'Grip', min = 0.0, max = 1.0, step = 0.01, precision = 2 },
+
+        { id = 'fMass', label = 'Mass', description = 'Vehicle mass used by handling calculations', group = 'Chassis', min = 100.0, max = 10000.0, step = 10.0, precision = 0, unit = 'kg' },
+        { id = 'fSuspensionForce', label = 'Spring force', description = 'Overall suspension spring strength', group = 'Chassis', min = 0.1, max = 10.0, step = 0.05, precision = 2 },
+        { id = 'fSuspensionCompDamp', label = 'Compression damping', description = 'Resistance while the suspension compresses', group = 'Chassis', min = 0.1, max = 10.0, step = 0.05, precision = 2 },
+        { id = 'fSuspensionReboundDamp', label = 'Rebound damping', description = 'Resistance while the suspension extends', group = 'Chassis', min = 0.1, max = 10.0, step = 0.05, precision = 2 },
+        { id = 'fSuspensionUpperLimit', label = 'Upper travel', description = 'Maximum upward suspension movement', group = 'Chassis', min = -1.0, max = 1.0, step = 0.01, precision = 2 },
+        { id = 'fSuspensionLowerLimit', label = 'Lower travel', description = 'Maximum downward suspension movement', group = 'Chassis', min = -1.0, max = 1.0, step = 0.01, precision = 2 },
+        { id = 'fSuspensionRaise', label = 'Ride height', description = 'Raises or lowers the chassis at rest', group = 'Chassis', min = -1.0, max = 1.0, step = 0.01, precision = 2 },
+        { id = 'fAntiRollBarForce', label = 'Anti-roll force', description = 'Resistance to chassis roll in corners', group = 'Chassis', min = 0.0, max = 10.0, step = 0.05, precision = 2 },
+        { id = 'fAntiRollBarBiasFront', label = 'Front anti-roll bias', description = 'Anti-roll stiffness distribution front to rear', group = 'Chassis', min = 0.0, max = 1.0, step = 0.01, precision = 2 },
+        { id = 'fRollCentreHeightFront', label = 'Front roll centre', description = 'Front roll-centre height relative to the chassis', group = 'Chassis', min = -1.0, max = 1.0, step = 0.01, precision = 2 },
+        { id = 'fRollCentreHeightRear', label = 'Rear roll centre', description = 'Rear roll-centre height relative to the chassis', group = 'Chassis', min = -1.0, max = 1.0, step = 0.01, precision = 2 },
+    },
+    audioPresets = {
+        { label = 'Adder V8', value = 'ADDER' },
+        { label = 'Banshee', value = 'BANSHEE' },
+        { label = 'Carbonizzare', value = 'CARBONIZARE' },
+        { label = 'Comet', value = 'COMET2' },
+        { label = 'Dominator V8', value = 'DOMINATOR' },
+        { label = 'Elegy', value = 'ELEGY' },
+        { label = 'Sultan RS', value = 'SULTANRS' },
+        { label = 'Zentorno V12', value = 'ZENTORNO' },
+    },
+}
+
+function Admin.canUseVehicleTuning()
+    return state.allowed['vehicle.liveTuning'] ~= false
+end
+
+function Admin.findVehicleTuningField(fieldId)
+    if type(fieldId) ~= 'string' then return nil end
+
+    for i = 1, #Admin.vehicleTuning.fields do
+        local field = Admin.vehicleTuning.fields[i]
+        if field.id == fieldId then
+            return field
+        end
+    end
+
+    return nil
+end
+
+function Admin.getVehicleTuningVehicle()
+    local ped = getPed()
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 or not DoesEntityExist(vehicle) then
+        return nil, 'Enter a vehicle to start a live tuning session.'
+    end
+
+    if GetPedInVehicleSeat(vehicle, -1) ~= ped then
+        return nil, 'Move to the driver seat before changing handling.'
+    end
+
+    return vehicle
+end
+
+function Admin.getVehicleTuningSession()
+    if not Admin.canUseVehicleTuning() then
+        return nil, 'You do not have permission to use live vehicle tuning.'
+    end
+
+    local vehicle, vehicleError = Admin.getVehicleTuningVehicle()
+    if not vehicle then
+        return nil, vehicleError
+    end
+
+    for handle, saved in pairs(Admin.vehicleTuning.sessions) do
+        if not DoesEntityExist(handle) or GetEntityModel(handle) ~= saved.model then
+            Admin.vehicleTuning.sessions[handle] = nil
+        end
+    end
+
+    local model = GetEntityModel(vehicle)
+    local session = Admin.vehicleTuning.sessions[vehicle]
+    if session and session.model == model then
+        return session
+    end
+
+    local defaults = {}
+    for i = 1, #Admin.vehicleTuning.fields do
+        local field = Admin.vehicleTuning.fields[i]
+        local value = GetVehicleHandlingFloat(vehicle, 'CHandlingData', field.id)
+        defaults[field.id] = value
+    end
+
+    local displayName = GetDisplayNameFromVehicleModel(model)
+    if type(displayName) ~= 'string' or displayName == '' or displayName == 'NULL' then
+        displayName = ('0x%08X'):format(model)
+    end
+
+    local label = GetLabelText(displayName)
+    if type(label) ~= 'string' or label == '' or label == 'NULL' then
+        label = displayName
+    end
+
+    session = {
+        vehicle = vehicle,
+        model = model,
+        modelName = displayName,
+        label = label,
+        plate = GetVehicleNumberPlateText(vehicle) or '',
+        defaults = defaults,
+        defaultAudio = displayName,
+        audioName = nil,
+    }
+    Admin.vehicleTuning.sessions[vehicle] = session
+    return session
+end
+
+function Admin.buildVehicleTuningSnapshot()
+    local session, sessionError = Admin.getVehicleTuningSession()
+    if not session then
+        return { ok = false, error = 'vehicle_unavailable', message = sessionError }
+    end
+
+    local fields = {}
+    for i = 1, #Admin.vehicleTuning.fields do
+        local definition = Admin.vehicleTuning.fields[i]
+        fields[i] = {
+            id = definition.id,
+            label = definition.label,
+            description = definition.description,
+            group = definition.group,
+            min = definition.min,
+            max = definition.max,
+            step = definition.step,
+            precision = definition.precision,
+            unit = definition.unit,
+            value = GetVehicleHandlingFloat(session.vehicle, 'CHandlingData', definition.id),
+            defaultValue = session.defaults[definition.id],
+        }
+    end
+
+    return {
+        ok = true,
+        vehicle = {
+            label = session.label,
+            model = session.modelName,
+            plate = session.plate,
+        },
+        fields = fields,
+        audio = {
+            value = session.audioName or '',
+            defaultValue = session.defaultAudio,
+            presets = Admin.vehicleTuning.audioPresets,
+        },
+    }
+end
+
+function Admin.setVehicleTuningValue(fieldId, rawValue)
+    local definition = Admin.findVehicleTuningField(fieldId)
+    local value = tonumber(rawValue)
+    if not definition or not value or value ~= value or value < definition.min or value > definition.max then
+        return { ok = false, error = 'invalid_handling_value', message = 'That handling value is outside the supported range.' }
+    end
+
+    local session, sessionError = Admin.getVehicleTuningSession()
+    if not session then
+        return { ok = false, error = 'vehicle_unavailable', message = sessionError }
+    end
+
+    SetVehicleHandlingFloat(session.vehicle, 'CHandlingData', definition.id, value + 0.0)
+    if definition.id == 'fInitialDriveForce' or definition.id == 'fInitialDriveMaxFlatVel' then
+        ModifyVehicleTopSpeed(session.vehicle, 0.0)
+    end
+
+    return {
+        ok = true,
+        field = definition.id,
+        value = GetVehicleHandlingFloat(session.vehicle, 'CHandlingData', definition.id),
+    }
+end
+
+function Admin.resetVehicleTuningField(fieldId)
+    local definition = Admin.findVehicleTuningField(fieldId)
+    if not definition then
+        return { ok = false, error = 'invalid_handling_field', message = 'That handling setting is not available.' }
+    end
+
+    local session, sessionError = Admin.getVehicleTuningSession()
+    if not session then
+        return { ok = false, error = 'vehicle_unavailable', message = sessionError }
+    end
+
+    local defaultValue = session.defaults[definition.id]
+    if type(defaultValue) ~= 'number' then
+        return { ok = false, error = 'missing_handling_default', message = 'That setting has no captured default.' }
+    end
+
+    SetVehicleHandlingFloat(session.vehicle, 'CHandlingData', definition.id, defaultValue + 0.0)
+    if definition.id == 'fInitialDriveForce' or definition.id == 'fInitialDriveMaxFlatVel' then
+        ModifyVehicleTopSpeed(session.vehicle, 0.0)
+    end
+
+    return {
+        ok = true,
+        field = definition.id,
+        value = GetVehicleHandlingFloat(session.vehicle, 'CHandlingData', definition.id),
+    }
+end
+
+function Admin.forceVehicleTuningAudio(vehicle, soundName)
+    if type(ForceVehicleEngineAudio) == 'function' then
+        ForceVehicleEngineAudio(vehicle, soundName)
+        return true
+    end
+
+    if type(ForceUseAudioGameObject) == 'function' then
+        ForceUseAudioGameObject(vehicle, soundName)
+        return true
+    end
+
+    return false
+end
+
+function Admin.setVehicleTuningAudio(rawSoundName)
+    local soundName = trimString(rawSoundName)
+    if not soundName or #soundName > 64 or not soundName:match('^[%w_%-]+$') then
+        return { ok = false, error = 'invalid_audio_name', message = 'Use a valid engine audio name (letters, numbers, _ or -).' }
+    end
+
+    local session, sessionError = Admin.getVehicleTuningSession()
+    if not session then
+        return { ok = false, error = 'vehicle_unavailable', message = sessionError }
+    end
+
+    if not Admin.forceVehicleTuningAudio(session.vehicle, soundName) then
+        return { ok = false, error = 'audio_native_unavailable', message = 'Engine audio switching is unavailable in this client build.' }
+    end
+
+    session.audioName = soundName
+    return { ok = true, value = soundName }
+end
+
+function Admin.resetVehicleTuning(scope)
+    local session, sessionError = Admin.getVehicleTuningSession()
+    if not session then
+        return { ok = false, error = 'vehicle_unavailable', message = sessionError }
+    end
+
+    if scope == 'audio' then
+        Admin.forceVehicleTuningAudio(session.vehicle, session.defaultAudio)
+        session.audioName = nil
+        return { ok = true, value = '' }
+    end
+
+    for i = 1, #Admin.vehicleTuning.fields do
+        local definition = Admin.vehicleTuning.fields[i]
+        local defaultValue = session.defaults[definition.id]
+        if type(defaultValue) == 'number' then
+            SetVehicleHandlingFloat(session.vehicle, 'CHandlingData', definition.id, defaultValue + 0.0)
+        end
+    end
+    ModifyVehicleTopSpeed(session.vehicle, 0.0)
+
+    if scope == 'all' then
+        Admin.forceVehicleTuningAudio(session.vehicle, session.defaultAudio)
+        session.audioName = nil
+    end
+
+    return Admin.buildVehicleTuningSnapshot()
+end
+
+function Admin.restoreVehicleTuningSessions()
+    for vehicle, session in pairs(Admin.vehicleTuning.sessions) do
+        if DoesEntityExist(vehicle) and GetEntityModel(vehicle) == session.model then
+            for i = 1, #Admin.vehicleTuning.fields do
+                local definition = Admin.vehicleTuning.fields[i]
+                local defaultValue = session.defaults[definition.id]
+                if type(defaultValue) == 'number' then
+                    SetVehicleHandlingFloat(vehicle, 'CHandlingData', definition.id, defaultValue + 0.0)
+                end
+            end
+            ModifyVehicleTopSpeed(vehicle, 0.0)
+            Admin.forceVehicleTuningAudio(vehicle, session.defaultAudio)
+        end
+    end
+    Admin.vehicleTuning.sessions = {}
+end
+
 
 function actionSetWeather(value)
-    TriggerServerEvent('es_admin:server:setWorldState', { weather = value })
+    TriggerServerEvent('cortex-admin:server:setWorldState', { weather = value })
 end
 
 function getCurrentDynamicWeatherZone()
@@ -4784,7 +5060,7 @@ function actionSetTime(value)
         notify('error', 'Invalid hour.')
         return
     end
-    TriggerServerEvent('es_admin:server:setWorldState', { hour = hour, minute = 0 })
+    TriggerServerEvent('cortex-admin:server:setWorldState', { hour = hour, minute = 0 })
 end
 
 function actionTeleportWaypoint()
@@ -5028,7 +5304,7 @@ function actionTakePhoto()
 
     closeMenuForDevCapture()
     notify('info', 'Capturing photo...')
-    TriggerServerEvent('es_admin:server:takePhoto')
+    TriggerServerEvent('cortex-admin:server:takePhoto')
 end
 
 function actionOpenGallery()
@@ -5304,10 +5580,10 @@ Admin.executeAction = function(actionId, data)
 
         Admin.saveSettings()
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { settings = state.settings }
         })
-        SendNUIMessage({ action = 'es_admin:reload' })
+        SendNUIMessage({ action = 'cortex-admin:reload' })
         notify('success', 'Settings reset and UI reload requested.')
         return
     elseif actionId == 'dev.noHud' then
@@ -5338,7 +5614,7 @@ Admin.executeAction = function(actionId, data)
             value = 100
         end
 
-        TriggerServerEvent('es_admin:server:setMetadata', {
+        TriggerServerEvent('cortex-admin:server:setMetadata', {
             target = GetPlayerServerId(PlayerId()),
             key = 'stress',
             value = value,
@@ -5357,7 +5633,7 @@ Admin.executeAction = function(actionId, data)
         return
     elseif actionId == 'vehicle.adminCar' then
         -- Save current vehicle to QBX garage via server
-        TriggerServerEvent('es_admin:server:adminCar')
+        TriggerServerEvent('cortex-admin:server:adminCar')
         return
     elseif actionId == 'vehicle.giveKeys' then
         local vehicle = ensureVehicle()
@@ -5369,17 +5645,17 @@ Admin.executeAction = function(actionId, data)
         return
     elseif actionId == 'inventory.giveItem' then
         -- Handled inline via NUI - just switch to inventory tab
-        SendNUIMessage({ action = 'es_admin:setTab', data = { tab = 'inventory' } })
+        SendNUIMessage({ action = 'cortex-admin:setTab', data = { tab = 'inventory' } })
         return
     elseif actionId == 'garage.spawnVehicle' then
         -- Handled inline via NUI - just switch to garage tab
-        SendNUIMessage({ action = 'es_admin:setTab', data = { tab = 'garage' } })
+        SendNUIMessage({ action = 'cortex-admin:setTab', data = { tab = 'garage' } })
         return
     elseif actionId == 'server.resources' then
-        SendNUIMessage({ action = 'es_admin:setTab', data = { tab = 'server' } })
+        SendNUIMessage({ action = 'cortex-admin:setTab', data = { tab = 'server' } })
         return
     elseif actionId == 'server.refresh' then
-        TriggerServerEvent('es_admin:server:resourceAction', { action = 'refresh', name = 'all' })
+        TriggerServerEvent('cortex-admin:server:resourceAction', { action = 'refresh', name = 'all' })
         return
     end
 
@@ -5493,11 +5769,9 @@ Admin.toggleAction = function(actionId, enabled)
         SetPedInfiniteAmmo(getPed(), enabled, 0)
         SetPedInfiniteAmmoClip(getPed(), enabled)
     elseif actionId == 'world.freezeTime' then
-        TriggerServerEvent('es_admin:server:setWorldState', { freezeTime = enabled })
+        TriggerServerEvent('cortex-admin:server:setWorldState', { freezeTime = enabled })
     elseif actionId == 'world.blackout' then
-        TriggerServerEvent('es_admin:server:setWorldState', { blackout = enabled })
-    elseif actionId == 'world.dynamicWeather' then
-        TriggerServerEvent('es_admin:server:setWorldState', { dynamicWeather = enabled })
+        TriggerServerEvent('cortex-admin:server:setWorldState', { blackout = enabled })
     elseif actionId == 'dev.noHud' then
         DisplayHud(not enabled)
         DisplayRadar(not enabled)
@@ -5528,13 +5802,13 @@ Admin.toggleAction = function(actionId, enabled)
     elseif actionId == 'dev.showCoords' then
         state.coordHudDirty = enabled == true
         SendNUIMessage({
-            action = 'es_admin:setCoordHud',
+            action = 'cortex-admin:setCoordHud',
             data = { visible = enabled }
         })
     elseif actionId == 'dev.showSpeed' then
         state.speedHudDirty = enabled == true
         SendNUIMessage({
-            action = 'es_admin:setSpeedHud',
+            action = 'cortex-admin:setSpeedHud',
             data = {
                 visible = enabled == true,
                 position = state.settings.speedHudPosition or 'top-left',
@@ -5547,10 +5821,10 @@ Admin.toggleAction = function(actionId, enabled)
             state.settings.compactMode = nil
         end
         state.settings[settingKey] = enabled
-        print(('[es_admin] Toggle setting: %s = %s'):format(settingKey, tostring(enabled)))
+        print(('[cortex-admin] Toggle setting: %s = %s'):format(settingKey, tostring(enabled)))
         Admin.saveSettings()
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { settings = state.settings }
         })
     end
@@ -5669,7 +5943,7 @@ Admin.selectAction = function(actionId, value)
         end
         state.speedHudDirty = true
         SendNUIMessage({
-            action = 'es_admin:setSpeedHud',
+            action = 'cortex-admin:setSpeedHud',
             data = {
                 visible = state.toggles['dev.showSpeed'] == true,
                 position = state.settings.speedHudPosition or 'top-left',
@@ -5687,7 +5961,7 @@ Admin.selectAction = function(actionId, value)
         end
         state.speedHudDirty = true
         SendNUIMessage({
-            action = 'es_admin:setSpeedHud',
+            action = 'cortex-admin:setSpeedHud',
             data = {
                 visible = state.toggles['dev.showSpeed'] == true,
                 position = state.settings.speedHudPosition or 'top-left',
@@ -5698,7 +5972,7 @@ Admin.selectAction = function(actionId, value)
 
     Admin.saveSettings()
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = { settings = state.settings }
     })
 end
@@ -5707,6 +5981,7 @@ AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     setFreecam(false, true)
     clearVehiclePreview()
+    Admin.restoreVehicleTuningSessions()
     setAmbientSuppressionState(false)
 end)
 
@@ -5865,7 +6140,7 @@ CreateThread(function()
                     state.coordHudDirty = false
 
                     SendNUIMessage({
-                        action = 'es_admin:updateCoordHud',
+                        action = 'cortex-admin:updateCoordHud',
                         data = {
                             x = x,
                             y = y,
@@ -5899,7 +6174,7 @@ CreateThread(function()
                     lastSpeedDisplay = display
                     state.speedHudDirty = false
                     SendNUIMessage({
-                        action = 'es_admin:updateSpeedHud',
+                        action = 'cortex-admin:updateSpeedHud',
                         data = { speed = display }
                     })
                 end
@@ -6072,7 +6347,7 @@ end
 -- GARAGE VEHICLE SPAWN (QBX)
 -- ============================================================================
 
-RegisterNetEvent('es_admin:client:spawnGarageVehicle', function(data)
+RegisterNetEvent('cortex-admin:client:spawnGarageVehicle', function(data)
     if not data or not data.model then
         notify('error', 'Invalid vehicle data')
         return
@@ -6080,7 +6355,7 @@ RegisterNetEvent('es_admin:client:spawnGarageVehicle', function(data)
 
     local modelHash = type(data.model) == 'number' and data.model or joaat(data.model)
 
-    if not exports.es_lib:requestModel(modelHash, 5000) then
+    if not exports['cortex-lib']:requestModel(modelHash, 5000) then
         notify('error', 'Failed to load vehicle model: ' .. tostring(data.model))
         return
     end
@@ -6140,7 +6415,7 @@ RegisterCommand('clean', function()
     actionCleanVehicle()
 end, false)
 
-AddStateBagChangeHandler('es_admin_pv_ex', nil, function(bagName, _, value)
+AddStateBagChangeHandler('cortex-admin_pv_ex', nil, function(bagName, _, value)
     if type(value) ~= 'table' then
         return
     end

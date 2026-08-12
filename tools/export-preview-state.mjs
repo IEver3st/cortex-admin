@@ -1,7 +1,7 @@
 /**
  * Reads shared/actions.lua (EsAdminActions) and writes ui/preview-state.json
  * for browser preview (?preview=1). Run from repo root:
- *   node tools/export-preview-state.mjs
+ *   bun run preview:state
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const luaPath = join(root, 'shared', 'actions.lua');
+const configPath = join(root, 'shared', 'config.lua');
 const outPath = join(root, 'ui', 'preview-state.json');
 
 function tokenize(input) {
@@ -66,7 +67,7 @@ function tokenize(input) {
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_') {
             let start = i;
             i += 1;
-            while (i < len && /[a-zA-Z0-9_]/.test(input[i])) i += 1;
+            while (i < len && /[a-zA-Z0-9_.]/.test(input[i])) i += 1;
             const word = input.slice(start, i);
             push('IDENT', word);
             continue;
@@ -91,11 +92,11 @@ function parseTable(tokens, start) {
     }
     p += 1;
 
-    const isArrayLike = () => {
-        if (p >= tokens.length) return false;
-        const t = tokens[p];
-        return t.type === 'PUNCT' && t.value === '{';
-    };
+    const isKeyedEntry = () => (
+        tokens[p]?.type === 'IDENT'
+        && tokens[p + 1]?.type === 'PUNCT'
+        && tokens[p + 1]?.value === '='
+    );
 
     const array = [];
     const obj = {};
@@ -108,7 +109,7 @@ function parseTable(tokens, start) {
         }
 
         if (useArray === null) {
-            useArray = isArrayLike();
+            useArray = !isKeyedEntry();
         }
 
         if (useArray) {
@@ -150,6 +151,7 @@ function parseValue(tokens, start) {
         if (t.value === 'true') return [true, start + 1];
         if (t.value === 'false') return [false, start + 1];
         if (t.value === 'nil') return [null, start + 1];
+        if (t.value.startsWith('Config.')) return [`__LUA_REF__:${t.value}`, start + 1];
     }
 
     if (t.type === 'PUNCT' && t.value === '{') {
@@ -225,10 +227,40 @@ function parseEsAdminActions(luaText) {
     return root;
 }
 
+function parseAssignedTable(luaText, marker) {
+    const idx = luaText.indexOf(marker);
+    if (idx < 0) throw new Error(`${marker} not found`);
+    const braceStart = luaText.indexOf('{', idx + marker.length);
+    if (braceStart < 0) throw new Error(`{ not found after ${marker}`);
+    const slice = extractBalancedBlock(luaText, braceStart);
+    const [value] = parseTable(tokenize(slice), 0);
+    return value;
+}
+
+function resolveLuaRefs(value, references) {
+    if (typeof value === 'string' && value.startsWith('__LUA_REF__:')) {
+        const key = value.slice('__LUA_REF__:'.length);
+        if (!(key in references)) throw new Error(`Unsupported Lua reference: ${key}`);
+        return references[key];
+    }
+    if (Array.isArray(value)) return value.map((entry) => resolveLuaRefs(entry, references));
+    if (value && typeof value === 'object') {
+        for (const [key, entry] of Object.entries(value)) {
+            value[key] = resolveLuaRefs(entry, references);
+        }
+    }
+    return value;
+}
+
 const lua = readFileSync(luaPath, 'utf8');
-const root = parseEsAdminActions(lua);
-const tabs = root.tabs;
-const actions = root.actions;
+const configLua = readFileSync(configPath, 'utf8');
+const references = {
+    'Config.ClearRadiusOptions': parseAssignedTable(configLua, 'Config.ClearRadiusOptions ='),
+    'Config.WeaponList': parseAssignedTable(configLua, 'Config.WeaponList ='),
+};
+const parsedActions = resolveLuaRefs(parseEsAdminActions(lua), references);
+const tabs = parsedActions.tabs;
+const actions = parsedActions.actions;
 
 if (!Array.isArray(tabs) || !Array.isArray(actions)) {
     throw new Error('Parsed root missing tabs/actions arrays');
@@ -275,7 +307,7 @@ const payload = {
         shared: false,
     },
     resources: [
-        { name: 'es_admin', status: 'started' },
+        { name: 'cortex-admin', status: 'started' },
         { name: 'ox_lib', status: 'started' },
         { name: 'example_stopped', status: 'stopped' },
     ],

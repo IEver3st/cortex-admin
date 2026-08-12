@@ -1,6 +1,6 @@
 /**
  * Browser-only preview: open ui/index.html?preview=1 (via local static server).
- * Mocks FiveM NUI fetch + pushes initial state after es_admin:ready.
+ * Mocks FiveM NUI fetch + pushes initial state after cortex-admin:ready.
  */
 (function () {
     const params = new URLSearchParams(window.location.search);
@@ -10,7 +10,7 @@
 
     window.__ES_ADMIN_PREVIEW__ = true;
     window.GetParentResourceName = function () {
-        return 'es_admin';
+        return 'cortex-admin';
     };
 
     const origFetch = window.fetch.bind(window);
@@ -70,6 +70,37 @@
             neonRight: false,
             neonColor: [255, 255, 255],
             tyreSmokeColor: [255, 255, 255]
+        };
+    }
+
+    function previewVehicleTuning() {
+        return {
+            ok: true,
+            vehicle: { label: 'Elegy Retro Custom', model: 'ELEGY', plate: 'CORTEX' },
+            fields: [
+                { id: 'fInitialDriveForce', label: 'Drive force', description: 'Acceleration delivered through the drivetrain', group: 'Powertrain', min: 0.01, max: 2, step: 0.01, precision: 2, value: 0.34, defaultValue: 0.29 },
+                { id: 'fDriveInertia', label: 'Drive inertia', description: 'How quickly the engine builds and sheds revs', group: 'Powertrain', min: 0.1, max: 5, step: 0.05, precision: 2, value: 1.1, defaultValue: 1.0 },
+                { id: 'fInitialDriveMaxFlatVel', label: 'Max flat velocity', description: 'Base transmission speed target from handling data', group: 'Powertrain', min: 10, max: 500, step: 1, precision: 0, value: 182, defaultValue: 168 },
+                { id: 'fClutchChangeRateScaleUpShift', label: 'Upshift rate', description: 'Clutch speed while shifting into a higher gear', group: 'Powertrain', min: 0.1, max: 20, step: 0.1, precision: 1, value: 3.4, defaultValue: 3.4 },
+                { id: 'fClutchChangeRateScaleDownShift', label: 'Downshift rate', description: 'Clutch speed while shifting into a lower gear', group: 'Powertrain', min: 0.1, max: 20, step: 0.1, precision: 1, value: 3.1, defaultValue: 3.1 },
+                { id: 'fInitialDragCoeff', label: 'Drag coefficient', description: 'Aerodynamic resistance as speed increases', group: 'Powertrain', min: 0.1, max: 100, step: 0.1, precision: 1, value: 8.2, defaultValue: 8.2 },
+                { id: 'fBrakeForce', label: 'Brake force', description: 'Overall service-brake strength', group: 'Control', min: 0.01, max: 5, step: 0.01, precision: 2, value: 1.1, defaultValue: 1.0 },
+                { id: 'fSteeringLock', label: 'Steering lock', description: 'Maximum steering angle', group: 'Control', min: 5, max: 90, step: 0.5, precision: 1, unit: 'deg', value: 38, defaultValue: 38 },
+                { id: 'fTractionCurveMax', label: 'Peak grip', description: 'Maximum tyre grip before slip begins', group: 'Grip', min: 0.1, max: 10, step: 0.01, precision: 2, value: 2.72, defaultValue: 2.55 },
+                { id: 'fLowSpeedTractionLossMult', label: 'Launch slip', description: 'Low-speed wheelspin multiplier', group: 'Grip', min: 0, max: 5, step: 0.05, precision: 2, value: 0.9, defaultValue: 0.9 },
+                { id: 'fMass', label: 'Mass', description: 'Vehicle mass used by handling calculations', group: 'Chassis', min: 100, max: 10000, step: 10, precision: 0, unit: 'kg', value: 1420, defaultValue: 1420 },
+                { id: 'fSuspensionForce', label: 'Spring force', description: 'Overall suspension spring strength', group: 'Chassis', min: 0.1, max: 10, step: 0.05, precision: 2, value: 2.4, defaultValue: 2.3 }
+            ],
+            audio: {
+                value: 'SULTANRS',
+                defaultValue: 'ELEGY',
+                presets: [
+                    { label: 'Adder V8', value: 'ADDER' },
+                    { label: 'Banshee', value: 'BANSHEE' },
+                    { label: 'Sultan RS', value: 'SULTANRS' },
+                    { label: 'Zentorno V12', value: 'ZENTORNO' }
+                ]
+            }
         };
     }
 
@@ -171,7 +202,7 @@
         },
         vehiclePreview: { active: false, model: '', shared: false },
         resources: [
-            { name: 'es_admin', status: 'started' },
+            { name: 'cortex-admin', status: 'started' },
             { name: 'ox_lib', status: 'started' }
         ],
         inventoryItems: [
@@ -205,40 +236,76 @@
                 return r.json();
             })
             .catch(function () {
-                console.warn('[es_admin preview] Using fallback state. Run: node tools/export-preview-state.mjs');
+                console.warn('[cortex-admin preview] Using fallback state. Run: bun run preview:state');
                 return FALLBACK_PREVIEW_STATE;
             })
             .then(function (data) {
                 const merged = mergeToggleDefaults(data);
-                window.postMessage({ action: 'es_admin:setState', data: merged }, '*');
-                window.postMessage({ action: 'es_admin:open' }, '*');
+                window.postMessage({ action: 'cortex-admin:setState', data: merged }, '*');
+                window.postMessage({ action: 'cortex-admin:open' }, '*');
             });
     }
 
     const nuiJsonHandlers = {
-        'es_admin:ready': function () {
+        'cortex-admin:ready': function () {
             injectPreviewUiState();
             return jsonResponse({ ok: true });
         },
-        'es_admin:getAppearance': function () {
+        'cortex-admin:getAppearance': function () {
             return jsonResponse(emptyAppearance());
         },
-        'es_admin:getSavedPeds': function () {
+        'cortex-admin:getSavedPeds': function () {
             return jsonResponse([]);
         },
-        'es_admin:getSavedTeleportLocations': function () {
+        'cortex-admin:getSavedTeleportLocations': function () {
             return jsonResponse([]);
         },
-        'es_admin:getVehicleCustomization': function () {
+        'cortex-admin:getVehicleCustomization': function () {
             return jsonResponse(emptyVehicleCustomization());
         },
-        'es_admin:getPreviewVehicleExtras': function () {
+        'cortex-admin:getVehicleTuning': function () {
+            return jsonResponse(previewVehicleTuning());
+        },
+        'cortex-admin:resetVehicleTuning': function (opts) {
+            const snapshot = previewVehicleTuning();
+            let request = {};
+            try {
+                request = JSON.parse((opts && opts.body) || '{}');
+            } catch (err) {
+                request = {};
+            }
+
+            if (request.scope === 'audio' || request.scope === 'all') {
+                snapshot.audio.value = '';
+            }
+            if (request.scope === 'handling' || request.scope === 'all') {
+                snapshot.fields = snapshot.fields.map(function (field) {
+                    return { ...field, value: field.defaultValue };
+                });
+            }
+            return jsonResponse(snapshot);
+        },
+        'cortex-admin:resetVehicleTuningField': function (opts) {
+            let request = {};
+            try {
+                request = JSON.parse((opts && opts.body) || '{}');
+            } catch (err) {
+                request = {};
+            }
+            const field = previewVehicleTuning().fields.find(function (entry) {
+                return entry.id === request.field;
+            });
+            return jsonResponse(field
+                ? { ok: true, field: field.id, value: field.defaultValue }
+                : { ok: false, error: 'invalid_handling_field', message: 'That handling setting is not available.' });
+        },
+        'cortex-admin:getPreviewVehicleExtras': function () {
             return jsonResponse({ ok: true, extras: [] });
         },
-        'es_admin:getWeaponAttachments': function () {
+        'cortex-admin:getWeaponAttachments': function () {
             return jsonResponse({ ok: true, weaponName: '', components: {} });
         },
-        'es_admin:getVmenuMigrationSnapshot': function () {
+        'cortex-admin:getVmenuMigrationSnapshot': function () {
             return jsonResponse({
                 vmenuRunning: false,
                 peds: { available: false, count: 0, source: 'preview', importedCount: 0 },
@@ -246,27 +313,27 @@
                 permissions: { mode: 'preview', note: 'Browser preview mode.' }
             });
         },
-        'es_admin:getWardrobeShareTargets': function () {
+        'cortex-admin:getWardrobeShareTargets': function () {
             return jsonResponse({ ok: true, targets: [] });
         }
     };
 
     window.fetch = function (url, opts) {
         const u = String(url);
-        if (!u.startsWith('https://es_admin/')) {
+        if (!u.startsWith('https://cortex-admin/')) {
             return origFetch(url, opts);
         }
 
-        const eventName = u.slice('https://es_admin/'.length);
+        const eventName = u.slice('https://cortex-admin/'.length);
         if (nuiJsonHandlers[eventName]) {
-            return Promise.resolve(nuiJsonHandlers[eventName]());
+            return Promise.resolve(nuiJsonHandlers[eventName](opts));
         }
 
         if (window.__ES_ADMIN_PREVIEW_DEBUG__) {
-            console.debug('[es_admin preview] NUI', eventName, opts && opts.body);
+            console.debug('[cortex-admin preview] NUI', eventName, opts && opts.body);
         }
         return Promise.resolve(jsonResponse({ ok: true }));
     };
 
-    console.info('[es_admin] Preview mode. Serve the ui folder over HTTP, e.g. npx serve ui');
+    console.info('[cortex-admin] Preview mode. Run `bun run dev` and open the printed URL.');
 })();

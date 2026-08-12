@@ -47,7 +47,27 @@ local allowedResourceActions = {
 
 local uiPresence = {}
 local permissionCache = {}
+local requestBuckets = {}
+local pendingAdminCarRequests = {}
 local PERMISSION_CACHE_MS = 10000
+local ADMIN_CAR_REQUEST_MS = 5000
+
+local moneyActions = {
+    ['player.setCash'] = 'cash',
+    ['player.setBank'] = 'bank',
+}
+
+local metadataActions = {
+    ['player.setFood'] = 'hunger',
+    ['player.setThirst'] = 'thirst',
+    ['player.setStress'] = 'stress',
+    ['dev.setStress'] = 'stress',
+}
+
+local allowedMoneyTypes = {
+    cash = true,
+    bank = true,
+}
 
 local function trimString(value, maxLength)
     if type(value) ~= 'string' then
@@ -68,11 +88,13 @@ end
 
 local function toInteger(value, minValue, maxValue)
     local number = tonumber(value)
-    if not number or number ~= number then
+    if not number or number ~= number or number == math.huge or number == -math.huge then
         return nil
     end
 
-    number = mathFloor(number)
+    if number ~= mathFloor(number) then
+        return nil
+    end
 
     if minValue and number < minValue then
         return nil
@@ -142,8 +164,217 @@ local function sanitizeCoords(coords)
     }
 end
 
+local function allowRequest(src, bucketName, maxRequests, windowMs)
+    if type(src) ~= 'number' or src <= 0 then
+        return false
+    end
+
+    local now = GetGameTimer()
+    local playerBuckets = requestBuckets[src]
+    if not playerBuckets then
+        playerBuckets = {}
+        requestBuckets[src] = playerBuckets
+    end
+
+    local bucket = playerBuckets[bucketName]
+    if not bucket or now < bucket.startedAt or now - bucket.startedAt >= windowMs then
+        playerBuckets[bucketName] = {
+            startedAt = now,
+            count = 1,
+        }
+        return true
+    end
+
+    if bucket.count >= maxRequests then
+        return false
+    end
+
+    bucket.count = bucket.count + 1
+    return true
+end
+
+local function getSessionIdentifier(src)
+    local identifiers = GetPlayerIdentifiers(src)
+    if type(identifiers) ~= 'table' then return nil end
+    return identifiers[1]
+end
+
+local function sessionIdentifierMatches(src, expected)
+    if type(expected) ~= 'string' or expected == '' or not GetPlayerName(src) then
+        return false
+    end
+
+    local identifiers = GetPlayerIdentifiers(src)
+    if type(identifiers) ~= 'table' then return false end
+    for _, identifier in ipairs(identifiers) do
+        if identifier == expected then return true end
+    end
+    return false
+end
+
+local function canOpenMenu(src)
+    if IsPlayerAceAllowed(src, Config.Permissions.all)
+        or IsPlayerAceAllowed(src, 'command.' .. Config.Command)
+        or IsPlayerAceAllowed(src, 'command.esadmin') then
+        return true
+    end
+
+    return Config.HasQBX
+        and EsAdminBridge
+        and EsAdminBridge.isQBXAdmin
+        and EsAdminBridge.isQBXAdmin(src) == true
+end
+
+local function sanitizeVariationPair(value, minDrawable)
+    if type(value) ~= 'table' then
+        return nil
+    end
+
+    local entryCount = 0
+    for key in pairs(value) do
+        if key ~= 1 and key ~= 2 then
+            return nil
+        end
+        entryCount = entryCount + 1
+    end
+
+    if entryCount ~= 2 then
+        return nil
+    end
+
+    local drawable = toInteger(value[1], minDrawable, 4096)
+    local texture = toInteger(value[2], 0, 1024)
+    if drawable == nil or texture == nil then
+        return nil
+    end
+
+    return { drawable, texture }
+end
+
+local function sanitizeVariationMap(value, minId, maxId, minDrawable, maxEntries)
+    if type(value) ~= 'table' then
+        return nil
+    end
+
+    local sanitized = {}
+    local count = 0
+
+    for rawId, variation in pairs(value) do
+        local id = toInteger(rawId, minId, maxId)
+        local pair = sanitizeVariationPair(variation, minDrawable)
+        if id == nil or pair == nil or sanitized[id] ~= nil then
+            return nil
+        end
+
+        count = count + 1
+        if count > maxEntries then
+            return nil
+        end
+        sanitized[id] = pair
+    end
+
+    return sanitized
+end
+
+local function sanitizeWardrobe(outfit)
+    if type(outfit) ~= 'table'
+        or type(outfit.DrawableVariations) ~= 'table'
+        or type(outfit.PropVariations) ~= 'table' then
+        return nil
+    end
+
+    local clothes = sanitizeVariationMap(outfit.DrawableVariations.clothes, 0, 11, 0, 12)
+    local props = sanitizeVariationMap(outfit.PropVariations.props, 0, 7, -1, 8)
+    if not clothes or not props then
+        return nil
+    end
+
+    return {
+        Version = 1,
+        DrawableVariations = { clothes = clothes },
+        PropVariations = { props = props },
+    }
+end
+
+local function sanitizeSerializable(value, depth, budget)
+    local valueType = type(value)
+    if valueType == 'boolean' then return value, true end
+    if valueType == 'string' then
+        if #value > 256 then return nil, false end
+        return value, true
+    end
+    if valueType == 'number' then
+        if value ~= value or value == math.huge or value == -math.huge or mathAbs(value) > 1000000000000 then
+            return nil, false
+        end
+        return value, true
+    end
+    if valueType ~= 'table' or depth > 6 then
+        return nil, false
+    end
+
+    local sanitized = {}
+    for key, entry in pairs(value) do
+        budget.count = budget.count + 1
+        if budget.count > 384 then return nil, false end
+
+        local keyType = type(key)
+        if keyType == 'number' then
+            if key ~= mathFloor(key) or key < -1 or key > 1024 then return nil, false end
+        elseif keyType == 'string' then
+            if key == '' or #key > 64 then return nil, false end
+        else
+            return nil, false
+        end
+
+        local cleanEntry, ok = sanitizeSerializable(entry, depth + 1, budget)
+        if not ok then return nil, false end
+        sanitized[key] = cleanEntry
+    end
+
+    return sanitized, true
+end
+
+local function sanitizeVehicleProps(props, model, plate)
+    if type(props) ~= 'table' then return nil end
+
+    local sanitized, ok = sanitizeSerializable(props, 1, { count = 0 })
+    if not ok then return nil end
+    sanitized.model = model
+    sanitized.plate = trimString(plate, 16) or ''
+
+    local encodedOk, encoded = pcall(json.encode, sanitized)
+    if not encodedOk or type(encoded) ~= 'string' or #encoded > 65536 then
+        return nil
+    end
+    return sanitized
+end
+
+local function arePlayersNearby(firstSource, secondSource, maxDistance)
+    if GetPlayerRoutingBucket(firstSource) ~= GetPlayerRoutingBucket(secondSource) then
+        return false
+    end
+
+    local firstPed = GetPlayerPed(firstSource)
+    local secondPed = GetPlayerPed(secondSource)
+    if not firstPed or firstPed <= 0 or not secondPed or secondPed <= 0 then
+        return false
+    end
+
+    local firstCoords = GetEntityCoords(firstPed)
+    local secondCoords = GetEntityCoords(secondPed)
+    if not firstCoords or not secondCoords then
+        return false
+    end
+
+    local dx = firstCoords.x - secondCoords.x
+    local dy = firstCoords.y - secondCoords.y
+    local dz = firstCoords.z - secondCoords.z
+    return dx * dx + dy * dy + dz * dz <= maxDistance * maxDistance
+end
+
 local function hasPermission(src, actionId)
-    -- Check for full admin access via es_admin ACE
+    -- Check for full admin access via cortex-admin ACE
     if IsPlayerAceAllowed(src, Config.Permissions.all) then
         return true
     end
@@ -151,28 +382,14 @@ local function hasPermission(src, actionId)
     -- QBX Permission Bridge: When QBX is active, check if the player belongs to
     -- a configured QBX admin group (god, admin, mod, etc.) and resolve permissions
     -- from Config.QBXPermissions mapping. This lets QBX admins use the menu
-    -- without needing separate es_admin.* ACE entries.
+    -- without needing separate cortex-admin.* ACE entries.
     if Config.HasQBX then
         local action = actionIndex[actionId]
-        local tab = action and action.tab
+        local tab = action and action.tab or actionId:match('^([^.]+)%.')
         local qbxResult = EsAdminBridge.checkQBXPermission(src, actionId, tab)
         if qbxResult == true then return true end
         if qbxResult == false then return false end
         -- nil = no QBX group matched, fall through to standard ACE checks
-    end
-
-    -- Check for command permission (if player can open the menu, they likely should have access)
-    -- This is a fallback for servers without fully configured ACE permissions
-    if IsPlayerAceAllowed(src, 'command.' .. Config.Command)
-        or IsPlayerAceAllowed(src, 'command.esadmin')
-        or IsPlayerAceAllowed(src, 'command') then
-        -- If no specific permissions are denied, allow access when player has menu command access
-        local actionPerm = Config.ActionPermissions[actionId]
-        if actionPerm and not IsPlayerAceAllowed(src, actionPerm) then
-            -- Check if specific action permission exists and is denied
-            return false
-        end
-        return true
     end
 
     -- Check for specific action permission
@@ -183,7 +400,7 @@ local function hasPermission(src, actionId)
 
     -- Check for tab-level permission
     local action = actionIndex[actionId]
-    local tab = action and action.tab
+    local tab = action and action.tab or actionId:match('^([^.]+)%.')
     if tab and Config.Permissions[tab] and IsPlayerAceAllowed(src, Config.Permissions[tab]) then
         return true
     end
@@ -202,6 +419,11 @@ local function buildPermissionSnapshot(src)
     for _, action in ipairs(Actions.actions) do
         allowed[action.id] = hasPermission(src, action.id)
     end
+    for actionId in pairs(Config.ActionPermissions or {}) do
+        if allowed[actionId] == nil then
+            allowed[actionId] = hasPermission(src, actionId)
+        end
+    end
 
     permissionCache[src] = {
         allowed = allowed,
@@ -211,13 +433,15 @@ local function buildPermissionSnapshot(src)
     return allowed
 end
 
-RegisterNetEvent('es_admin:server:requestPermissions', function()
+RegisterNetEvent('cortex-admin:server:requestPermissions', function()
     local src = source
-    TriggerClientEvent('es_admin:client:permissions', src, buildPermissionSnapshot(src))
+    if not allowRequest(src, 'menu-read', 12, 5000) or not canOpenMenu(src) then return end
+    TriggerClientEvent('cortex-admin:client:permissions', src, buildPermissionSnapshot(src))
 end)
 
-RegisterNetEvent('es_admin:server:setWorldState', function(payload)
+RegisterNetEvent('cortex-admin:server:setWorldState', function(payload)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(payload) ~= 'table' then return end
 
     local changedState = {}
@@ -232,9 +456,9 @@ RegisterNetEvent('es_admin:server:setWorldState', function(payload)
 
     if payload.hour ~= nil and hasPermission(src, 'world.time') then
         local hour = toInteger(payload.hour, 0, 23)
-        local minute = toInteger(payload.minute, 0, 59) or 0
+        local minute = toInteger(payload.minute, 0, 59)
 
-        if hour then
+        if hour and minute then
             worldState.hour = hour
             worldState.minute = minute
             changedState.hour = hour
@@ -259,18 +483,23 @@ RegisterNetEvent('es_admin:server:setWorldState', function(payload)
     end
 
     if next(changedState) then
-        TriggerClientEvent('es_admin:client:updateWorldState', -1, changedState)
+        TriggerClientEvent('cortex-admin:client:updateWorldState', -1, changedState)
     end
 end)
 
-RegisterNetEvent('es_admin:server:requestWorldState', function()
+RegisterNetEvent('cortex-admin:server:requestWorldState', function()
     local src = source
+    if not allowRequest(src, 'menu-read', 12, 5000) or not canOpenMenu(src) then return end
     if next(worldState) == nil then return end
-    TriggerClientEvent('es_admin:client:updateWorldState', src, worldState)
+    TriggerClientEvent('cortex-admin:client:updateWorldState', src, worldState)
 end)
 
-RegisterNetEvent('es_admin:server:setUiPresence', function(data)
+RegisterNetEvent('cortex-admin:server:setUiPresence', function(data)
     local src = source
+    if not allowRequest(src, 'menu-presence', 8, 5000) or not canOpenMenu(src) then
+        uiPresence[src] = nil
+        return
+    end
     if type(data) ~= 'table' then
         return
     end
@@ -278,65 +507,80 @@ RegisterNetEvent('es_admin:server:setUiPresence', function(data)
     uiPresence[src] = data.open == true
 end)
 
-RegisterNetEvent('es_admin:server:requestWardrobeShareTargets', function(requestId)
+RegisterNetEvent('cortex-admin:server:requestWardrobeShareTargets', function(requestId)
     local src = source
-    if type(requestId) ~= 'string' or requestId == '' then
+    if not allowRequest(src, 'wardrobe-read', 6, 5000)
+        or not canOpenMenu(src)
+        or uiPresence[src] ~= true
+        or type(requestId) ~= 'string'
+        or requestId == ''
+        or #requestId > 96 then
         return
     end
 
     local targets = {}
     for playerId, isOpen in pairs(uiPresence) do
-        if playerId ~= src and isOpen == true and GetPlayerName(playerId) then
+        if playerId ~= src
+            and isOpen == true
+            and GetPlayerName(playerId)
+            and arePlayersNearby(src, playerId, 12.0) then
             targets[#targets + 1] = playerId
         end
     end
 
     table.sort(targets)
-    TriggerClientEvent('es_admin:client:receiveWardrobeShareTargets', src, requestId, targets)
+    TriggerClientEvent('cortex-admin:client:receiveWardrobeShareTargets', src, requestId, targets)
 end)
 
-RegisterNetEvent('es_admin:server:shareWardrobe', function(data)
+RegisterNetEvent('cortex-admin:server:shareWardrobe', function(data)
     local src = source
-    if type(data) ~= 'table' then
+    if not allowRequest(src, 'wardrobe-write', 3, 10000)
+        or not canOpenMenu(src)
+        or uiPresence[src] ~= true
+        or type(data) ~= 'table' then
         return
     end
 
     local target = toInteger(data.target, 1)
     if not target or target == src or not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player is unavailable.')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player is unavailable.')
         return
     end
 
     if uiPresence[target] ~= true then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player must have the menu open.')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player must have the menu open.')
         return
     end
 
-    local outfit = data.outfit
-    if type(outfit) ~= 'table'
-        or type(outfit.DrawableVariations) ~= 'table'
-        or type(outfit.PropVariations) ~= 'table' then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Shared wardrobe payload was invalid.')
+    if not arePlayersNearby(src, target, 12.0) then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player must be nearby.')
+        return
+    end
+
+    local outfit = sanitizeWardrobe(data.outfit)
+    if not outfit then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Shared wardrobe payload was invalid.')
         return
     end
 
     local shareId = ('wardrobe:%d:%d:%d'):format(src, target, GetGameTimer())
     local senderName = GetPlayerName(src) or ('Player %d'):format(src)
 
-    TriggerClientEvent('es_admin:client:receiveWardrobeShare', target, {
+    TriggerClientEvent('cortex-admin:client:receiveWardrobeShare', target, {
         shareId = shareId,
         senderId = src,
         senderName = senderName,
-        title = type(data.title) == 'string' and data.title or 'Current Outfit',
+        title = trimString(data.title, 64) or 'Current Outfit',
         outfit = outfit,
     })
 
-    TriggerClientEvent('es_admin:client:notify', src, 'success', ('Shared current outfit with %s.'):format(GetPlayerName(target) or ('Player %d'):format(target)))
-    TriggerClientEvent('es_admin:client:notify', target, 'info', ('%s shared an outfit with you.'):format(senderName))
+    TriggerClientEvent('cortex-admin:client:notify', src, 'success', ('Shared current outfit with %s.'):format(GetPlayerName(target) or ('Player %d'):format(target)))
+    TriggerClientEvent('cortex-admin:client:notify', target, 'info', ('%s shared an outfit with you.'):format(senderName))
 end)
 
-RegisterNetEvent('es_admin:server:playerAction', function(data)
+RegisterNetEvent('cortex-admin:server:playerAction', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
 
     local action = trimString(data.action, 16)
@@ -353,23 +597,24 @@ RegisterNetEvent('es_admin:server:playerAction', function(data)
         local identifiers = GetPlayerIdentifiers(target)
         local reason = trimString(data.reason, 160) or 'Banned by staff.'
         local duration = toInteger(data.duration, 0, 525600)
+        if duration == nil then return end
         local adminName = GetPlayerName(src) or 'Console'
         EsAdminServer.addBan(identifiers, reason, adminName, duration)
         DropPlayer(target, reason)
     elseif action == 'freeze' then
         if not hasPermission(src, 'player.freeze') then return end
-        TriggerClientEvent('es_admin:client:freeze', target, toBoolean(data.enabled) == true)
+        local enabled = toBoolean(data.enabled)
+        if enabled == nil then return end
+        TriggerClientEvent('cortex-admin:client:freeze', target, enabled)
     elseif action == 'bring' then
         if not hasPermission(src, 'player.bring') then return end
-        local coords = sanitizeCoords(data.coords)
-        local heading = tonumber(data.heading)
-        if not coords then return end
-        if heading and heading == heading then
-            heading = heading % 360
-        else
-            heading = nil
-        end
-        TriggerClientEvent('es_admin:client:teleport', target, coords, heading)
+        local adminPed = GetPlayerPed(src)
+        if not adminPed or adminPed <= 0 then return end
+        local coords = sanitizeCoords(GetEntityCoords(adminPed))
+        local heading = GetEntityHeading(adminPed)
+        if not coords or not heading or heading ~= heading then return end
+        heading = heading % 360
+        TriggerClientEvent('cortex-admin:client:teleport', target, coords, heading)
     end
 end)
 
@@ -386,6 +631,8 @@ end)
 AddEventHandler('playerDropped', function()
     uiPresence[source] = nil
     permissionCache[source] = nil
+    requestBuckets[source] = nil
+    pendingAdminCarRequests[source] = nil
 end)
 
 -- =============================================================================
@@ -898,7 +1145,7 @@ local function getAddonVehicles(forceRefresh)
     addonVehiclesCache.expiresAt = now + ADDON_VEHICLES_CACHE_MS
 
     if Config.Debug or #list == 0 then
-        print(('[es_admin] Addon vehicle scan indexed %d models (metadata: %d, stream fallback: %d, duplicates: %d, started resources: %d, vehicle meta resources: %d, declarations: %d, resolved meta files: %d, missing meta files: %d, parsed meta files: %d, fallback resources: %d)'):format(
+        print(('[cortex-admin] Addon vehicle scan indexed %d models (metadata: %d, stream fallback: %d, duplicates: %d, started resources: %d, vehicle meta resources: %d, declarations: %d, resolved meta files: %d, missing meta files: %d, parsed meta files: %d, fallback resources: %d)'):format(
             #list,
             stats.metadataModels,
             stats.streamFallbackModels,
@@ -965,30 +1212,35 @@ end
 
 local function invalidateAddonVehiclesCache(reason)
     addonVehiclesCache.expiresAt = 0
-    print(('[es_admin] addon vehicle cache invalidated (%s)'):format(reason or 'unspecified'))
+    print(('[cortex-admin] addon vehicle cache invalidated (%s)'):format(reason or 'unspecified'))
 end
 
-RegisterNetEvent('es_admin:server:requestAddonVehicles', function()
+RegisterNetEvent('cortex-admin:server:requestAddonVehicles', function()
     local src = source
-    local canSpawnVehicles = hasPermission(src, 'vehicle.spawn')
+    if not allowRequest(src, 'expensive-read', 4, 10000) then return end
+    if not canOpenMenu(src) or not hasPermission(src, 'vehicle.spawn') then return end
     local vehicles = getAddonVehicles(false)
-    if not canSpawnVehicles and Config.Debug then
-        print(('[es_admin] requestAddonVehicles: %s (%d) lacks vehicle.spawn; sending UI visibility list.'):format(GetPlayerName(src) or 'unknown', src))
-    end
-    TriggerClientEvent('es_admin:client:setAddonVehicles', src, vehicles)
+    TriggerClientEvent('cortex-admin:client:setAddonVehicles', src, vehicles)
 end)
 
-RegisterNetEvent('es_admin:server:takePhoto', function()
+RegisterNetEvent('cortex-admin:server:takePhoto', function()
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if not hasPermission(src, 'dev.takePhoto') then return end
 
     if GetResourceState('screenshot-basic') ~= 'started' then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'screenshot-basic is not running.')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'screenshot-basic is not running.')
         return
     end
 
     if not ensurePhotoCaptureDir() then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed to prepare the photo output folder.')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed to prepare the photo output folder.')
+        return
+    end
+
+    local sessionIdentifier = getSessionIdentifier(src)
+    if not sessionIdentifier then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not verify your player session.')
         return
     end
 
@@ -999,14 +1251,16 @@ RegisterNetEvent('es_admin:server:takePhoto', function()
         encoding = 'jpg',
         quality = 0.95,
     }, function(err)
+        if not sessionIdentifierMatches(src, sessionIdentifier) then return end
+
         if err then
-            print(('[es_admin] failed to capture photo for %s (%d): %s'):format(GetPlayerName(src) or 'unknown', src, tostring(err)))
-            TriggerClientEvent('es_admin:client:notify', src, 'error', 'Photo capture failed.')
+            print(('[cortex-admin] failed to capture photo for %s (%d): %s'):format(GetPlayerName(src) or 'unknown', src, tostring(err)))
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Photo capture failed.')
             return
         end
 
-        TriggerClientEvent('es_admin:client:copyText', src, absolutePath)
-        TriggerClientEvent('es_admin:client:notify', src, 'success', ('Photo saved to %s. Full path copied to clipboard.'):format(relativePath))
+        TriggerClientEvent('cortex-admin:client:copyText', src, absolutePath)
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', ('Photo saved to %s. Full path copied to clipboard.'):format(relativePath))
     end)
 end)
 
@@ -1024,15 +1278,17 @@ AddEventHandler('onResourceStop', function(resourceName)
     invalidateAddonVehiclesCache(('resource stop: %s'):format(resourceName or 'unknown'))
 end)
 
-RegisterNetEvent('es_admin:server:requestResources', function()
+RegisterNetEvent('cortex-admin:server:requestResources', function()
     local src = source
+    if not allowRequest(src, 'expensive-read', 4, 10000) then return end
     if not hasPermission(src, 'server.resources') then return end
     
-    TriggerClientEvent('es_admin:client:setResources', src, getResourceList())
+    TriggerClientEvent('cortex-admin:client:setResources', src, getResourceList())
 end)
 
-RegisterNetEvent('es_admin:server:resourceAction', function(data)
+RegisterNetEvent('cortex-admin:server:resourceAction', function(data)
     local src = source
+    if not allowRequest(src, 'resource-write', 4, 10000) then return end
     if type(data) ~= 'table' then return end
 
     local action = trimString(data.action, 16)
@@ -1040,53 +1296,58 @@ RegisterNetEvent('es_admin:server:resourceAction', function(data)
 
     if not action or not allowedResourceActions[action] or not name then return end
     if not hasPermission(src, 'server.resources') then return end
+    if action == 'refresh' then
+        ExecuteCommand('refresh')
+        print(string.format('^3[cortex-admin] ^7Admin %s triggered global resource refresh', GetPlayerName(src)))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'info', 'Resource list refreshed')
+        TriggerClientEvent('cortex-admin:client:setResources', src, getResourceList())
+        return
+    end
+
     if GetResourceState(name) == 'missing' then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', ('Resource not found: %s'):format(name))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', ('Resource not found: %s'):format(name))
         return
     end
 
     if action == 'start' then
         if GetResourceState(name) == 'stopped' then
             StartResource(name)
-            print(string.format('^3[es_admin] ^7Admin %s started resource: %s', GetPlayerName(src), name))
-            TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Started %s', name))
+            print(string.format('^3[cortex-admin] ^7Admin %s started resource: %s', GetPlayerName(src), name))
+            TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Started %s', name))
         else
-            TriggerClientEvent('es_admin:client:notify', src, 'error', string.format('%s is already %s', name, GetResourceState(name)))
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', string.format('%s is already %s', name, GetResourceState(name)))
         end
     elseif action == 'stop' then
         if GetResourceState(name) == 'started' then
             StopResource(name)
-            print(string.format('^3[es_admin] ^7Admin %s stopped resource: %s', GetPlayerName(src), name))
-            TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Stopped %s', name))
+            print(string.format('^3[cortex-admin] ^7Admin %s stopped resource: %s', GetPlayerName(src), name))
+            TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Stopped %s', name))
         else
-            TriggerClientEvent('es_admin:client:notify', src, 'error', string.format('%s is not running', name))
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', string.format('%s is not running', name))
         end
     elseif action == 'ensure' or action == 'restart' then
         StopResource(name)
         StartResource(name)
-        print(string.format('^3[es_admin] ^7Admin %s restarted resource: %s', GetPlayerName(src), name))
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Restarted %s', name))
-    elseif action == 'refresh' then
-        ExecuteCommand('refresh')
-        print(string.format('^3[es_admin] ^7Admin %s triggered global resource refresh', GetPlayerName(src)))
-        TriggerClientEvent('es_admin:client:notify', src, 'info', 'Resource list refreshed')
+        print(string.format('^3[cortex-admin] ^7Admin %s restarted resource: %s', GetPlayerName(src), name))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Restarted %s', name))
     end
 
     -- Send updated list back to the sender
-    TriggerClientEvent('es_admin:client:setResources', src, getResourceList())
+    TriggerClientEvent('cortex-admin:client:setResources', src, getResourceList())
 end)
 
 AddEventHandler('playerJoining', function()
     if next(worldState) == nil then return end
-    TriggerClientEvent('es_admin:client:updateWorldState', source, worldState)
+    TriggerClientEvent('cortex-admin:client:updateWorldState', source, worldState)
 end)
 
 -- =============================================================================
 -- INVENTORY MANAGEMENT (QBX / ox_inventory)
 -- =============================================================================
 
-RegisterNetEvent('es_admin:server:getItems', function()
+RegisterNetEvent('cortex-admin:server:getItems', function()
     local src = source
+    if not allowRequest(src, 'expensive-read', 4, 10000) then return end
     if not hasPermission(src, 'inventory.giveItem') then return end
 
     local items = EsAdminBridge.getAllItems()
@@ -1094,27 +1355,28 @@ RegisterNetEvent('es_admin:server:getItems', function()
         items = {}
     end
 
-    TriggerClientEvent('es_admin:client:setItems', src, items)
+    TriggerClientEvent('cortex-admin:client:setItems', src, items)
 end)
 
-RegisterNetEvent('es_admin:server:giveItem', function(data)
+RegisterNetEvent('cortex-admin:server:giveItem', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'inventory.giveItem') then return end
 
     local target = toInteger(data.target, 1)
     local itemName = trimString(data.item, 64)
-    local amount = toInteger(data.amount, 1, 10000) or 1
+    local amount = toInteger(data.amount, 1, 10000)
 
-    if not target or not itemName then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid parameters')
+    if not target or not itemName or not amount then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid parameters')
         return
     end
 
     -- Verify target is online
     local targetName = GetPlayerName(target)
     if not targetName then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
@@ -1122,10 +1384,10 @@ RegisterNetEvent('es_admin:server:giveItem', function(data)
 
     if success then
         local adminName = GetPlayerName(src) or 'Admin'
-        print(string.format('^3[es_admin] ^7%s gave %dx %s to %s (ID: %d)', adminName, amount, itemName, targetName, target))
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Gave %dx %s to %s', amount, itemName, targetName))
+        print(string.format('^3[cortex-admin] ^7%s gave %dx %s to %s (ID: %d)', adminName, amount, itemName, targetName, target))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Gave %dx %s to %s', amount, itemName, targetName))
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', err or 'Failed to give item')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', err or 'Failed to give item')
     end
 end)
 
@@ -1133,13 +1395,14 @@ end)
 -- GARAGE MANAGEMENT (QBX / qbx_vehicles)
 -- =============================================================================
 
-RegisterNetEvent('es_admin:server:getPlayerGarage', function()
+RegisterNetEvent('cortex-admin:server:getPlayerGarage', function()
     local src = source
+    if not allowRequest(src, 'expensive-read', 4, 10000) then return end
     if not hasPermission(src, 'garage.spawnVehicle') then return end
 
     local citizenid = EsAdminBridge.getPlayerCitizenId(src)
     if not citizenid then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not determine your citizen ID')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not determine your citizen ID')
         return
     end
 
@@ -1148,30 +1411,31 @@ RegisterNetEvent('es_admin:server:getPlayerGarage', function()
         vehicles = {}
     end
 
-    TriggerClientEvent('es_admin:client:setGarageVehicles', src, vehicles)
+    TriggerClientEvent('cortex-admin:client:setGarageVehicles', src, vehicles)
 end)
 
-RegisterNetEvent('es_admin:server:spawnGarageVehicle', function(data)
+RegisterNetEvent('cortex-admin:server:spawnGarageVehicle', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'garage.spawnVehicle') then return end
 
-    local vehicleId = toInteger(data.vehicleId, 1)
+    local vehicleId = toInteger(data.vehicleId, 1, 2147483647)
     if not vehicleId then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid vehicle ID')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid vehicle ID')
         return
     end
 
     local citizenid = EsAdminBridge.getPlayerCitizenId(src)
     if not citizenid then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not determine your citizen ID')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not determine your citizen ID')
         return
     end
 
     -- Fetch the specific vehicle to verify ownership
     local vehicles = EsAdminBridge.getPlayerVehicles(citizenid)
     if type(vehicles) ~= 'table' then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Garage data is unavailable right now')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Garage data is unavailable right now')
         return
     end
 
@@ -1184,12 +1448,12 @@ RegisterNetEvent('es_admin:server:spawnGarageVehicle', function(data)
     end
 
     if not targetVehicle then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Vehicle not found in your garage')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Vehicle not found in your garage')
         return
     end
 
     -- Send vehicle data to client for spawning
-    TriggerClientEvent('es_admin:client:spawnGarageVehicle', src, {
+    TriggerClientEvent('cortex-admin:client:spawnGarageVehicle', src, {
         id = targetVehicle.id,
         model = targetVehicle.model,
         label = targetVehicle.label,
@@ -1218,8 +1482,9 @@ local function giveVehicleKeys(src, vehicle)
     return true
 end
 
-RegisterNetEvent('es_admin:server:giveVehicleKeys', function(data)
+RegisterNetEvent('cortex-admin:server:giveVehicleKeys', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     local silent = type(data) == 'table' and data.silent == true
 
     local hasAccess = hasPermission(src, 'vehicle.giveKeys')
@@ -1232,7 +1497,7 @@ RegisterNetEvent('es_admin:server:giveVehicleKeys', function(data)
 
     local function notifyError(message)
         if silent then return end
-        TriggerClientEvent('es_admin:client:notify', src, 'error', message)
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', message)
     end
 
     local playerPed = GetPlayerPed(src)
@@ -1249,7 +1514,7 @@ RegisterNetEvent('es_admin:server:giveVehicleKeys', function(data)
 
     local vehicle = currentVehicle
     if type(data) == 'table' and data.netId then
-        local netId = tonumber(data.netId)
+        local netId = toInteger(data.netId, 1, 65535)
         if netId then
             local fromNetId = NetworkGetEntityFromNetworkId(netId)
             if fromNetId ~= 0 then
@@ -1270,7 +1535,7 @@ RegisterNetEvent('es_admin:server:giveVehicleKeys', function(data)
     end
 
     if not silent then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', 'Vehicle keys granted')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', 'Vehicle keys granted')
     end
 end)
 
@@ -1278,84 +1543,101 @@ end)
 -- QBX PLAYER MANAGEMENT COMMANDS
 -- =============================================================================
 
-RegisterNetEvent('es_admin:server:killPlayer', function(data)
+RegisterNetEvent('cortex-admin:server:killPlayer', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.kill') then return end
 
-    local target = tonumber(data.target)
+    local target = toInteger(data.target, 1)
     if not target or not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
-    TriggerClientEvent('es_admin:client:killPed', target)
+    TriggerClientEvent('cortex-admin:client:killPed', target)
     local adminName = GetPlayerName(src) or 'Admin'
-    print(string.format('^3[es_admin] ^7%s killed %s (ID: %d)', adminName, GetPlayerName(target), target))
-    TriggerClientEvent('es_admin:client:notify', src, 'success', 'Killed ' .. GetPlayerName(target))
+    print(string.format('^3[cortex-admin] ^7%s killed %s (ID: %d)', adminName, GetPlayerName(target), target))
+    TriggerClientEvent('cortex-admin:client:notify', src, 'success', 'Killed ' .. GetPlayerName(target))
 end)
 
-RegisterNetEvent('es_admin:server:revivePlayer', function(data)
+RegisterNetEvent('cortex-admin:server:revivePlayer', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.reviveTarget') then return end
 
-    local target = tonumber(data.target)
+    local target = toInteger(data.target, 1)
     if not target or not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
-    TriggerClientEvent('es_admin:client:revivePed', target)
+    TriggerClientEvent('cortex-admin:client:revivePed', target)
     local adminName = GetPlayerName(src) or 'Admin'
-    print(string.format('^3[es_admin] ^7%s revived %s (ID: %d)', adminName, GetPlayerName(target), target))
-    TriggerClientEvent('es_admin:client:notify', src, 'success', 'Revived ' .. GetPlayerName(target))
+    print(string.format('^3[cortex-admin] ^7%s revived %s (ID: %d)', adminName, GetPlayerName(target), target))
+    TriggerClientEvent('cortex-admin:client:notify', src, 'success', 'Revived ' .. GetPlayerName(target))
 end)
 
-RegisterNetEvent('es_admin:server:sitInVehicle', function(data)
+RegisterNetEvent('cortex-admin:server:sitInVehicle', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.sitInVehicle') then return end
 
-    local target = tonumber(data.target)
+    local target = toInteger(data.target, 1)
     if not target or not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
+        return
+    end
+
+    if GetPlayerRoutingBucket(src) ~= GetPlayerRoutingBucket(target) then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target is in a different routing bucket')
         return
     end
 
     local targetPed = GetPlayerPed(target)
+    if not targetPed or targetPed == 0 or not DoesEntityExist(targetPed) or GetEntityType(targetPed) ~= 1 then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player entity is unavailable')
+        return
+    end
     local veh = GetVehiclePedIsIn(targetPed, false)
-    if veh == 0 then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target is not in a vehicle')
+    if veh == 0 or not DoesEntityExist(veh) or GetEntityType(veh) ~= 2 then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target is not in a vehicle')
         return
     end
 
     -- Get target vehicle's net ID and send to admin client
     local netId = NetworkGetNetworkIdFromEntity(veh)
-    TriggerClientEvent('es_admin:client:sitInVehicle', src, netId)
+    if not toInteger(netId, 1, 65535) then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target vehicle is not networked')
+        return
+    end
+    TriggerClientEvent('cortex-admin:client:sitInVehicle', src, netId)
 end)
 
-RegisterNetEvent('es_admin:server:setJob', function(data)
+RegisterNetEvent('cortex-admin:server:setJob', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.setJob') then return end
     if not Config.HasQBX then return end
 
     local target = toInteger(data.target, 1)
     local jobName = trimString(data.job, 64)
-    local jobGrade = toInteger(data.grade, 0, 99) or 0
-    if not target or not jobName then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid parameters')
+    local jobGrade = toInteger(data.grade, 0, 99)
+    if not target or not jobName or jobGrade == nil then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid parameters')
         return
     end
     if not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
     local player = EsAdminBridge.getPlayer(target)
     if not player then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not get QBX player data')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not get QBX player data')
         return
     end
 
@@ -1364,33 +1646,34 @@ RegisterNetEvent('es_admin:server:setJob', function(data)
     end)
 
     if ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Set %s job to %s (grade %d)', GetPlayerName(target), jobName, jobGrade))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Set %s job to %s (grade %d)', GetPlayerName(target), jobName, jobGrade))
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
     end
 end)
 
-RegisterNetEvent('es_admin:server:setGang', function(data)
+RegisterNetEvent('cortex-admin:server:setGang', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.setGang') then return end
     if not Config.HasQBX then return end
 
     local target = toInteger(data.target, 1)
     local gangName = trimString(data.gang, 64)
-    local gangGrade = toInteger(data.grade, 0, 99) or 0
-    if not target or not gangName then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid parameters')
+    local gangGrade = toInteger(data.grade, 0, 99)
+    if not target or not gangName or gangGrade == nil then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid parameters')
         return
     end
     if not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
     local player = EsAdminBridge.getPlayer(target)
     if not player then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not get QBX player data')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not get QBX player data')
         return
     end
 
@@ -1399,35 +1682,36 @@ RegisterNetEvent('es_admin:server:setGang', function(data)
     end)
 
     if ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Set %s gang to %s (grade %d)', GetPlayerName(target), gangName, gangGrade))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Set %s gang to %s (grade %d)', GetPlayerName(target), gangName, gangGrade))
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
     end
 end)
 
-RegisterNetEvent('es_admin:server:setMoney', function(data)
+RegisterNetEvent('cortex-admin:server:setMoney', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not Config.HasQBX then return end
 
-    local actionId = data.actionId or 'player.setCash'
-    if not hasPermission(src, actionId) then return end
+    local actionId = trimString(data.actionId, 64)
+    local moneyType = actionId and moneyActions[actionId]
+    if not moneyType or not hasPermission(src, actionId) then return end
 
     local target = toInteger(data.target, 1)
-    local moneyType = trimString(data.moneyType, 32) or 'cash'
     local amount = toInteger(data.amount, 0, 1000000000)
     if not target or amount == nil then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid parameters')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid parameters')
         return
     end
     if not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
     local player = EsAdminBridge.getPlayer(target)
     if not player then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not get QBX player data')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not get QBX player data')
         return
     end
 
@@ -1436,33 +1720,34 @@ RegisterNetEvent('es_admin:server:setMoney', function(data)
     end)
 
     if ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Set %s %s to $%s', GetPlayerName(target), moneyType, tostring(amount)))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Set %s %s to $%s', GetPlayerName(target), moneyType, tostring(amount)))
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
     end
 end)
 
-RegisterNetEvent('es_admin:server:giveMoney', function(data)
+RegisterNetEvent('cortex-admin:server:giveMoney', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.giveMoney') then return end
     if not Config.HasQBX then return end
 
     local target = toInteger(data.target, 1)
-    local moneyType = trimString(data.moneyType, 32) or 'cash'
+    local moneyType = trimString(data.moneyType, 32)
     local amount = toInteger(data.amount, 1, 1000000000)
-    if not target or not amount or amount <= 0 then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid parameters')
+    if not target or not moneyType or not allowedMoneyTypes[moneyType] or not amount or amount <= 0 then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid parameters')
         return
     end
     if not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
     local player = EsAdminBridge.getPlayer(target)
     if not player then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not get QBX player data')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not get QBX player data')
         return
     end
 
@@ -1471,62 +1756,39 @@ RegisterNetEvent('es_admin:server:giveMoney', function(data)
     end)
 
     if ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Gave $%s %s to %s', tostring(amount), moneyType, GetPlayerName(target)))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Gave $%s %s to %s', tostring(amount), moneyType, GetPlayerName(target)))
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
     end
 end)
 
-RegisterNetEvent('es_admin:server:setMetadata', function(data)
+RegisterNetEvent('cortex-admin:server:setMetadata', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not Config.HasQBX then return end
 
-    local actionId = data.actionId
-    if not actionId or not hasPermission(src, actionId) then return end
+    local actionId = trimString(data.actionId, 64)
+    local key = actionId and metadataActions[actionId]
+    if not key or not hasPermission(src, actionId) then return end
 
     local target = toInteger(data.target, 1)
-    local key = trimString(data.key, 64)
-    local value = data.value
+    local value = toInteger(data.value, 0, 100)
 
-    if type(value) == 'string' then
-        value = value:match('^%s*(.-)%s*$')
-        if value == '' then
-            value = nil
-        elseif #value > 160 then
-            value = value:sub(1, 160)
-        end
-    end
+    if actionId == 'dev.setStress' and target ~= src then return end
 
-    if actionId == 'player.setFood' or actionId == 'player.setThirst' or actionId == 'player.setStress' then
-        value = tonumber(value)
-        if not value then
-            TriggerClientEvent('es_admin:client:notify', src, 'error', 'Value must be a number')
-            return
-        end
-
-        if value < 0 then value = 0 end
-        if value > 100 then value = 100 end
-        value = math.floor(value + 0.5)
-    elseif type(value) == 'string' then
-        local numeric = tonumber(value)
-        if numeric ~= nil then
-            value = numeric
-        end
-    end
-
-    if not target or not key then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Invalid parameters')
+    if not target or value == nil then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Invalid parameters')
         return
     end
     if not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
     local player = EsAdminBridge.getPlayer(target)
     if not player then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not get QBX player data')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not get QBX player data')
         return
     end
 
@@ -1535,24 +1797,25 @@ RegisterNetEvent('es_admin:server:setMetadata', function(data)
     end)
 
     if ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Set %s %s to %s', GetPlayerName(target), key, tostring(value)))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Set %s %s to %s', GetPlayerName(target), key, tostring(value)))
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed: ' .. tostring(err))
     end
 end)
 
-RegisterNetEvent('es_admin:server:openInventory', function(data)
+RegisterNetEvent('cortex-admin:server:openInventory', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.openInventory') then return end
     if not Config.HasOxInventory then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'No inventory system detected')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'No inventory system detected')
         return
     end
 
-    local target = tonumber(data.target)
+    local target = toInteger(data.target, 1)
     if not target or not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
@@ -1561,60 +1824,81 @@ RegisterNetEvent('es_admin:server:openInventory', function(data)
     end)
 
     if not ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed to open inventory: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed to open inventory: ' .. tostring(err))
     end
 end)
 
-RegisterNetEvent('es_admin:server:setRoutingBucket', function(data)
+RegisterNetEvent('cortex-admin:server:setRoutingBucket', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'player.setRoutingBucket') then return end
 
     local target = toInteger(data.target, 1)
-    local bucket = toInteger(data.bucket, 0, 65535) or 0
-    if not target or not GetPlayerName(target) then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Target player not found')
+    local bucket = toInteger(data.bucket, 0, 65535)
+    if not target or bucket == nil or not GetPlayerName(target) then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player not found')
         return
     end
 
     SetPlayerRoutingBucket(target, bucket)
-    TriggerClientEvent('es_admin:client:notify', src, 'success', string.format('Set %s routing bucket to %d', GetPlayerName(target), bucket))
+    TriggerClientEvent('cortex-admin:client:notify', src, 'success', string.format('Set %s routing bucket to %d', GetPlayerName(target), bucket))
 end)
 
-RegisterNetEvent('es_admin:server:adminCar', function()
+RegisterNetEvent('cortex-admin:server:adminCar', function()
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if not hasPermission(src, 'vehicle.adminCar') then return end
     if not Config.HasQBX or not Config.HasQBXVehicles then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'QBX vehicles not available')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'QBX vehicles not available')
         return
     end
 
     local citizenid = EsAdminBridge.getPlayerCitizenId(src)
     if not citizenid then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not determine your citizen ID')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not determine your citizen ID')
         return
     end
 
+    pendingAdminCarRequests[src] = GetGameTimer() + ADMIN_CAR_REQUEST_MS
+
     -- Request vehicle props from client
-    TriggerClientEvent('es_admin:client:getVehicleProps', src)
+    TriggerClientEvent('cortex-admin:client:getVehicleProps', src)
 end)
 
-RegisterNetEvent('es_admin:server:adminCarSave', function(data)
+RegisterNetEvent('cortex-admin:server:adminCarSave', function(data)
     local src = source
+    if not allowRequest(src, 'admin-car-save', 2, 10000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'vehicle.adminCar') then return end
     if not Config.HasQBX or not Config.HasQBXVehicles then return end
 
+    local deadline = pendingAdminCarRequests[src]
+    pendingAdminCarRequests[src] = nil
+    if not deadline or GetGameTimer() > deadline then return end
+
     local citizenid = EsAdminBridge.getPlayerCitizenId(src)
     if not citizenid then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Could not determine your citizen ID')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not determine your citizen ID')
         return
     end
 
-    local model = data.model
-    local props = data.props
-    if not model or not props then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'No vehicle data')
+    local ped = GetPlayerPed(src)
+    local vehicle = ped and GetVehiclePedIsIn(ped, false) or 0
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'You must remain inside the vehicle being saved')
+        return
+    end
+
+    local model = GetEntityModel(vehicle)
+    if toInteger(data.model) ~= model then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Vehicle changed before it could be saved')
+        return
+    end
+
+    local props = sanitizeVehicleProps(data.props, model, GetVehicleNumberPlateText(vehicle))
+    if not props then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'No vehicle data')
         return
     end
 
@@ -1629,24 +1913,25 @@ RegisterNetEvent('es_admin:server:adminCarSave', function(data)
     end)
 
     if ok and result then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', 'Vehicle saved to your garage')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', 'Vehicle saved to your garage')
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed to save vehicle: ' .. tostring(result))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed to save vehicle: ' .. tostring(result))
     end
 end)
 
-RegisterNetEvent('es_admin:server:pullStash', function(data)
+RegisterNetEvent('cortex-admin:server:pullStash', function(data)
     local src = source
+    if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     if type(data) ~= 'table' then return end
     if not hasPermission(src, 'server.pullStash') then return end
     if not Config.HasOxInventory then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'No inventory system detected')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'No inventory system detected')
         return
     end
 
     local stashName = trimString(data.stash, 80)
     if not stashName then
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Stash name required')
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Stash name required')
         return
     end
 
@@ -1655,8 +1940,8 @@ RegisterNetEvent('es_admin:server:pullStash', function(data)
     end)
 
     if ok then
-        TriggerClientEvent('es_admin:client:notify', src, 'success', 'Opened stash: ' .. stashName)
+        TriggerClientEvent('cortex-admin:client:notify', src, 'success', 'Opened stash: ' .. stashName)
     else
-        TriggerClientEvent('es_admin:client:notify', src, 'error', 'Failed to open stash: ' .. tostring(err))
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Failed to open stash: ' .. tostring(err))
     end
 end)

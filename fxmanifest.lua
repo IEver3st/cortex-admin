@@ -1,13 +1,13 @@
 fx_version 'cerulean'
 game 'gta5'
 
-name 'es_admin'
-author 'Everest Studios'
+name 'cortex-admin'
+author 'Cortex'
 version '1.1.0'
 description 'Admin/dev menu with QBX framework support'
 
 shared_scripts {
-    '@es_lib/init.lua',
+    '@cortex-lib/init.lua',
     'shared/config.lua',
     'shared/weapon_component_hashes.lua',
     'shared/bridge.lua',
@@ -28,7 +28,7 @@ server_scripts {
     'server/main.lua',
 }
 
-dependency 'es_lib'
+dependency 'cortex-lib'
 
 -- Exports for external resources
 exports {
@@ -42,6 +42,7 @@ files {
     'ui/style.css',
     'ui/app.js',
     'ui/preview-shim.js',
+    'ui/vendor/*.js',
 }
 
 lua54 'yes'

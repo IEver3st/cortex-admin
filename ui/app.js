@@ -133,7 +133,7 @@ function Icon({ name, size = 16, className = '' }) {
     });
 }
 
-const resourceName = window.GetParentResourceName ? window.GetParentResourceName() : 'es_admin';
+const resourceName = window.GetParentResourceName ? window.GetParentResourceName() : 'cortex-admin';
 const isDebugMode = new URLSearchParams(window.location.search).get('debug') === '1';
 const NUI_REQUEST_TIMEOUT_MS = 8000;
 
@@ -222,7 +222,7 @@ class AppearanceErrorBoundary extends React.Component {
     }
 
     componentDidCatch(error) {
-        debugLog('[es_admin] Appearance view crashed:', error);
+        debugLog('[cortex-admin] Appearance view crashed:', error);
     }
 
     handleRetry() {
@@ -293,14 +293,14 @@ async function fetchNui(eventName, data) {
             try {
                 parsed = await response.json();
             } catch (err) {
-                debugLog('[es_admin] Failed to parse NUI response JSON:', eventName, err);
+                debugLog('[cortex-admin] Failed to parse NUI response JSON:', eventName, err);
             }
         } else {
             try {
                 const text = await response.text();
                 parsed = text ? { text } : null;
             } catch (err) {
-                debugLog('[es_admin] Failed to read NUI response text:', eventName, err);
+                debugLog('[cortex-admin] Failed to read NUI response text:', eventName, err);
             }
         }
 
@@ -311,7 +311,7 @@ async function fetchNui(eventName, data) {
             json: async () => parsed
         };
     } catch (err) {
-        debugLog('[es_admin] NUI callback error:', eventName, err);
+        debugLog('[cortex-admin] NUI callback error:', eventName, err);
         return {
             ok: false,
             status: 0,
@@ -335,7 +335,7 @@ async function copyTextToClipboard(text) {
             return true;
         }
     } catch (err) {
-        debugLog('[es_admin] navigator.clipboard failed:', err);
+        debugLog('[cortex-admin] navigator.clipboard failed:', err);
     }
 
     try {
@@ -350,7 +350,7 @@ async function copyTextToClipboard(text) {
         document.body.removeChild(ta);
         return copied;
     } catch (err) {
-        debugLog('[es_admin] execCommand copy failed:', err);
+        debugLog('[cortex-admin] execCommand copy failed:', err);
         return false;
     }
 }
@@ -485,7 +485,7 @@ function isPercentValues(values) {
     return values.every((option) => typeof option.label === 'string' && option.label.trim().endsWith('%'));
 }
 
-function CustomSelect({ options, value, disabled, onChange }) {
+function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
     const [open, setOpen] = useState(false);
     const wrapperRef = React.useRef(null);
     const listboxId = React.useId();
@@ -590,6 +590,7 @@ function CustomSelect({ options, value, disabled, onChange }) {
             className: 'admin-select-trigger',
             onClick: handleToggle,
             disabled,
+            'aria-label': ariaLabel,
             'aria-haspopup': 'listbox',
             'aria-expanded': open,
             'aria-controls': listboxId
@@ -1741,7 +1742,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     const isAutoReplace = settings.replacePersonalVehicle !== false;
 
     useEffect(() => {
-        fetchNui('es_admin:requestAddonVehicles');
+        fetchNui('cortex-admin:requestAddonVehicles');
     }, []);
 
     useEffect(() => {
@@ -1767,7 +1768,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             setExtrasList([]);
             return;
         }
-        const res = await fetchNui('es_admin:getPreviewVehicleExtras');
+        const res = await fetchNui('cortex-admin:getPreviewVehicleExtras');
         const ex = res && res.data && res.data.extras;
         setExtrasList(Array.isArray(ex) ? ex : []);
     }, [extrasEnabled, previewModel]);
@@ -1794,7 +1795,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     }, [extrasEnabled, previewModel, refreshExtras]);
 
     const handleExtraToggle = useCallback(async (id) => {
-        await fetchNui('es_admin:togglePreviewVehicleExtra', { extraId: id });
+        await fetchNui('cortex-admin:togglePreviewVehicleExtra', { extraId: id });
         refreshExtras();
     }, [refreshExtras]);
 
@@ -1802,7 +1803,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
         if (e) e.stopPropagation();
         if (!previewModel) return;
         const next = !shareOn;
-        const res = await fetchNui('es_admin:setVehiclePreviewShared', { shared: next });
+        const res = await fetchNui('cortex-admin:setVehiclePreviewShared', { shared: next });
         if (res.ok && res.data && res.data.ok) {
             setShareOn(next);
         }
@@ -1840,7 +1841,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
         if (e) e.stopPropagation();
         if (!previewModel) return;
         if (extrasEnabled) {
-            const res = await fetchNui('es_admin:spawnPreviewVehicle');
+            const res = await fetchNui('cortex-admin:spawnPreviewVehicle');
             if (res.ok && res.data && res.data.ok) {
                 setPreviewModel('');
                 setPreviewName('');
@@ -2001,7 +2002,7 @@ function InlineInventory({ items, players, onClose }) {
     // Request items on first render if not cached
     useEffect(() => {
         if (!items || items.length === 0) {
-            fetchNui('es_admin:requestItems');
+            fetchNui('cortex-admin:requestItems');
         }
     }, []);
 
@@ -2018,7 +2019,7 @@ function InlineInventory({ items, players, onClose }) {
     const handleGive = () => {
         if (!selectedItem || !targetPlayer) return;
         setLoading(true);
-        fetchNui('es_admin:giveItem', {
+        fetchNui('cortex-admin:giveItem', {
             target: targetPlayer,
             item: selectedItem.name,
             amount: Math.max(1, parseInt(amount) || 1)
@@ -2123,7 +2124,7 @@ function InlineGarage({ vehicles, onClose }) {
 
     // Request garage vehicles on first render
     useEffect(() => {
-        fetchNui('es_admin:requestGarage');
+        fetchNui('cortex-admin:requestGarage');
     }, []);
 
     const stateLabels = { 0: 'Out', 1: 'Garaged', 2: 'Impounded' };
@@ -2156,7 +2157,7 @@ function InlineGarage({ vehicles, onClose }) {
 
     const handleSpawn = (vehicleId) => {
         setLoading(vehicleId);
-        fetchNui('es_admin:spawnGarageVehicle', { vehicleId }).then(() => {
+        fetchNui('cortex-admin:spawnGarageVehicle', { vehicleId }).then(() => {
             setTimeout(() => setLoading(null), 1000);
         });
     };
@@ -2164,7 +2165,7 @@ function InlineGarage({ vehicles, onClose }) {
     return React.createElement('div', { className: 'admin-inline-garage' },
         React.createElement('div', { className: 'admin-inline-garage-header' },
             React.createElement('span', { className: 'admin-inline-garage-title' }, 'My Garage'),
-            React.createElement('button', { className: 'admin-button small', onClick: () => { fetchNui('es_admin:requestGarage'); } }, 'Refresh'),
+            React.createElement('button', { className: 'admin-button small', onClick: () => { fetchNui('cortex-admin:requestGarage'); } }, 'Refresh'),
             React.createElement('button', { className: 'admin-button small', onClick: onClose }, 'Close')
         ),
         // Garage filter tabs
@@ -2231,21 +2232,21 @@ function InlineGarage({ vehicles, onClose }) {
 
 // QBX action definitions for inline prompts
 const qbxActionConfigs = {
-    'player.kill': { needsTarget: true, label: 'Kill', callback: 'es_admin:killPlayer', color: 'danger' },
-    'player.reviveTarget': { needsTarget: true, label: 'Revive', callback: 'es_admin:revivePlayer', color: 'success' },
-    'player.sitInVehicle': { needsTarget: true, label: 'Sit In', callback: 'es_admin:sitInVehicle', color: '' },
-    'player.openInventory': { needsTarget: true, label: 'Open', callback: 'es_admin:openInventory', color: '' },
-    'player.setJob': { needsTarget: true, fields: [{ name: 'job', label: 'Job Name', placeholder: 'police' }, { name: 'grade', label: 'Grade', placeholder: '0', type: 'number' }], callback: 'es_admin:setJob', color: 'success' },
-    'player.setGang': { needsTarget: true, fields: [{ name: 'gang', label: 'Gang Name', placeholder: 'ballas' }, { name: 'grade', label: 'Grade', placeholder: '0', type: 'number' }], callback: 'es_admin:setGang', color: 'success' },
-    'player.setCash': { needsTarget: true, fields: [{ name: 'amount', label: 'Amount', placeholder: '1000', type: 'number' }], callback: 'es_admin:setMoney', extra: { moneyType: 'cash', actionId: 'player.setCash' }, color: 'success' },
-    'player.setBank': { needsTarget: true, fields: [{ name: 'amount', label: 'Amount', placeholder: '1000', type: 'number' }], callback: 'es_admin:setMoney', extra: { moneyType: 'bank', actionId: 'player.setBank' }, color: 'success' },
-    'player.giveMoney': { needsTarget: true, fields: [{ name: 'amount', label: 'Amount', placeholder: '1000', type: 'number' }, { name: 'moneyType', label: 'Type', placeholder: 'cash', options: ['cash', 'bank'] }], callback: 'es_admin:giveMoney', color: 'success' },
-    'player.setFood': { needsTarget: true, fields: [{ name: 'value', label: 'Hunger (0-100)', placeholder: '100', type: 'number' }], callback: 'es_admin:setMetadata', extra: { key: 'hunger', actionId: 'player.setFood' }, color: 'success' },
-    'player.setThirst': { needsTarget: true, fields: [{ name: 'value', label: 'Thirst (0-100)', placeholder: '100', type: 'number' }], callback: 'es_admin:setMetadata', extra: { key: 'thirst', actionId: 'player.setThirst' }, color: 'success' },
-    'player.setStress': { needsTarget: true, fields: [{ name: 'value', label: 'Stress (0-100)', placeholder: '0', type: 'number' }], callback: 'es_admin:setMetadata', extra: { key: 'stress', actionId: 'player.setStress' }, color: 'success' },
-    'player.setRoutingBucket': { needsTarget: true, fields: [{ name: 'bucket', label: 'Bucket ID', placeholder: '0', type: 'number' }], callback: 'es_admin:setRoutingBucket', color: 'success' },
-    'vehicle.adminCar': { needsTarget: false, label: 'Save to Garage', callback: 'es_admin:adminCar', color: 'success' },
-    'server.pullStash': { needsTarget: false, fields: [{ name: 'stash', label: 'Stash Name', placeholder: 'police_stash' }], callback: 'es_admin:pullStash', color: 'success' },
+    'player.kill': { needsTarget: true, label: 'Kill', callback: 'cortex-admin:killPlayer', color: 'danger' },
+    'player.reviveTarget': { needsTarget: true, label: 'Revive', callback: 'cortex-admin:revivePlayer', color: 'success' },
+    'player.sitInVehicle': { needsTarget: true, label: 'Sit In', callback: 'cortex-admin:sitInVehicle', color: '' },
+    'player.openInventory': { needsTarget: true, label: 'Open', callback: 'cortex-admin:openInventory', color: '' },
+    'player.setJob': { needsTarget: true, fields: [{ name: 'job', label: 'Job Name', placeholder: 'police' }, { name: 'grade', label: 'Grade', placeholder: '0', type: 'number' }], callback: 'cortex-admin:setJob', color: 'success' },
+    'player.setGang': { needsTarget: true, fields: [{ name: 'gang', label: 'Gang Name', placeholder: 'ballas' }, { name: 'grade', label: 'Grade', placeholder: '0', type: 'number' }], callback: 'cortex-admin:setGang', color: 'success' },
+    'player.setCash': { needsTarget: true, fields: [{ name: 'amount', label: 'Amount', placeholder: '1000', type: 'number' }], callback: 'cortex-admin:setMoney', extra: { moneyType: 'cash', actionId: 'player.setCash' }, color: 'success' },
+    'player.setBank': { needsTarget: true, fields: [{ name: 'amount', label: 'Amount', placeholder: '1000', type: 'number' }], callback: 'cortex-admin:setMoney', extra: { moneyType: 'bank', actionId: 'player.setBank' }, color: 'success' },
+    'player.giveMoney': { needsTarget: true, fields: [{ name: 'amount', label: 'Amount', placeholder: '1000', type: 'number' }, { name: 'moneyType', label: 'Type', placeholder: 'cash', options: ['cash', 'bank'] }], callback: 'cortex-admin:giveMoney', color: 'success' },
+    'player.setFood': { needsTarget: true, fields: [{ name: 'value', label: 'Hunger (0-100)', placeholder: '100', type: 'number' }], callback: 'cortex-admin:setMetadata', extra: { key: 'hunger', actionId: 'player.setFood' }, color: 'success' },
+    'player.setThirst': { needsTarget: true, fields: [{ name: 'value', label: 'Thirst (0-100)', placeholder: '100', type: 'number' }], callback: 'cortex-admin:setMetadata', extra: { key: 'thirst', actionId: 'player.setThirst' }, color: 'success' },
+    'player.setStress': { needsTarget: true, fields: [{ name: 'value', label: 'Stress (0-100)', placeholder: '0', type: 'number' }], callback: 'cortex-admin:setMetadata', extra: { key: 'stress', actionId: 'player.setStress' }, color: 'success' },
+    'player.setRoutingBucket': { needsTarget: true, fields: [{ name: 'bucket', label: 'Bucket ID', placeholder: '0', type: 'number' }], callback: 'cortex-admin:setRoutingBucket', color: 'success' },
+    'vehicle.adminCar': { needsTarget: false, label: 'Save to Garage', callback: 'cortex-admin:adminCar', color: 'success' },
+    'server.pullStash': { needsTarget: false, fields: [{ name: 'stash', label: 'Stash Name', placeholder: 'police_stash' }], callback: 'cortex-admin:pullStash', color: 'success' },
 };
 
 function InlineQBXAction({ config, players, onClose }) {
@@ -2337,7 +2338,7 @@ function InlineWeaponAttachments({ onClose }) {
     const [busy, setBusy] = useState(false);
 
     const refresh = useCallback(async () => {
-        const res = await fetchNui('es_admin:getWeaponAttachments');
+        const res = await fetchNui('cortex-admin:getWeaponAttachments');
         const d = res && res.data;
         if (d && d.ok) {
             setWeaponName(d.weaponName || '');
@@ -2356,7 +2357,7 @@ function InlineWeaponAttachments({ onClose }) {
         if (busy || !h) return;
         setBusy(true);
         try {
-            await fetchNui('es_admin:toggleWeaponAttachment', { componentHash: h });
+            await fetchNui('cortex-admin:toggleWeaponAttachment', { componentHash: h });
             await refresh();
         } finally {
             setBusy(false);
@@ -2481,6 +2482,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
                 step: safeStep,
                 value: val,
                 disabled: !isAllowed,
+                'aria-label': action.label || action.id,
                 'aria-valuemin': lo,
                 'aria-valuemax': hi,
                 'aria-valuenow': val,
@@ -2511,6 +2513,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
                     step: 1,
                     value: activeIndex,
                     disabled: !isAllowed,
+                    'aria-label': action.label || action.id,
                     onChange: (e) => {
                         const index = Number(e.target.value);
                         const nextOption = options[index];
@@ -3185,8 +3188,8 @@ function LegacyAppearanceView({ onPrompt }) {
     const [activeSubTab, setActiveSubTab] = useState('clothing');
 
     const refreshData = useCallback(() => {
-        fetchNui('es_admin:getAppearance').then(res => res.json()).then((payload) => setData(normalizeAppearancePayload(payload)));
-        fetchNui('es_admin:getSavedPeds').then(res => res.json()).then((payload) => setSavedPeds(Array.isArray(payload) ? payload : []));
+        fetchNui('cortex-admin:getAppearance').then(res => res.json()).then((payload) => setData(normalizeAppearancePayload(payload)));
+        fetchNui('cortex-admin:getSavedPeds').then(res => res.json()).then((payload) => setSavedPeds(Array.isArray(payload) ? payload : []));
     }, []);
 
     useEffect(() => {
@@ -3196,7 +3199,7 @@ function LegacyAppearanceView({ onPrompt }) {
     if (!data) return React.createElement('div', { className: 'admin-no-results' }, 'Loading appearance data...');
 
     const handleUpdate = (type, id, drawable, texture) => {
-        fetchNui('es_admin:setAppearance', { type, id, drawable, texture });
+        fetchNui('cortex-admin:setAppearance', { type, id, drawable, texture });
         setData(prev => {
             const next = { ...prev };
             const key = type === 'component' ? 'components' : 'props';
@@ -3207,7 +3210,7 @@ function LegacyAppearanceView({ onPrompt }) {
 
     const handleFeatureUpdate = (id, value) => {
         // We'll need a new NUI callback for face features if not handled by setAppearance
-        fetchNui('es_admin:action', { id: 'player.setFaceFeature', data: { id, value } });
+        fetchNui('cortex-admin:action', { id: 'player.setFaceFeature', data: { id, value } });
         setData(prev => ({
             ...prev,
             features: { ...prev.features, [id]: value }
@@ -3216,18 +3219,18 @@ function LegacyAppearanceView({ onPrompt }) {
 
     const handleSave = () => {
         if (!saveName.trim()) return;
-        fetchNui('es_admin:action', { id: 'player.saveMpPed', data: { name: saveName.trim() } });
+        fetchNui('cortex-admin:action', { id: 'player.saveMpPed', data: { name: saveName.trim() } });
         setSaveName('');
         setTimeout(refreshData, 500);
     };
 
     const handleImport = () => {
         const onConfirm = () => {
-            fetchNui('es_admin:importVmenuSavedPeds').then(() => setTimeout(refreshData, 500));
+            fetchNui('cortex-admin:importVmenuSavedPeds').then(() => setTimeout(refreshData, 500));
         };
 
         if (!onPrompt) {
-            if (window.confirm('Copy all saved vMenu MP outfits into es_admin local storage? Existing es_admin outfits with the same name will be kept.')) {
+            if (window.confirm('Copy all saved vMenu MP outfits into cortex-admin local storage? Existing cortex-admin outfits with the same name will be kept.')) {
                 onConfirm();
             }
             return;
@@ -3235,19 +3238,19 @@ function LegacyAppearanceView({ onPrompt }) {
 
         onPrompt({
             title: 'Import from vMenu?',
-            description: 'This copies all saved vMenu MP outfits into es_admin local storage so they keep working without vMenu running. Existing es_admin outfits with the same name are kept.',
+            description: 'This copies all saved vMenu MP outfits into cortex-admin local storage so they keep working without vMenu running. Existing cortex-admin outfits with the same name are kept.',
             fields: [],
             onSubmit: onConfirm
         });
     };
 
     const handleLoad = (ped) => {
-        fetchNui('es_admin:action', { id: 'player.loadMpPed', data: { entry: ped } });
+        fetchNui('cortex-admin:action', { id: 'player.loadMpPed', data: { entry: ped } });
         setTimeout(refreshData, 800);
     };
 
     const handleDelete = (ped) => {
-        fetchNui('es_admin:deleteSavedPed', { entry: ped });
+        fetchNui('cortex-admin:deleteSavedPed', { entry: ped });
         setTimeout(refreshData, 500);
     };
 
@@ -3260,7 +3263,7 @@ function LegacyAppearanceView({ onPrompt }) {
             onSubmit: (values) => {
                 const newName = values && values.name ? values.name.trim() : '';
                 if (!newName) return;
-                fetchNui('es_admin:renameSavedPed', { entry: ped, newName });
+                fetchNui('cortex-admin:renameSavedPed', { entry: ped, newName });
                 setTimeout(refreshData, 500);
             }
         });
@@ -3275,7 +3278,7 @@ function LegacyAppearanceView({ onPrompt }) {
             onSubmit: (values) => {
                 const newName = values && values.name ? values.name.trim() : '';
                 if (!newName) return;
-                fetchNui('es_admin:cloneSavedPed', { entry: ped, newName });
+                fetchNui('cortex-admin:cloneSavedPed', { entry: ped, newName });
                 setTimeout(refreshData, 500);
             }
         });
@@ -3290,7 +3293,7 @@ function LegacyAppearanceView({ onPrompt }) {
                 : 'This will save your current appearance over this outfit.',
             fields: [],
             onSubmit: () => {
-                fetchNui('es_admin:action', { id: 'player.saveMpPed', data: { name: ped.name, entry: ped } });
+                fetchNui('cortex-admin:action', { id: 'player.saveMpPed', data: { name: ped.name, entry: ped } });
                 setTimeout(refreshData, 500);
             }
         });
@@ -3362,7 +3365,7 @@ function LegacyAppearanceView({ onPrompt }) {
             React.createElement('div', { className: 'appearance-label' }, item.label),
             React.createElement('div', { className: 'appearance-control wide' },
                 React.createElement('span', { className: 'appearance-value' }, value.toFixed(2)),
-                React.createElement('input', { type: 'range', className: 'appearance-slider', min: -1, max: 1, step: 0.05, value: value, onChange: (e) => handleFeatureUpdate(item.id, parseFloat(e.target.value)) }),
+                React.createElement('input', { type: 'range', className: 'appearance-slider', min: -1, max: 1, step: 0.05, value: value, 'aria-label': item.label, onChange: (e) => handleFeatureUpdate(item.id, parseFloat(e.target.value)) }),
                 React.createElement('div', { className: 'appearance-btns' },
                     React.createElement('button', { className: 'appearance-btn', onClick: () => handleFeatureUpdate(item.id, Math.max(-1, value - 0.05)) }, '−'),
                     React.createElement('button', { className: 'appearance-btn', onClick: () => handleFeatureUpdate(item.id, Math.min(1, value + 0.05)) }, '+')
@@ -3397,8 +3400,8 @@ function LegacyAppearanceView({ onPrompt }) {
             activeSubTab === 'general' && React.createElement('div', { className: 'admin-section' },
                 React.createElement('div', { className: 'admin-section-title' }, 'Quick Actions'),
                 React.createElement('div', { className: 'appearance-quick-actions' },
-                    React.createElement('button', { className: 'admin-button', onClick: () => fetchNui('es_admin:action', { id: 'player.setModel', data: { model: 'mp_m_freemode_01' } }).then(() => setTimeout(refreshData, 1000)) }, 'Male MP'),
-                    React.createElement('button', { className: 'admin-button', onClick: () => fetchNui('es_admin:action', { id: 'player.setModel', data: { model: 'mp_f_freemode_01' } }).then(() => setTimeout(refreshData, 1000)) }, 'Female MP'),
+                    React.createElement('button', { className: 'admin-button', onClick: () => fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model: 'mp_m_freemode_01' } }).then(() => setTimeout(refreshData, 1000)) }, 'Male MP'),
+                    React.createElement('button', { className: 'admin-button', onClick: () => fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model: 'mp_f_freemode_01' } }).then(() => setTimeout(refreshData, 1000)) }, 'Female MP'),
                     React.createElement('button', { type: 'button', className: 'admin-button', onClick: refreshData }, React.createElement(Icon, { name: 'refresh-cw', size: 14 }))
                 )
             ),
@@ -3441,13 +3444,14 @@ function LegacyAppearanceView({ onPrompt }) {
                             max: 63,
                             min: 0,
                             onConfirm: (v) => {
-                                fetchNui('es_admin:setAppearance', { type: 'color', colorType: c.type, id: c.overlayId, value: v });
+                                fetchNui('cortex-admin:setAppearance', { type: 'color', colorType: c.type, id: c.overlayId, value: v });
                                 setData(prev => ({ ...prev, [c.type === 'hair' ? 'hairColor' : c.type === 'hairHighlight' ? 'hairHighlightColor' : c.type === 'eyes' ? 'eyeColor' : 'overlayColor']: v }));
                             }
                         }),
                         React.createElement('input', {
                             type: 'range',
                             className: 'appearance-slider',
+                            'aria-label': c.label,
                             min: 0,
                             max: 63,
                             value: c.type === 'hair' ? (data.hairColor || 0) :
@@ -3456,7 +3460,7 @@ function LegacyAppearanceView({ onPrompt }) {
                                         (data.overlays && data.overlays[c.overlayId] ? data.overlays[c.overlayId].color : 0),
                             onChange: (e) => {
                                 const v = parseInt(e.target.value);
-                                fetchNui('es_admin:setAppearance', { type: 'color', colorType: c.type, id: c.overlayId, value: v });
+                                fetchNui('cortex-admin:setAppearance', { type: 'color', colorType: c.type, id: c.overlayId, value: v });
                                 setData(prev => ({ ...prev, [c.type === 'hair' ? 'hairColor' : c.type === 'hairHighlight' ? 'hairHighlightColor' : c.type === 'eyes' ? 'eyeColor' : 'overlayColor']: v }));
                             }
                         })
@@ -3477,7 +3481,7 @@ function LegacyAppearanceView({ onPrompt }) {
                                 React.createElement('div', { className: 'card-title-row' },
                                     React.createElement('span', { className: 'card-title', title: ped.name }, ped.name),
                                     React.createElement(React.Fragment, null,
-                                        React.createElement('span', { className: 'card-tag' }, ped.source || 'es_admin'),
+                                        React.createElement('span', { className: 'card-tag' }, ped.source || 'cortex-admin'),
                                         ped.isDefault && React.createElement('span', { className: 'card-tag' }, 'default')
                                     )
                                 )
@@ -3539,10 +3543,10 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     }, []);
 
     const refreshData = useCallback(() => {
-        fetchNui('es_admin:getAppearance').then((res) => res.json()).then((payload) => setData(normalizeAppearancePayload(payload)));
-        fetchNui('es_admin:getSavedPeds').then((res) => res.json()).then((payload) => setSavedPeds(Array.isArray(payload) ? payload : []));
-        fetchNui('es_admin:getVmenuMigrationSnapshot').then((res) => res.json()).then((payload) => setMigrationInfo(payload && typeof payload === 'object' ? payload : null));
-        fetchNui('es_admin:getWardrobeShareTargets').then((res) => res.json()).then((payload) => {
+        fetchNui('cortex-admin:getAppearance').then((res) => res.json()).then((payload) => setData(normalizeAppearancePayload(payload)));
+        fetchNui('cortex-admin:getSavedPeds').then((res) => res.json()).then((payload) => setSavedPeds(Array.isArray(payload) ? payload : []));
+        fetchNui('cortex-admin:getVmenuMigrationSnapshot').then((res) => res.json()).then((payload) => setMigrationInfo(payload && typeof payload === 'object' ? payload : null));
+        fetchNui('cortex-admin:getWardrobeShareTargets').then((res) => res.json()).then((payload) => {
             const targets = Array.isArray(payload)
                 ? payload
                 : (payload && Array.isArray(payload.targets) ? payload.targets : []);
@@ -3564,8 +3568,8 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
 
     useEffect(() => {
         const handleAppearanceRefresh = () => refreshData();
-        window.addEventListener('es_admin:appearanceRefresh', handleAppearanceRefresh);
-        return () => window.removeEventListener('es_admin:appearanceRefresh', handleAppearanceRefresh);
+        window.addEventListener('cortex-admin:appearanceRefresh', handleAppearanceRefresh);
+        return () => window.removeEventListener('cortex-admin:appearanceRefresh', handleAppearanceRefresh);
     }, [refreshData]);
 
     useLayoutEffect(() => {
@@ -3603,7 +3607,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             .sort((a, b) => String(a && a.name != null ? a.name : '').localeCompare(String(b && b.name != null ? b.name : '')))
             .filter((ped) => {
                 if (!query) return true;
-                const source = String(ped.source || 'es_admin').toLowerCase();
+                const source = String(ped.source || 'cortex-admin').toLowerCase();
                 const name = String(ped && ped.name != null ? ped.name : '').toLowerCase();
                 return name.includes(query) || source.includes(query);
             });
@@ -3612,7 +3616,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     if (!data) return React.createElement('div', { className: 'admin-no-results' }, 'Loading appearance data...');
 
     const handleUpdate = (type, id, drawable, texture) => {
-        fetchNui('es_admin:setAppearance', { type, id, drawable, texture });
+        fetchNui('cortex-admin:setAppearance', { type, id, drawable, texture });
         setData((prev) => {
             const next = { ...prev };
             const key = type === 'component' ? 'components' : 'props';
@@ -3622,7 +3626,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     };
 
     const handleFeatureUpdate = (id, value) => {
-        fetchNui('es_admin:action', { id: 'player.setFaceFeature', data: { id, value } });
+        fetchNui('cortex-admin:action', { id: 'player.setFaceFeature', data: { id, value } });
         setData((prev) => ({
             ...prev,
             features: { ...prev.features, [id]: value }
@@ -3630,7 +3634,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     };
 
     const handleBlendUpdate = (field, value) => {
-        fetchNui('es_admin:setAppearance', { type: 'blend', field, value });
+        fetchNui('cortex-admin:setAppearance', { type: 'blend', field, value });
         setData((prev) => ({
             ...prev,
             headBlend: {
@@ -3641,7 +3645,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     };
 
     const handleOverlayUpdate = (id, field, value) => {
-        fetchNui('es_admin:setAppearance', { type: 'overlay', id, field, value });
+        fetchNui('cortex-admin:setAppearance', { type: 'overlay', id, field, value });
         setData((prev) => ({
             ...prev,
             overlays: {
@@ -3656,7 +3660,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
 
     const handleSave = () => {
         if (!saveName.trim()) return;
-        fetchNui('es_admin:action', { id: 'player.saveMpPed', data: { name: saveName.trim() } });
+        fetchNui('cortex-admin:action', { id: 'player.saveMpPed', data: { name: saveName.trim() } });
         setSaveName('');
         setTimeout(refreshData, 500);
     };
@@ -3667,17 +3671,17 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             return;
         }
 
-        fetchNui('es_admin:shareWardrobe', { target: parseInt(selectedShareTarget, 10) })
+        fetchNui('cortex-admin:shareWardrobe', { target: parseInt(selectedShareTarget, 10) })
             .then(() => setTimeout(refreshData, 300));
     };
 
     const handleImport = () => {
         openPrompt({
             title: 'Import from vMenu?',
-            description: 'This copies all saved vMenu MP outfits into es_admin local storage so they keep working without vMenu running. Existing es_admin outfits with the same name are kept.',
+            description: 'This copies all saved vMenu MP outfits into cortex-admin local storage so they keep working without vMenu running. Existing cortex-admin outfits with the same name are kept.',
             fields: [],
             onSubmit: () => {
-                fetchNui('es_admin:importVmenuSavedPeds').then(() => setTimeout(refreshData, 500));
+                fetchNui('cortex-admin:importVmenuSavedPeds').then(() => setTimeout(refreshData, 500));
             }
         });
     };
@@ -3685,10 +3689,10 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     const handleImportAll = () => {
         openPrompt({
             title: 'Import all vMenu data?',
-            description: 'This permanently imports durable vMenu data into es_admin, including saved MP outfits and saved vehicles when available. ACE permissions stay active and are not copied into storage.',
+            description: 'This permanently imports durable vMenu data into cortex-admin, including saved MP outfits and saved vehicles when available. ACE permissions stay active and are not copied into storage.',
             fields: [],
             onSubmit: () => {
-                fetchNui('es_admin:importVmenuMigrationData')
+                fetchNui('cortex-admin:importVmenuMigrationData')
                     .then((res) => res.json())
                     .then(() => setTimeout(refreshData, 600));
             }
@@ -3696,7 +3700,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     };
 
     const handleLoad = (ped) => {
-        fetchNui('es_admin:action', { id: 'player.loadMpPed', data: { entry: ped } });
+        fetchNui('cortex-admin:action', { id: 'player.loadMpPed', data: { entry: ped } });
         setTimeout(refreshData, 800);
     };
 
@@ -3705,10 +3709,10 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             title: `Delete outfit: ${ped.name}?`,
             description: ped.source === 'vmenu'
                 ? 'This permanently removes the selected vMenu outfit.'
-                : 'This permanently removes the saved outfit from es_admin local storage.',
+                : 'This permanently removes the saved outfit from cortex-admin local storage.',
             fields: [],
             onSubmit: () => {
-                fetchNui('es_admin:deleteSavedPed', { entry: ped });
+                fetchNui('cortex-admin:deleteSavedPed', { entry: ped });
                 setTimeout(refreshData, 500);
             }
         });
@@ -3724,7 +3728,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             onSubmit: (values) => {
                 const newName = values && values.name ? values.name.trim() : '';
                 if (!newName) return;
-                fetchNui('es_admin:renameSavedPed', { entry: ped, newName });
+                fetchNui('cortex-admin:renameSavedPed', { entry: ped, newName });
                 setTimeout(refreshData, 500);
             }
         });
@@ -3740,7 +3744,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             onSubmit: (values) => {
                 const newName = values && values.name ? values.name.trim() : '';
                 if (!newName) return;
-                fetchNui('es_admin:cloneSavedPed', { entry: ped, newName });
+                fetchNui('cortex-admin:cloneSavedPed', { entry: ped, newName });
                 setTimeout(refreshData, 500);
             }
         });
@@ -3754,14 +3758,14 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 : 'This replaces the saved outfit with your current appearance.',
             fields: [],
             onSubmit: () => {
-                fetchNui('es_admin:action', { id: 'player.saveMpPed', data: { name: ped.name, entry: ped } });
+                fetchNui('cortex-admin:action', { id: 'player.saveMpPed', data: { name: ped.name, entry: ped } });
                 setTimeout(refreshData, 500);
             }
         });
     };
 
     const handleSetDefault = (ped) => {
-        fetchNui('es_admin:action', { id: 'player.setDefaultSavedPed', data: { entry: ped } });
+        fetchNui('cortex-admin:action', { id: 'player.setDefaultSavedPed', data: { entry: ped } });
         setTimeout(refreshData, 400);
     };
 
@@ -3848,6 +3852,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 React.createElement('input', {
                     type: 'range',
                     className: 'appearance-slider appearance-slider--feature',
+                    'aria-label': item.label,
                     min: -1,
                     max: 1,
                     step: 0.01,
@@ -3872,7 +3877,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     (data.overlays && data.overlays[item.overlayId] ? data.overlays[item.overlayId].color : 0);
 
         const updateColorValue = (nextValue) => {
-            fetchNui('es_admin:setAppearance', { type: 'color', colorType: item.type, id: item.overlayId, value: nextValue });
+            fetchNui('cortex-admin:setAppearance', { type: 'color', colorType: item.type, id: item.overlayId, value: nextValue });
             setData((prev) => {
                 if (item.type === 'hair') {
                     return { ...prev, hairColor: nextValue };
@@ -3910,6 +3915,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 React.createElement('input', {
                     type: 'range',
                     className: 'appearance-slider',
+                    'aria-label': item.label,
                     min: 0,
                     max: 63,
                     value,
@@ -3948,7 +3954,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
         if (filteredSavedPeds.length > 0) {
             return React.createElement('div', { className: 'appearance-preset-list' },
                 filteredSavedPeds.map((ped) => {
-                    const sourceLabel = String(ped.source || 'es_admin');
+                    const sourceLabel = String(ped.source || 'cortex-admin');
                     const showVmenu = sourceLabel === 'vmenu';
                     const showMeta = showVmenu || ped.isDefault;
                     return React.createElement('div', { className: 'appearance-preset-card', key: ped.id },
@@ -4088,6 +4094,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 React.createElement('input', {
                     type: 'range',
                     className: 'appearance-slider appearance-slider--heritage',
+                    'aria-label': item.label,
                     min: item.min,
                     max: item.max,
                     step: item.step,
@@ -4125,6 +4132,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     React.createElement('input', {
                         type: 'range',
                         className: 'appearance-slider appearance-slider--overlay',
+                        'aria-label': `${item.label} style`,
                         min: 0,
                         max: maxStyle,
                         step: 1,
@@ -4140,6 +4148,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     React.createElement('input', {
                         type: 'range',
                         className: 'appearance-slider appearance-slider--overlay',
+                        'aria-label': `${item.label} opacity`,
                         min: 0,
                         max: 1,
                         step: 0.01,
@@ -4155,6 +4164,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     React.createElement('input', {
                         type: 'range',
                         className: 'appearance-slider appearance-slider--overlay',
+                        'aria-label': `${item.label} color A`,
                         min: 0,
                         max: 63,
                         step: 1,
@@ -4170,6 +4180,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     React.createElement('input', {
                         type: 'range',
                         className: 'appearance-slider appearance-slider--overlay',
+                        'aria-label': `${item.label} color B`,
                         min: 0,
                         max: 63,
                         step: 1,
@@ -4191,13 +4202,13 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             React.createElement('button', {
                 type: 'button',
                 className: 'admin-button appearance-tool-btn appearance-tool-btn--grow',
-                onClick: () => fetchNui('es_admin:action', { id: 'player.randomizeMpFace' }).then(() => setTimeout(refreshData, 300)),
+                onClick: () => fetchNui('cortex-admin:action', { id: 'player.randomizeMpFace' }).then(() => setTimeout(refreshData, 300)),
                 disabled: !data.isFreemode
             }, React.createElement(Icon, { name: 'sparkles', size: 16 }), React.createElement('span', null, 'Randomize face')),
             React.createElement('button', {
                 type: 'button',
                 className: 'admin-button appearance-tool-btn appearance-tool-btn--grow',
-                onClick: () => fetchNui('es_admin:action', { id: 'player.clearPedTattoos' }).then(() => setTimeout(refreshData, 300))
+                onClick: () => fetchNui('cortex-admin:action', { id: 'player.clearPedTattoos' }).then(() => setTimeout(refreshData, 300))
             }, React.createElement(Icon, { name: 'eraser', size: 16 }), React.createElement('span', null, 'Clear tattoos'))
         ),
         React.createElement('div', { className: 'appearance-heritage-layout' },
@@ -4237,12 +4248,12 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     React.createElement('button', {
                         type: 'button',
                         className: `appearance-gender-btn${mpMaleActive ? ' active' : ''}`,
-                        onClick: () => fetchNui('es_admin:action', { id: 'player.setModel', data: { model: 'mp_m_freemode_01' } }).then(() => setTimeout(refreshData, 1000))
+                        onClick: () => fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model: 'mp_m_freemode_01' } }).then(() => setTimeout(refreshData, 1000))
                     }, 'Male'),
                     React.createElement('button', {
                         type: 'button',
                         className: `appearance-gender-btn${mpFemaleActive ? ' active' : ''}`,
-                        onClick: () => fetchNui('es_admin:action', { id: 'player.setModel', data: { model: 'mp_f_freemode_01' } }).then(() => setTimeout(refreshData, 1000))
+                        onClick: () => fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model: 'mp_f_freemode_01' } }).then(() => setTimeout(refreshData, 1000))
                     }, 'Female')
                 ),
                 React.createElement('button', {
@@ -4317,7 +4328,7 @@ function TeleportWorkspaceView({ onPrompt } = {}) {
     const [search, setSearch] = useState('');
 
     const refreshLocations = useCallback(() => {
-        fetchNui('es_admin:getSavedTeleportLocations').then((res) => res.json()).then((data) => setLocations(Array.isArray(data) ? data : []));
+        fetchNui('cortex-admin:getSavedTeleportLocations').then((res) => res.json()).then((data) => setLocations(Array.isArray(data) ? data : []));
     }, []);
 
     useEffect(() => {
@@ -4361,7 +4372,7 @@ function TeleportWorkspaceView({ onPrompt } = {}) {
             onSubmit: (values) => {
                 const name = values && values.name ? values.name.trim() : '';
                 if (!name) return;
-                fetchNui('es_admin:saveCurrentTeleportLocation', { name }).then(() => setTimeout(refreshLocations, 250));
+                fetchNui('cortex-admin:saveCurrentTeleportLocation', { name }).then(() => setTimeout(refreshLocations, 250));
             }
         });
     };
@@ -4369,10 +4380,10 @@ function TeleportWorkspaceView({ onPrompt } = {}) {
     const handleDelete = (entry) => {
         openPrompt({
             title: `Delete location: ${entry.name}?`,
-            description: 'This removes the saved teleport location from es_admin.',
+            description: 'This removes the saved teleport location from cortex-admin.',
             fields: [],
             onSubmit: () => {
-                fetchNui('es_admin:deleteSavedTeleportLocation', { name: entry.name }).then(() => setTimeout(refreshLocations, 250));
+                fetchNui('cortex-admin:deleteSavedTeleportLocation', { name: entry.name }).then(() => setTimeout(refreshLocations, 250));
             }
         });
     };
@@ -4383,11 +4394,11 @@ function TeleportWorkspaceView({ onPrompt } = {}) {
             React.createElement('div', { className: 'admin-teleport-quick' },
                 React.createElement('button', {
                     className: 'admin-button small appearance-action-button',
-                    onClick: () => fetchNui('es_admin:action', { id: 'teleport.waypoint' })
+                    onClick: () => fetchNui('cortex-admin:action', { id: 'teleport.waypoint' })
                 }, React.createElement(Icon, { name: 'map-pin', size: 14 }), React.createElement('span', null, 'Waypoint')),
                 React.createElement('button', {
                     className: 'admin-button small appearance-action-button',
-                    onClick: () => fetchNui('es_admin:action', { id: 'teleport.back' })
+                    onClick: () => fetchNui('cortex-admin:action', { id: 'teleport.back' })
                 }, React.createElement(Icon, { name: 'undo-2', size: 14 }), React.createElement('span', null, 'Back')),
                 React.createElement('button', {
                     className: 'admin-button small success appearance-action-button',
@@ -4432,7 +4443,7 @@ function TeleportWorkspaceView({ onPrompt } = {}) {
                             React.createElement('div', { className: 'appearance-preset-actions' },
                                 React.createElement('button', {
                                     className: 'admin-button small success appearance-action-button',
-                                    onClick: () => fetchNui('es_admin:loadSavedTeleportLocation', { name: entry.name })
+                                    onClick: () => fetchNui('cortex-admin:loadSavedTeleportLocation', { name: entry.name })
                                 }, 'Load'),
                                 React.createElement('button', {
                                     className: 'admin-button small danger appearance-action-button',
@@ -4460,7 +4471,7 @@ function VehicleView() {
     }, []);
 
     const refreshData = useCallback(() => {
-        fetchNui('es_admin:getVehicleCustomization').then(res => res.json()).then(setData);
+        fetchNui('cortex-admin:getVehicleCustomization').then(res => res.json()).then(setData);
     }, []);
 
     useEffect(() => {
@@ -4494,7 +4505,7 @@ function VehicleView() {
     if (!data) return React.createElement('div', { className: 'admin-no-results' }, 'No vehicle found or loading...');
 
     const handleUpdate = (type, id, value, isToggle, enabled) => {
-        fetchNui('es_admin:setVehicleCustomization', { type, id, value, isToggle, enabled });
+        fetchNui('cortex-admin:setVehicleCustomization', { type, id, value, isToggle, enabled });
         if (type === 'mod') {
             setData(prev => {
                 const next = { ...prev };
@@ -4564,6 +4575,7 @@ function VehicleView() {
                 React.createElement('input', {
                     type: 'range',
                     className: 'appearance-slider',
+                    'aria-label': item.label,
                     min: -1,
                     max: max,
                     value: current.current,
@@ -4618,6 +4630,7 @@ function VehicleView() {
                         React.createElement('input', {
                             type: 'range',
                             className: 'appearance-slider',
+                            'aria-label': c.label,
                             min: 0,
                             max: 159,
                             value: data.colors[c.id] || 0,
@@ -4800,6 +4813,7 @@ function VehicleView() {
                             React.createElement('input', {
                                 type: 'range',
                                 className: 'appearance-slider',
+                                'aria-label': `Neon ${label}`,
                                 min: 0,
                                 max: 255,
                                 value: (data.neonColor && data.neonColor[idx]) || 0,
@@ -4840,6 +4854,7 @@ function VehicleView() {
                             React.createElement('input', {
                                 type: 'range',
                                 className: 'appearance-slider',
+                                'aria-label': `Tire smoke ${label}`,
                                 min: 0,
                                 max: 255,
                                 value: (data.tyreSmokeColor && data.tyreSmokeColor[idx]) || 0,
@@ -4857,6 +4872,378 @@ function VehicleView() {
     );
 }
 
+function VehicleTuningView() {
+    const [snapshot, setSnapshot] = useState(null);
+    const [activeGroup, setActiveGroup] = useState('Powertrain');
+    const [loading, setLoading] = useState(true);
+    const [status, setStatus] = useState({ tone: 'neutral', text: 'Reading current vehicle...' });
+    const [customAudio, setCustomAudio] = useState('');
+    const [pendingReset, setPendingReset] = useState(null);
+    const pendingFieldTimers = React.useRef(new Map());
+    const tuningRequestVersion = React.useRef(0);
+
+    const loadSnapshot = useCallback(async () => {
+        setLoading(true);
+        setStatus({ tone: 'neutral', text: 'Reading current vehicle...' });
+        const response = await fetchNui('cortex-admin:getVehicleTuning');
+        const payload = response.data || {};
+
+        if (!response.ok || payload.ok !== true) {
+            setSnapshot(null);
+            setStatus({ tone: 'error', text: payload.message || 'Live tuning could not find a drivable vehicle.' });
+            setLoading(false);
+            return;
+        }
+
+        setSnapshot(payload);
+        setCustomAudio(payload.audio && payload.audio.value ? payload.audio.value : '');
+        const nextFields = Array.isArray(payload.fields) ? payload.fields : [];
+        const firstGroup = nextFields[0] ? nextFields[0].group : 'Powertrain';
+        setActiveGroup((current) => nextFields.some((field) => field.group === current) ? current : firstGroup);
+        setStatus({ tone: 'live', text: 'Live values are connected to this vehicle.' });
+        setLoading(false);
+    }, []);
+
+    useEffect(() => {
+        loadSnapshot();
+        return () => {
+            pendingFieldTimers.current.forEach((timerId) => window.clearTimeout(timerId));
+            pendingFieldTimers.current.clear();
+        };
+    }, [loadSnapshot]);
+
+    const updateFieldLocally = useCallback((fieldId, value) => {
+        setSnapshot((current) => {
+            if (!current || !Array.isArray(current.fields)) return current;
+            return {
+                ...current,
+                fields: current.fields.map((field) => field.id === fieldId ? { ...field, value } : field)
+            };
+        });
+    }, []);
+
+    const commitField = useCallback(async (fieldId, value) => {
+        const requestVersion = tuningRequestVersion.current;
+        const response = await fetchNui('cortex-admin:setVehicleHandling', { field: fieldId, value });
+        const payload = response.data || {};
+        if (!response.ok || payload.ok !== true) {
+            if (requestVersion !== tuningRequestVersion.current) return;
+            setStatus({ tone: 'error', text: payload.message || 'The handling value was rejected.' });
+            return;
+        }
+
+        if (requestVersion !== tuningRequestVersion.current) return;
+
+        if (Number.isFinite(Number(payload.value))) {
+            updateFieldLocally(fieldId, Number(payload.value));
+        }
+        setStatus({ tone: 'live', text: 'Handling applied in real time.' });
+    }, [updateFieldLocally]);
+
+    const queueField = useCallback((field, rawValue, immediate = false) => {
+        const numericValue = clamp(Number(rawValue), Number(field.min), Number(field.max));
+        if (!Number.isFinite(numericValue)) return;
+
+        updateFieldLocally(field.id, numericValue);
+        const existingTimer = pendingFieldTimers.current.get(field.id);
+        if (existingTimer) window.clearTimeout(existingTimer);
+
+        if (immediate) {
+            pendingFieldTimers.current.delete(field.id);
+            commitField(field.id, numericValue);
+            return;
+        }
+
+        const timerId = window.setTimeout(() => {
+            pendingFieldTimers.current.delete(field.id);
+            commitField(field.id, numericValue);
+        }, 90);
+        pendingFieldTimers.current.set(field.id, timerId);
+    }, [commitField, updateFieldLocally]);
+
+    const resetTuning = useCallback(async (scope) => {
+        pendingFieldTimers.current.forEach((timerId) => window.clearTimeout(timerId));
+        pendingFieldTimers.current.clear();
+        if (scope !== 'audio') tuningRequestVersion.current += 1;
+        setPendingReset(scope);
+        setStatus({ tone: 'neutral', text: scope === 'audio' ? 'Restoring factory engine audio...' : 'Restoring captured handling...' });
+        try {
+            const response = await fetchNui('cortex-admin:resetVehicleTuning', { scope });
+            const payload = response.data || {};
+
+            if (!response.ok || payload.ok !== true) {
+                setStatus({ tone: 'error', text: payload.message || 'The baseline could not be restored.' });
+                return;
+            }
+
+            if (scope === 'audio') {
+                setSnapshot((current) => current ? { ...current, audio: { ...current.audio, value: '' } } : current);
+                setCustomAudio('');
+            } else {
+                setSnapshot(payload);
+            }
+            setStatus({ tone: 'live', text: scope === 'audio' ? 'Factory engine audio restored.' : 'Captured handling restored.' });
+        } finally {
+            setPendingReset(null);
+        }
+    }, []);
+
+    const resetField = useCallback(async (field) => {
+        if (!field) return;
+
+        tuningRequestVersion.current += 1;
+
+        const existingTimer = pendingFieldTimers.current.get(field.id);
+        if (existingTimer) {
+            window.clearTimeout(existingTimer);
+            pendingFieldTimers.current.delete(field.id);
+        }
+
+        setPendingReset(field.id);
+        setStatus({ tone: 'neutral', text: `Restoring ${field.label} to its captured default...` });
+
+        try {
+            const response = await fetchNui('cortex-admin:resetVehicleTuningField', { field: field.id });
+            const payload = response.data || {};
+            if (!response.ok || payload.ok !== true) {
+                setStatus({ tone: 'error', text: payload.message || `Could not restore ${field.label}.` });
+                return;
+            }
+
+            const restoredValue = Number.isFinite(Number(payload.value))
+                ? Number(payload.value)
+                : Number(field.defaultValue);
+            updateFieldLocally(field.id, restoredValue);
+            setStatus({ tone: 'live', text: `${field.label} restored to its captured default.` });
+        } finally {
+            setPendingReset(null);
+        }
+    }, [updateFieldLocally]);
+
+    const applyAudio = useCallback(async (soundName) => {
+        const normalized = String(soundName || '').trim();
+        if (!normalized) {
+            resetTuning('audio');
+            return;
+        }
+
+        setStatus({ tone: 'neutral', text: `Loading ${normalized} engine audio...` });
+        const response = await fetchNui('cortex-admin:setVehicleEngineAudio', { soundName: normalized });
+        const payload = response.data || {};
+        if (!response.ok || payload.ok !== true) {
+            setStatus({ tone: 'error', text: payload.message || 'That engine audio name could not be applied.' });
+            return;
+        }
+
+        setSnapshot((current) => current ? { ...current, audio: { ...current.audio, value: payload.value || normalized } } : current);
+        setCustomAudio(payload.value || normalized);
+        setStatus({ tone: 'live', text: `${payload.value || normalized} engine audio is active.` });
+    }, [resetTuning]);
+
+    if (loading && !snapshot) {
+        return React.createElement('div', { className: 'admin-tuning-state', role: 'status' },
+            React.createElement('div', { className: 'admin-tuning-state-icon' }, React.createElement(Icon, { name: 'gauge', size: 24 })),
+            React.createElement('strong', null, 'Connecting live tuning'),
+            React.createElement('span', null, status.text)
+        );
+    }
+
+    if (!snapshot) {
+        return React.createElement('div', { className: 'admin-tuning-state admin-tuning-state--error', role: 'alert' },
+            React.createElement('div', { className: 'admin-tuning-state-icon' }, React.createElement(Icon, { name: 'car-front', size: 24 })),
+            React.createElement('strong', null, 'No tuning target'),
+            React.createElement('span', null, status.text),
+            React.createElement('button', { type: 'button', className: 'admin-button small', onClick: loadSnapshot }, 'Try again')
+        );
+    }
+
+    const fields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+    const groups = [...new Set(fields.map((field) => field.group).filter(Boolean))];
+    const activeFields = fields.filter((field) => field.group === activeGroup);
+    const modifiedCount = fields.filter((field) => Math.abs(Number(field.value) - Number(field.defaultValue)) > 0.0001).length;
+    const audio = snapshot.audio || { value: '', defaultValue: '', presets: [] };
+    const baseAudioOptions = [
+        { label: `Factory (${audio.defaultValue || 'vehicle default'})`, value: '' },
+        ...(Array.isArray(audio.presets) ? audio.presets : [])
+    ];
+    const audioOptions = audio.value && !baseAudioOptions.some((option) => String(option.value) === String(audio.value))
+        ? [{ label: `${audio.value} (active)`, value: audio.value }, ...baseAudioOptions]
+        : baseAudioOptions;
+    const audioChanged = Boolean(audio.value)
+        && String(audio.value).toUpperCase() !== String(audio.defaultValue || '').toUpperCase();
+
+    return React.createElement('div', { className: 'admin-tuning-workspace' },
+        React.createElement('header', { className: 'admin-tuning-hero' },
+            React.createElement('div', { className: 'admin-tuning-hero-main' },
+                React.createElement('div', { className: 'admin-tuning-eyebrow' }, 'Live vehicle data'),
+                React.createElement('h2', null, snapshot.vehicle.label || 'Current vehicle'),
+                React.createElement('div', { className: 'admin-tuning-vehicle-meta' },
+                    React.createElement('code', null, snapshot.vehicle.model || 'UNKNOWN'),
+                    snapshot.vehicle.plate && React.createElement('span', null, snapshot.vehicle.plate)
+                )
+            ),
+            React.createElement('div', { className: 'admin-tuning-hero-actions' },
+                React.createElement('div', { className: `admin-tuning-live-pill ${status.tone}`, role: 'status', 'aria-live': 'polite' },
+                    React.createElement('span', { 'aria-hidden': true }),
+                    status.tone === 'error' ? 'Target unavailable' : 'Connected'
+                ),
+                React.createElement('button', { type: 'button', className: 'admin-button small', onClick: loadSnapshot },
+                    React.createElement(Icon, { name: 'refresh-cw', size: 13 }), 'Refresh target'
+                )
+            )
+        ),
+
+        React.createElement('div', { className: 'admin-tuning-status-line', 'aria-live': 'polite' },
+            React.createElement('span', { className: `admin-tuning-status-dot ${status.tone}` }),
+            React.createElement('span', null, status.text),
+            React.createElement('strong', null, `${modifiedCount} changed`)
+        ),
+
+        React.createElement('section', { className: 'admin-tuning-audio', 'aria-labelledby': 'tuning-audio-title' },
+            React.createElement('div', { className: 'admin-tuning-section-copy' },
+                React.createElement('div', { className: 'admin-tuning-section-icon' }, React.createElement(Icon, { name: 'audio-waveform', size: 17 })),
+                React.createElement('div', null,
+                    React.createElement('h3', { id: 'tuning-audio-title' }, 'Engine audio'),
+                    React.createElement('p', null, 'Choose a preset or apply an installed audioNameHash.'),
+                    React.createElement('div', { className: 'admin-tuning-setting-baseline' },
+                        'Default ', React.createElement('code', null, audio.defaultValue || 'vehicle default')
+                    )
+                )
+            ),
+            React.createElement('div', { className: 'admin-tuning-audio-controls' },
+                React.createElement(CustomSelect, {
+                    options: audioOptions,
+                    value: audio.value || '',
+                    ariaLabel: 'Engine audio preset',
+                    onChange: applyAudio
+                }),
+                React.createElement('div', { className: 'admin-tuning-audio-custom' },
+                    React.createElement('input', {
+                        type: 'text',
+                        value: customAudio,
+                        maxLength: 64,
+                        placeholder: 'Custom audio name',
+                        'aria-label': 'Custom engine audio name',
+                        onChange: (event) => setCustomAudio(event.target.value),
+                        onKeyDown: (event) => {
+                            if (event.key === 'Enter') applyAudio(customAudio);
+                        }
+                    }),
+                    React.createElement('button', { type: 'button', className: 'admin-button small success', disabled: !customAudio.trim(), onClick: () => applyAudio(customAudio) }, 'Apply')
+                ),
+                React.createElement('button', {
+                    type: 'button',
+                    className: `admin-tuning-restore${audioChanged ? ' is-changed' : ''}`,
+                    disabled: !audioChanged || Boolean(pendingReset),
+                    onClick: () => resetTuning('audio'),
+                    title: 'Restore engine audio to the captured default'
+                },
+                    React.createElement(Icon, { name: 'rotate-ccw', size: 13 }),
+                    React.createElement('span', null, 'Restore default')
+                )
+            )
+        ),
+
+        React.createElement('section', { className: 'admin-tuning-handling', 'aria-labelledby': 'tuning-handling-title' },
+            React.createElement('div', { className: 'admin-tuning-handling-header' },
+                React.createElement('div', { className: 'admin-tuning-section-copy' },
+                    React.createElement('div', { className: 'admin-tuning-section-icon' }, React.createElement(Icon, { name: 'sliders-horizontal', size: 17 })),
+                    React.createElement('div', null,
+                        React.createElement('h3', { id: 'tuning-handling-title' }, 'Handling channels'),
+                        React.createElement('p', null, 'Every adjustment is written to CHandlingData while you move it.')
+                    )
+                ),
+                React.createElement('button', { type: 'button', className: 'admin-button small admin-tuning-global-reset', disabled: modifiedCount === 0 || Boolean(pendingReset), onClick: () => resetTuning('handling'), title: 'Restore every handling setting to its captured default' },
+                    React.createElement(Icon, { name: 'rotate-ccw', size: 13 }), 'Restore all'
+                )
+            ),
+            React.createElement('div', { className: 'admin-tuning-group-tabs', role: 'tablist', 'aria-label': 'Handling category' },
+                groups.map((group) => React.createElement('button', {
+                    key: group,
+                    type: 'button',
+                    role: 'tab',
+                    'aria-selected': activeGroup === group,
+                    className: activeGroup === group ? 'active' : '',
+                    onClick: () => setActiveGroup(group)
+                }, group))
+            ),
+            React.createElement('div', { className: 'admin-tuning-field-grid' },
+                activeFields.map((field) => {
+                    const value = Number(field.value);
+                    const precision = Number.isInteger(Number(field.precision)) ? Number(field.precision) : 2;
+                    const changed = Math.abs(value - Number(field.defaultValue)) > 0.0001;
+                    const formattedDefault = Number(field.defaultValue).toFixed(precision);
+                    return React.createElement('div', { className: `admin-tuning-field${changed ? ' changed' : ''}`, key: field.id },
+                        React.createElement('div', { className: 'admin-tuning-field-head' },
+                            React.createElement('div', null,
+                                React.createElement('label', { htmlFor: `tune-${field.id}` }, field.label),
+                                React.createElement('span', null, field.description)
+                            ),
+                            React.createElement('div', { className: 'admin-tuning-field-head-actions' },
+                                changed && React.createElement('span', { className: 'admin-tuning-modified' }, 'Edited'),
+                                React.createElement('button', {
+                                    type: 'button',
+                                    className: `admin-tuning-restore${changed ? ' is-changed' : ''}`,
+                                    disabled: !changed || Boolean(pendingReset),
+                                    onClick: () => resetField(field),
+                                    title: `Restore ${field.label} to ${formattedDefault}`,
+                                    'aria-label': `Restore ${field.label} to its captured default`
+                                },
+                                    React.createElement(Icon, { name: 'rotate-ccw', size: 12 }),
+                                    React.createElement('span', null, 'Restore default')
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'admin-tuning-field-controls' },
+                            React.createElement('input', {
+                                id: `tune-${field.id}`,
+                                type: 'range',
+                                'aria-label': field.label,
+                                min: field.min,
+                                max: field.max,
+                                step: field.step,
+                                value,
+                                onChange: (event) => queueField(field, event.target.value),
+                                onPointerUp: (event) => queueField(field, event.currentTarget.value, true),
+                                onKeyUp: (event) => {
+                                    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+                                        queueField(field, event.currentTarget.value, true);
+                                    }
+                                }
+                            }),
+                            React.createElement('div', { className: 'admin-tuning-number-wrap' },
+                                React.createElement('input', {
+                                    type: 'number',
+                                    min: field.min,
+                                    max: field.max,
+                                    step: field.step,
+                                    value: Number.isFinite(value) ? value.toFixed(precision) : '',
+                                    'aria-label': `${field.label} value`,
+                                    onChange: (event) => updateFieldLocally(field.id, Number(event.target.value)),
+                                    onBlur: (event) => queueField(field, event.target.value, true),
+                                    onKeyDown: (event) => {
+                                        if (event.key === 'Enter') {
+                                            queueField(field, event.currentTarget.value, true);
+                                            event.currentTarget.blur();
+                                        }
+                                    }
+                                }),
+                                field.unit && React.createElement('span', null, field.unit)
+                            )
+                        ),
+                        React.createElement('div', { className: 'admin-tuning-field-baseline' },
+                            'Default ', formattedDefault, field.unit ? ` ${field.unit}` : ''
+                        )
+                    );
+                })
+            )
+        ),
+        React.createElement('p', { className: 'admin-tuning-footnote' },
+            'Changes apply instantly to the current vehicle. Defaults are captured when this editor opens and are restored when the session ends.'
+        )
+    );
+}
+
 // Sidebar Navigation Component with FontAwesome icons
 // Framework-specific items (inventory, garage) are conditionally included
 const baseSidebarItems = [
@@ -4865,6 +5252,7 @@ const baseSidebarItems = [
     { type: 'divider' },
     { id: 'player', label: 'Player', lucide: 'user', tab: 'player' },
     { id: 'vehicle', label: 'Vehicle', lucide: 'car', tab: 'vehicle' },
+    { id: 'vehicle_tuning', label: 'Live Vehicle Tuning', lucide: 'gauge', tab: 'vehicle_tuning', requiresPermission: 'vehicle.liveTuning' },
     { id: 'world', label: 'World', lucide: 'globe', tab: 'world' },
     { id: 'weapons', label: 'Weapons', lucide: 'crosshair', tab: 'weapons' },
     { id: 'teleport', label: 'Teleport', lucide: 'map-pin', tab: 'teleport' },
@@ -4881,15 +5269,16 @@ const sidebarFooterNavItems = [
     { id: 'server', label: 'Server Resources', lucide: 'server', tab: 'server' },
 ];
 
-function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo }) {
+function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo, allowed }) {
     const sidebarItems = useMemo(() => {
         return baseSidebarItems.filter(item => {
+            if (item.requiresPermission && allowed && allowed[item.requiresPermission] === false) return false;
             if (!item.requiresFramework) return true;
             if (item.requiresFramework === 'inventory') return frameworkInfo && frameworkInfo.hasInventory;
             if (item.requiresFramework === 'garage') return frameworkInfo && frameworkInfo.hasGarage;
             return true;
         });
-    }, [frameworkInfo]);
+    }, [frameworkInfo, allowed]);
     return React.createElement('div', { className: 'admin-sidebar' },
         React.createElement('div', { className: 'admin-sidebar-items' },
             sidebarItems.map((item, index) => {
@@ -4931,7 +5320,7 @@ function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo }) {
             React.createElement('button', {
                 className: 'admin-sidebar-item logout',
                 type: 'button',
-                onClick: () => fetchNui('es_admin:close'),
+                onClick: () => fetchNui('cortex-admin:close'),
                 'data-tooltip': 'Close Menu',
                 'aria-label': 'Close Menu'
             },
@@ -4996,13 +5385,13 @@ function CoordHudPanel() {
         const handleMessage = (event) => {
             const payload = asObject(event.data);
 
-            if (payload.action === 'es_admin:setCoordHud') {
+            if (payload.action === 'cortex-admin:setCoordHud') {
                 const nextData = asObject(payload.data);
                 setVisible(nextData.visible === true);
                 return;
             }
 
-            if (payload.action === 'es_admin:updateCoordHud') {
+            if (payload.action === 'cortex-admin:updateCoordHud') {
                 const nextData = asObject(payload.data);
                 setData({
                     x: asFiniteNumber(nextData.x, 0),
@@ -5027,7 +5416,7 @@ function CoordHudPanel() {
     const vector4Text = `vector4(${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}, ${heading.toFixed(2)})`;
 
     const copyCoords = (format) => {
-        fetchNui('es_admin:action', {
+        fetchNui('cortex-admin:action', {
             id: 'player.copyCoords',
             data: { format }
         });
@@ -5092,7 +5481,7 @@ function SpeedHudPanel() {
     useEffect(() => {
         const handleMessage = (event) => {
             const payload = asObject(event.data);
-            if (payload.action === 'es_admin:setSpeedHud') {
+            if (payload.action === 'cortex-admin:setSpeedHud') {
                 const d = asObject(payload.data);
                 setVisible(d.visible === true);
                 if (typeof d.position === 'string' && d.position.length > 0) {
@@ -5103,7 +5492,7 @@ function SpeedHudPanel() {
                 }
                 return;
             }
-            if (payload.action === 'es_admin:updateSpeedHud') {
+            if (payload.action === 'cortex-admin:updateSpeedHud') {
                 const d = asObject(payload.data);
                 setSpeed(asFiniteNumber(d.speed, 0));
             }
@@ -5133,7 +5522,7 @@ function WardrobeShareInbox({ open }) {
     useEffect(() => {
         const handleMessage = (event) => {
             const payload = asObject(event.data);
-            if (payload.action !== 'es_admin:setState') {
+            if (payload.action !== 'cortex-admin:setState') {
                 return;
             }
 
@@ -5157,7 +5546,7 @@ function WardrobeShareInbox({ open }) {
     }, []);
 
     const emitAppearanceRefresh = () => {
-        window.dispatchEvent(new CustomEvent('es_admin:appearanceRefresh'));
+        window.dispatchEvent(new CustomEvent('cortex-admin:appearanceRefresh'));
     };
 
     const handleAction = (eventName, shareId, refreshAppearance) => {
@@ -5183,17 +5572,17 @@ function WardrobeShareInbox({ open }) {
                 React.createElement('button', {
                     type: 'button',
                     className: 'admin-button small success',
-                    onClick: () => handleAction('es_admin:acceptWardrobeShare', request.shareId, true)
+                    onClick: () => handleAction('cortex-admin:acceptWardrobeShare', request.shareId, true)
                 }, 'Accept'),
                 React.createElement('button', {
                     type: 'button',
                     className: 'admin-button small',
-                    onClick: () => handleAction('es_admin:saveWardrobeShare', request.shareId, true)
+                    onClick: () => handleAction('cortex-admin:saveWardrobeShare', request.shareId, true)
                 }, 'Save Copy'),
                 React.createElement('button', {
                     type: 'button',
                     className: 'admin-button small danger',
-                    onClick: () => handleAction('es_admin:dismissWardrobeShare', request.shareId, false)
+                    onClick: () => handleAction('cortex-admin:dismissWardrobeShare', request.shareId, false)
                 }, 'Dismiss')
             )
         ))
@@ -5254,6 +5643,7 @@ function App() {
     const decoratedActions = useMemo(() => {
         if (!open) return [];
         return actions.map((action) => {
+            if (action.hidden === true) return null;
             // Filter out framework-specific actions when framework isn't active
             if (action.framework === 'qbx' && (!frameworkInfo || !frameworkInfo.hasQBX)) return null;
             if (action.tab === 'inventory' && (!frameworkInfo || !frameworkInfo.hasInventory)) return null;
@@ -5331,14 +5721,14 @@ function App() {
         const next = isTyping === true;
         if (typingStateRef.current === next) return;
         typingStateRef.current = next;
-        fetchNui('es_admin:setTypingState', { typing: next });
+        fetchNui('cortex-admin:setTypingState', { typing: next });
     }, []);
 
 
     const handleMessage = useCallback((event) => {
         const payload = asObject(event.data);
 
-        if (payload.action === 'es_admin:setState') {
+        if (payload.action === 'cortex-admin:setState') {
             const data = asObject(payload.data);
             if (typeof data.open === 'boolean') setOpen(data.open);
             if (Array.isArray(data.actions)) setActions(data.actions);
@@ -5383,7 +5773,7 @@ function App() {
             if (Array.isArray(data.resources)) setResources(data.resources);
         }
 
-        if (payload.action === 'es_admin:updateRuntimeState') {
+        if (payload.action === 'cortex-admin:updateRuntimeState') {
             const data = asObject(payload.data);
 
             if (Array.isArray(data.players)) setPlayers(data.players);
@@ -5401,11 +5791,11 @@ function App() {
             }
         }
 
-        if (payload.action === 'es_admin:open') {
+        if (payload.action === 'cortex-admin:open') {
             setOpen(true);
         }
 
-        if (payload.action === 'es_admin:vehiclePreviewPage') {
+        if (payload.action === 'cortex-admin:vehiclePreviewPage') {
             const data = asObject(payload.data);
             const rawModel = data.model;
             const modelStr = typeof rawModel === 'string' && rawModel.trim() ? rawModel.trim() : null;
@@ -5418,7 +5808,7 @@ function App() {
             setActiveTab('vehicle');
         }
 
-        if (payload.action === 'es_admin:vehiclePreviewResume') {
+        if (payload.action === 'cortex-admin:vehiclePreviewResume') {
             const data = asObject(payload.data);
             const rawModel = data.model;
             const modelStr = typeof rawModel === 'string' && rawModel.trim() ? rawModel.trim() : null;
@@ -5432,23 +5822,23 @@ function App() {
             setActiveTab('vehicle');
         }
 
-        if (payload.action === 'es_admin:close') {
+        if (payload.action === 'cortex-admin:close') {
             setOpen(false);
         }
 
-        if (payload.action === 'es_admin:copyText') {
+        if (payload.action === 'cortex-admin:copyText') {
             const text = payload.data && payload.data.text;
             if (text) {
                 copyTextToClipboard(text);
             }
         }
 
-        if (payload.action === 'es_admin:setTab') {
+        if (payload.action === 'cortex-admin:setTab') {
             const tab = asString(asObject(payload.data).tab);
             if (tab) setActiveTab(tab);
         }
 
-        if (payload.action === 'es_admin:reload') {
+        if (payload.action === 'cortex-admin:reload') {
             window.location.reload();
         }
 
@@ -5456,7 +5846,7 @@ function App() {
 
     useEffect(() => {
         window.addEventListener('message', handleMessage);
-        fetchNui('es_admin:ready');
+        fetchNui('cortex-admin:ready');
 
         return () => {
             window.removeEventListener('message', handleMessage);
@@ -5516,7 +5906,7 @@ function App() {
             if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
-                fetchNui('es_admin:close');
+                fetchNui('cortex-admin:close');
                 return;
             }
 
@@ -5582,7 +5972,7 @@ function App() {
             event.preventDefault();
             setActiveTab(prev => {
                 if (prev === 'all') {
-                    fetchNui('es_admin:close');
+                    fetchNui('cortex-admin:close');
                     return prev;
                 }
                 return 'all';
@@ -5608,11 +5998,9 @@ function App() {
         }
     }, [activeTab]);
 
-    // Reset to 'all' tab when menu opens
+    // Preserve the current tab and search when the menu is reopened.
     useEffect(() => {
         if (open) {
-            setActiveTab('all');
-            setSearch('');
             setSelectedIndex(-1);
         }
     }, [open]);
@@ -5633,7 +6021,7 @@ function App() {
         }
     }, [open, selectedIndex, filteredActions]);
 
-    const queueAction = useCallback((action, payload, eventName = 'es_admin:action') => {
+    const queueAction = useCallback((action, payload, eventName = 'cortex-admin:action') => {
         if (!action) return;
         // Personal vehicles now handled inline via ActionItem
         const data = payload || { id: action.id };
@@ -5650,7 +6038,7 @@ function App() {
 
     const handleConfirmAction = useCallback(() => {
         if (!confirmAction || !confirmAction.action) return;
-        const eventName = confirmAction.eventName || 'es_admin:action';
+        const eventName = confirmAction.eventName || 'cortex-admin:action';
         const payload = confirmAction.payload || { id: confirmAction.action.id };
         fetchNui(eventName, payload);
         setConfirmAction(null);
@@ -5692,7 +6080,7 @@ function App() {
         if (action.type === 'toggle') {
             const isEnabled = toggles[action.id] === true;
             setToggles(prev => ({ ...prev, [action.id]: !isEnabled }));
-            fetchNui('es_admin:toggle', { id: action.id, enabled: !isEnabled });
+            fetchNui('cortex-admin:toggle', { id: action.id, enabled: !isEnabled });
         } else if (action.type === 'dock' || action.type === 'slider' || action.type === 'color') {
             return;
         } else {
@@ -5710,11 +6098,11 @@ function App() {
         if (action.id.startsWith('options.')) {
             const settingKey = action.id.replace('options.', '');
             setSettings((prev) => ({ ...prev, [settingKey]: enabled }));
-            fetchNui('es_admin:toggle', { id: action.id, enabled });
+            fetchNui('cortex-admin:toggle', { id: action.id, enabled });
             return;
         }
         setToggles((prev) => ({ ...prev, [action.id]: enabled }));
-        fetchNui('es_admin:toggle', { id: action.id, enabled });
+        fetchNui('cortex-admin:toggle', { id: action.id, enabled });
     }, []);
 
     const handleSelect = useCallback((action, value) => {
@@ -5722,14 +6110,14 @@ function App() {
             const next = normalizeMenuDock(value);
             setDockPosition(next);
             setSettings((prev) => ({ ...prev, menuPosition: next }));
-            fetchNui('es_admin:select', { id: action.id, value: next });
+            fetchNui('cortex-admin:select', { id: action.id, value: next });
             return;
         }
         if (action.id.startsWith('options.')) {
             const key = action.id.replace('options.', '');
             setSettings((prev) => ({ ...prev, [key]: value }));
         }
-        queueAction(action, { id: action.id, value }, 'es_admin:select');
+        queueAction(action, { id: action.id, value }, 'cortex-admin:select');
     }, [queueAction]);
 
     const handleAction = useCallback((action) => {
@@ -5737,27 +6125,27 @@ function App() {
     }, [queueAction]);
 
     const handlePromptSubmit = useCallback((action, values) => {
-        fetchNui('es_admin:action', { id: action.id, data: values });
+        fetchNui('cortex-admin:action', { id: action.id, data: values });
     }, []);
 
     const handlePreviewAnyVehicle = useCallback((model) => {
         if (!model) return;
-        fetchNui('es_admin:previewVehicle', { model });
+        fetchNui('cortex-admin:previewVehicle', { model });
     }, []);
 
     const handleClearVehiclePreview = useCallback(() => {
-        fetchNui('es_admin:clearVehiclePreview');
+        fetchNui('cortex-admin:clearVehiclePreview');
     }, []);
 
     const handleFavorite = useCallback((id) => {
-        fetchNui('es_admin:favorite', { id });
+        fetchNui('cortex-admin:favorite', { id });
     }, []);
 
     const handlePromptConfirm = (values) => {
         if (prompt && typeof prompt.onSubmit === 'function') {
             prompt.onSubmit(values || {});
         } else {
-            fetchNui('es_admin:action', { id: prompt.id, data: values });
+            fetchNui('cortex-admin:action', { id: prompt.id, data: values });
         }
         setPrompt(null);
     };
@@ -5771,11 +6159,11 @@ function App() {
             setPlayerPrompt({ action, player, title: `${action.toUpperCase()} ${player.name}`, fields });
             return;
         }
-        fetchNui('es_admin:playerAction', { action, target: player.id });
+        fetchNui('cortex-admin:playerAction', { action, target: player.id });
     }, []);
 
     const handlePlayerPromptConfirm = useCallback((values) => {
-        fetchNui('es_admin:playerAction', {
+        fetchNui('cortex-admin:playerAction', {
             action: playerPrompt.action,
             target: playerPrompt.player.id,
             reason: values.reason,
@@ -5800,28 +6188,28 @@ function App() {
         if (tab) {
             setActiveTab(tab);
             if (tab === 'server') {
-                fetchNui('es_admin:requestResources');
+                fetchNui('cortex-admin:requestResources');
             }
             if (tab === 'inventory') {
-                fetchNui('es_admin:requestItems');
+                fetchNui('cortex-admin:requestItems');
             }
             if (tab === 'garage') {
-                fetchNui('es_admin:requestGarage');
+                fetchNui('cortex-admin:requestGarage');
             }
         }
     }, []);
 
     // Close handler
     const handleClose = useCallback(() => {
-        fetchNui('es_admin:close');
+        fetchNui('cortex-admin:close');
     }, []);
 
     const handleResourceAction = useCallback((action, name) => {
-        fetchNui('es_admin:resourceAction', { action, name });
+        fetchNui('cortex-admin:resourceAction', { action, name });
     }, []);
 
     const handleResourceRefresh = useCallback(() => {
-        fetchNui('es_admin:requestResources');
+        fetchNui('cortex-admin:requestResources');
     }, []);
 
     const handleInventoryClose = useCallback(() => {
@@ -5833,24 +6221,24 @@ function App() {
     }, []);
 
     const handleSpawnPersonalVehicle = useCallback((vehicleId) => {
-        fetchNui('es_admin:action', { id: 'vehicle.personal', data: { id: vehicleId } });
+        fetchNui('cortex-admin:action', { id: 'vehicle.personal', data: { id: vehicleId } });
     }, []);
 
     const handleDeletePersonalVehicle = useCallback((vehicleId) => {
-        fetchNui('es_admin:action', { id: 'vehicle.removePersonal', data: { id: vehicleId } });
+        fetchNui('cortex-admin:action', { id: 'vehicle.removePersonal', data: { id: vehicleId } });
     }, []);
 
     const handleSavePersonalVehicle = useCallback((vehicleId) => {
-        fetchNui('es_admin:action', { id: 'vehicle.savePersonal', data: { id: vehicleId } });
+        fetchNui('cortex-admin:action', { id: 'vehicle.savePersonal', data: { id: vehicleId } });
     }, []);
 
     const handleToggleInlineSetting = useCallback((key, value) => {
         setSettings((prev) => ({ ...prev, [key]: value }));
-        fetchNui('es_admin:toggle', { id: `options.${key}`, enabled: value });
+        fetchNui('cortex-admin:toggle', { id: `options.${key}`, enabled: value });
     }, []);
 
     const handleSpawnAnyVehicle = useCallback((model) => {
-        fetchNui('es_admin:action', { id: 'vehicle.spawn', data: { model } });
+        fetchNui('cortex-admin:action', { id: 'vehicle.spawn', data: { model } });
     }, []);
 
     return React.createElement(React.Fragment, null,
@@ -5866,7 +6254,8 @@ function App() {
                 activeView,
                 activeTab,
                 onViewChange: handleViewChange,
-                frameworkInfo
+                frameworkInfo,
+                allowed
             }),
 
             // Main Content Area
@@ -5884,7 +6273,7 @@ function App() {
                         }
                     },
                         // Search Bar (always visible, prominent in sidebar mode)
-                        React.createElement('div', { className: 'admin-search-bar' },
+                        activeTab !== 'vehicle_tuning' && React.createElement('div', { className: 'admin-search-bar' },
                             React.createElement('div', { className: 'admin-search-wrapper' },
                                 React.createElement(Icon, { name: 'search', size: 18, className: 'admin-search-icon' }),
                                 React.createElement('input', {
@@ -5892,6 +6281,7 @@ function App() {
                                     type: 'text',
                                     className: 'admin-search-input',
                                     value: search,
+                                    'aria-label': 'Search commands',
                                     placeholder: 'Search commands...',
                                     onKeyDown: (e) => {
                                         e.stopPropagation();
@@ -5939,6 +6329,7 @@ function App() {
                             React.createElement(AppearanceWorkspaceView, { onPrompt: setPrompt })
                         ),
                         activeTab === 'vehicle_custom' && React.createElement(VehicleView),
+                        activeTab === 'vehicle_tuning' && React.createElement(VehicleTuningView),
                         activeTab === 'teleport' && React.createElement(TeleportWorkspaceView, { onPrompt: setPrompt }),
 
                         // Inventory View (QBX only)
@@ -5955,7 +6346,7 @@ function App() {
                         }),
 
                         // General Commands Section (Filtered by Tab)
-                        activeTab !== 'appearance' && activeTab !== 'vehicle_custom' && activeTab !== 'inventory' && activeTab !== 'garage' && React.createElement('div', {
+                        activeTab !== 'appearance' && activeTab !== 'vehicle_custom' && activeTab !== 'vehicle_tuning' && activeTab !== 'inventory' && activeTab !== 'garage' && React.createElement('div', {
                             className: activeTab === 'recording' ? 'admin-section admin-section--recording' : 'admin-section'
                         },
                             React.createElement('div', { className: 'admin-section-title' },
@@ -6029,5 +6420,5 @@ const rootElement = document.getElementById('root');
 if (rootElement) {
     ReactDOM.createRoot(rootElement).render(React.createElement(App));
 } else if (window.console && typeof window.console.error === 'function') {
-    window.console.error('[es_admin] Missing #root element');
+    window.console.error('[cortex-admin] Missing #root element');
 }

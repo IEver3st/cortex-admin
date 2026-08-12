@@ -46,6 +46,7 @@ local RegisterNetEvent = RegisterNetEvent
 local TriggerServerEvent = TriggerServerEvent
 local GetResourceKvpString = GetResourceKvpString
 local SetResourceKvp = SetResourceKvp
+local GetResourceState = GetResourceState
 
 -- Cached math/table functions
 local pairs = pairs
@@ -102,7 +103,9 @@ local trackedWeatherTypes = {
 }
 
 local enabledControls = {
-    71, 72, 59, 60, 76, 77, 79, 80, 63, 64, 75, 249,
+    71, 72, 59, 60, 76, 77, 79, 80, 63, 64, 75,
+    -- Keep GTA's text-chat controls usable while the menu owns gameplay input.
+    245, 246, 247, 248, 249,
     30, 31, 32, 33, 34, 35, 21, 22, 36
 }
 local enabledControlsCount = #enabledControls
@@ -111,11 +114,12 @@ local menuFocusApplied = false
 local menuIdleCamTick = 0
 local menuFocusTick = 0
 local menuTypingLock = false
+local chatResourceName = 'cortex-chat'
 
 EsAdmin.state = state
 
 -- ============================================================================
--- UTILITY FUNCTIONS (Use es_lib where possible)
+-- UTILITY FUNCTIONS (Use cortex-lib where possible)
 -- ============================================================================
 
 local function notify(notifyType, message)
@@ -123,8 +127,8 @@ local function notify(notifyType, message)
     if state.settings.menuPosition == 'right' then
         position = 'top-left'
     end
-    -- Use exports.es_lib:notify from es_lib
-    exports.es_lib:notify({ type = notifyType or 'info', description = message, position = position })
+    -- Use exports['cortex-lib']:notify from cortex-lib
+    exports['cortex-lib']:notify({ type = notifyType or 'info', description = message, position = position })
 end
 
 EsAdmin.notify = notify
@@ -165,13 +169,13 @@ end
 
 local function saveKvp(key, data)
     if not key or key == '' then
-        print('[es_admin] ERROR: saveKvp called with empty key')
+        print('[cortex-admin] ERROR: saveKvp called with empty key')
         return false
     end
     
     local ok, encoded = pcall(json.encode, data)
     if not ok then
-        print('[es_admin] ERROR: Failed to encode settings for key: ' .. key)
+        print('[cortex-admin] ERROR: Failed to encode settings for key: ' .. key)
         return false
     end
     
@@ -180,13 +184,13 @@ local function saveKvp(key, data)
 end
 
 local MP_PED_KEY_PREFIX = 'mp_ped_'
-local MP_PED_SOURCE_ES_ADMIN = 'es_admin'
+local MP_PED_SOURCE_ES_ADMIN = 'cortex-admin'
 local MP_PED_SOURCE_VMENU = 'vmenu'
-local LAST_PED_NAME_KEY = 'es_admin_last_ped'
-local LAST_PED_SOURCE_KEY = 'es_admin_last_ped_source'
-local LAST_PED_SOURCE_REF_KEY = 'es_admin_last_ped_source_key'
-local DEFAULT_PED_SOURCE_KEY = 'es_admin_default_ped_source'
-local DEFAULT_PED_SOURCE_REF_KEY = 'es_admin_default_ped_source_key'
+local LAST_PED_NAME_KEY = 'cortex-admin_last_ped'
+local LAST_PED_SOURCE_KEY = 'cortex-admin_last_ped_source'
+local LAST_PED_SOURCE_REF_KEY = 'cortex-admin_last_ped_source_key'
+local DEFAULT_PED_SOURCE_KEY = 'cortex-admin_default_ped_source'
+local DEFAULT_PED_SOURCE_REF_KEY = 'cortex-admin_default_ped_source_key'
 
 local function cloneJsonTable(data)
     if type(data) ~= 'table' then
@@ -512,13 +516,13 @@ local function refreshPersonalVehiclesCache()
         end
     end
 
-    local data = loadKvp('es_admin_personal_vehicles_v2', nil)
+    local data = loadKvp('cortex-admin_personal_vehicles_v2', nil)
     if data and type(data) == 'table' and data.version == 2 and type(data.vehicles) == 'table' then
         cachedData.personalVehicles = buildPersonalVehiclesSummary(data.vehicles)
         return
     end
 
-    local legacy = loadKvp('es_admin_personal_vehicles', {}) or {}
+    local legacy = loadKvp('cortex-admin_personal_vehicles', {}) or {}
     local summary = {}
     for name, props in pairs(legacy) do
         if type(props) == 'table' then
@@ -593,12 +597,12 @@ end
 
 local function sendUiState()
     SendNUIMessage({
-        action = 'es_admin:setState',
+        action = 'cortex-admin:setState',
         data = buildUiState()
     })
     if state.toggles['dev.showSpeed'] == true then
         SendNUIMessage({
-            action = 'es_admin:setSpeedHud',
+            action = 'cortex-admin:setSpeedHud',
             data = {
                 visible = true,
                 position = state.settings.speedHudPosition or 'top-left',
@@ -645,7 +649,7 @@ local function sendRuntimeUiState(includePlayers, force)
     end
 
     SendNUIMessage({
-        action = 'es_admin:updateRuntimeState',
+        action = 'cortex-admin:updateRuntimeState',
         data = data
     })
 
@@ -658,7 +662,7 @@ local function requestMenuPermissions(force)
     local now = GetGameTimer()
     if force or now - menuDataCache.permissionsRequestedAt > PERMISSIONS_REFRESH_MS then
         menuDataCache.permissionsRequestedAt = now
-        TriggerServerEvent('es_admin:server:requestPermissions')
+        TriggerServerEvent('cortex-admin:server:requestPermissions')
     end
 end
 
@@ -667,7 +671,7 @@ local function requestAddonVehiclesIfNeeded(force)
     local hasAddonVehicles = type(cachedData.addonVehicles) == 'table' and #cachedData.addonVehicles > 0
     if force or not menuDataCache.addonVehiclesLoaded or not hasAddonVehicles or now - menuDataCache.addonVehiclesRequestedAt > ADDON_VEHICLES_REFRESH_MS then
         menuDataCache.addonVehiclesRequestedAt = now
-        TriggerServerEvent('es_admin:server:requestAddonVehicles')
+        TriggerServerEvent('cortex-admin:server:requestAddonVehicles')
         return true
     end
     return false
@@ -679,11 +683,29 @@ EsAdmin.requestAddonVehiclesIfNeeded = requestAddonVehiclesIfNeeded
 -- MENU OPEN/CLOSE
 -- ============================================================================
 
+local function isChatOpen()
+    if GetResourceState(chatResourceName) ~= 'started' then
+        return false
+    end
+
+    -- cortex-chat is optional; treat a missing/outdated export as closed so the
+    -- admin menu keeps its normal focus behavior on servers without that chat.
+    local ok, open = pcall(function()
+        return exports[chatResourceName]:isOpen()
+    end)
+
+    return ok and open == true
+end
+
 local function startMenuControlThread()
     if menuControlThreadActive then return end
     menuControlThreadActive = true
 
     CreateThread(function()
+        local chatOpen = false
+        local wasChatOpen = false
+        local chatStateTick = 0
+
         while state.open do
             DisableAllControlActions(0)
             for i = 1, enabledControlsCount do
@@ -695,11 +717,28 @@ local function startMenuControlThread()
             SetPauseMenuActive(false)
 
             local now = GetGameTimer()
-            if now - menuFocusTick >= 500 then
+            if now - chatStateTick >= 100 then
+                chatOpen = isChatOpen()
+                chatStateTick = now
+            end
+
+            if chatOpen then
+                -- cortex-chat owns NUI focus while its input is open.
+                menuFocusTick = now
+            elseif wasChatOpen then
+                -- Chat just released focus; hand it back to the admin menu now.
                 SetNuiFocus(true, true)
                 SetNuiFocusKeepInput(not menuTypingLock)
+                menuFocusApplied = true
+                menuFocusTick = now
+            elseif now - menuFocusTick >= 500 then
+                SetNuiFocus(true, true)
+                SetNuiFocusKeepInput(not menuTypingLock)
+                menuFocusApplied = true
                 menuFocusTick = now
             end
+
+            wasChatOpen = chatOpen
 
             if now - menuIdleCamTick >= 1000 then
                 InvalidateIdleCam()
@@ -716,6 +755,7 @@ end
 
 local function applyMenuFocus()
     if menuFocusApplied then return end
+    if isChatOpen() then return end
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(not menuTypingLock)
     menuFocusApplied = true
@@ -724,8 +764,10 @@ end
 local function clearMenuFocus()
     if not menuFocusApplied then return end
     menuTypingLock = false
-    SetNuiFocusKeepInput(false)
-    SetNuiFocus(false, false)
+    if not isChatOpen() then
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+    end
     menuFocusApplied = false
 end
 
@@ -747,7 +789,7 @@ end
 local function setOpen(open)
     if state.open == open then return end
     state.open = open
-    TriggerServerEvent('es_admin:server:setUiPresence', { open = open == true })
+    TriggerServerEvent('cortex-admin:server:setUiPresence', { open = open == true })
 
     if open then
         menuTypingLock = false
@@ -756,14 +798,14 @@ local function setOpen(open)
         menuFocusTick = 0
         refreshPlayerList()
         sendUiState()
-        SendNUIMessage({ action = 'es_admin:open' })
+        SendNUIMessage({ action = 'cortex-admin:open' })
         startMenuControlThread()
         requestMenuPermissions(false)
         requestAddonVehiclesIfNeeded(false)
         local m = EsAdmin.getPreviewVehicleModel and EsAdmin.getPreviewVehicleModel() or nil
         if type(m) == 'string' and m ~= '' then
             SendNUIMessage({
-                action = 'es_admin:vehiclePreviewResume',
+                action = 'cortex-admin:vehiclePreviewResume',
                 data = {
                     model = m,
                     shared = EsAdmin.getPreviewShared and EsAdmin.getPreviewShared() == true,
@@ -773,7 +815,7 @@ local function setOpen(open)
         end
     else
         menuTypingLock = false
-        SendNUIMessage({ action = 'es_admin:close' })
+        SendNUIMessage({ action = 'cortex-admin:close' })
         clearMenuFocus()
     end
 end
@@ -787,7 +829,7 @@ local function openVehiclePreviewPage(model)
     requestAddonVehiclesIfNeeded(false)
 
     SendNUIMessage({
-        action = 'es_admin:vehiclePreviewPage',
+        action = 'cortex-admin:vehiclePreviewPage',
         data = {
             model = type(model) == 'string' and model ~= '' and model or nil,
         }
@@ -927,7 +969,7 @@ RegisterCommand('tp', function(_, args)
         notify('success', ('Teleported to %.1f, %.1f, %.1f'):format(coords.x, coords.y, coords.z))
     else
         -- Use smart teleport to find ground
-        exports.es_admin:teleportToCoords(coords.x, coords.y, true)
+        exports['cortex-admin']:teleportToCoords(coords.x, coords.y, true)
     end
 end, false)
 
@@ -999,7 +1041,7 @@ RegisterCommand('copyheading', function()
     runCommandAction('player.copyHeading', nil, 'copy heading')
 end, false)
 
--- Delete vehicle command (Optimized with es_lib)
+-- Delete vehicle command (Optimized with cortex-lib)
 RegisterCommand('dv', function()
     if not hasCommandPermission('vehicle.delete', 'delete vehicle') then
         return
@@ -1018,9 +1060,9 @@ RegisterCommand('dv', function()
         return
     end
     
-    -- Otherwise, find nearest vehicle using exports.es_lib:getClosestVehicle
+    -- Otherwise, find nearest vehicle using exports['cortex-lib']:getClosestVehicle
     local coords = GetEntityCoords(ped)
-    local nearestVehicle = exports.es_lib:getClosestVehicle(coords, 10.0)
+    local nearestVehicle = exports['cortex-lib']:getClosestVehicle(coords, 10.0)
     
     if nearestVehicle then
         SetEntityAsMissionEntity(nearestVehicle, true, true)
@@ -1179,7 +1221,7 @@ RegisterCommand('esadmin_reset', function()
     EsAdmin.sendUiState()
     
     notify('success', 'Admin menu visual settings have been reset to defaults.')
-    print('[es_admin] Visual settings reset to defaults via command.')
+    print('[cortex-admin] Visual settings reset to defaults via command.')
 end, false)
 
 -- ============================================================================
@@ -1311,7 +1353,7 @@ end
 -- Set default MP Ped model (male or female based on random or preference)
 local function setDefaultMpPed()
     local model = joaat('mp_m_freemode_01')
-    if exports.es_lib:requestModel(model, 5000) then
+    if exports['cortex-lib']:requestModel(model, 5000) then
         SetPlayerModel(PlayerId(), model)
         SetModelAsNoLongerNeeded(model)
         
@@ -1328,7 +1370,7 @@ local function setDefaultMpPed()
         SetPedComponentVariation(ped, 8, 0, 0, 2)  -- Undershirt
         SetPedComponentVariation(ped, 11, 0, 0, 2) -- Torso
         
-        print('[es_admin] Set default MP Freemode ped')
+        print('[cortex-admin] Set default MP Freemode ped')
     end
 end
 
@@ -1340,12 +1382,12 @@ local function loadOrRestoreMpPed(isRespawn)
     local pedData, pedName, source = findSavedPedData()
     
     if pedData then
-        print(('[es_admin] Loading saved MP Ped: %s (source: %s)'):format(pedName, source))
+        print(('[cortex-admin] Loading saved MP Ped: %s (source: %s)'):format(pedName, source))
         if type(EsAdmin.loadMpPedData) == 'function' then
             EsAdmin.loadMpPedData(pedData)
             return true
         end
-        print('[es_admin] WARNING: loadMpPedData is unavailable during startup restore.')
+        print('[cortex-admin] WARNING: loadMpPedData is unavailable during startup restore.')
     end
     
     -- No saved ped found, check if we should default to MP ped
@@ -1417,28 +1459,28 @@ end
 -- NET EVENTS
 -- ============================================================================
 
-RegisterNetEvent('es_admin:client:permissions', function(allowed)
+RegisterNetEvent('cortex-admin:client:permissions', function(allowed)
     state.allowed = allowed or {}
     if state.open then
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { allowed = state.allowed }
         })
     end
 end)
 
-RegisterNetEvent('es_admin:client:setAddonVehicles', function(vehicles)
+RegisterNetEvent('cortex-admin:client:setAddonVehicles', function(vehicles)
     cachedData.addonVehicles = normalizeAddonVehicles(vehicles)
     menuDataCache.addonVehiclesLoaded = true
     if state.open then
         SendNUIMessage({
-            action = 'es_admin:setState',
+            action = 'cortex-admin:setState',
             data = { addonVehicles = cachedData.addonVehicles }
         })
     end
 end)
 
-RegisterNetEvent('es_admin:client:updateWorldState', function(payload)
+RegisterNetEvent('cortex-admin:client:updateWorldState', function(payload)
     if not payload then return end
 
     local shouldRefreshUi = false
@@ -1484,7 +1526,7 @@ RegisterNetEvent('es_admin:client:updateWorldState', function(payload)
     end
 end)
 
-RegisterNetEvent('es_admin:client:teleport', function(coords, heading)
+RegisterNetEvent('cortex-admin:client:teleport', function(coords, heading)
     if not coords then return end
     local ped = PlayerPedId()
     SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false)
@@ -1493,18 +1535,18 @@ RegisterNetEvent('es_admin:client:teleport', function(coords, heading)
     end
 end)
 
-RegisterNetEvent('es_admin:client:freeze', function(enabled)
+RegisterNetEvent('cortex-admin:client:freeze', function(enabled)
     local ped = PlayerPedId()
     FreezeEntityPosition(ped, enabled)
 end)
 
-RegisterNetEvent('es_admin:client:notify', function(notifyType, message)
+RegisterNetEvent('cortex-admin:client:notify', function(notifyType, message)
     local position = 'top-right'
     if state.settings.menuPosition == 'right' then
         position = 'top-left'
     end
     
-    exports.es_lib:notify({
+    exports['cortex-lib']:notify({
         type = notifyType or 'info',
         description = message or '',
         position = position
@@ -1519,9 +1561,9 @@ RegisterNetEvent('es_admin:client:notify', function(notifyType, message)
     end
 end)
 
-RegisterNetEvent('es_admin:client:copyText', function(text)
+RegisterNetEvent('cortex-admin:client:copyText', function(text)
     SendNUIMessage({
-        action = 'es_admin:copyText',
+        action = 'cortex-admin:copyText',
         data = { text = text }
     })
 end)
@@ -1567,7 +1609,7 @@ end)
 
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName ~= currentResourceName then return end
-    TriggerServerEvent('es_admin:server:requestWorldState')
+    TriggerServerEvent('cortex-admin:server:requestWorldState')
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
@@ -1575,5 +1617,10 @@ AddEventHandler('onResourceStop', function(resourceName)
         return
     end
 
-    TriggerServerEvent('es_admin:server:setUiPresence', { open = false })
+    TriggerServerEvent('cortex-admin:server:setUiPresence', { open = false })
+    state.open = false
+    menuTypingLock = false
+    menuFocusApplied = false
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(false, false)
 end)

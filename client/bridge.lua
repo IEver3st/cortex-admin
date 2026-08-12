@@ -34,4 +34,4 @@ function EsAdminBridge.getFrameworkInfo()
     }
 end
 
-print('[es_admin] Client bridge loaded')
+print('[cortex-admin] Client bridge loaded')

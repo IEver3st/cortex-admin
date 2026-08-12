@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a phased migration and parity path so `es_admin` can permanently import durable vMenu data, preserve ACE behavior, and progressively replace vMenu.
+**Goal:** Add a phased migration and parity path so `cortex-admin` can permanently import durable vMenu data, preserve ACE behavior, and progressively replace vMenu.
 
-**Architecture:** Build a migration foundation first using the existing vMenu bridge and KVP fallback readers, then expand parity domain-by-domain. Persist imported records in `es_admin` storage and keep ACE permissions as the live access-control model.
+**Architecture:** Build a migration foundation first using the existing vMenu bridge and KVP fallback readers, then expand parity domain-by-domain. Persist imported records in `cortex-admin` storage and keep ACE permissions as the live access-control model.
 
 **Tech Stack:** FiveM Lua, NUI React-in-JS, resource KVP storage, vMenu exports, fallback KVP snapshot reader
 
@@ -27,7 +27,7 @@
 - Modify: `client/actions.lua`
 
 - [ ] **Step 1: Reuse existing vMenu vehicle normalization helpers**
-- [ ] **Step 2: Copy vMenu vehicle entries into es_admin storage**
+- [ ] **Step 2: Copy vMenu vehicle entries into cortex-admin storage**
 - [ ] **Step 3: Skip duplicates safely and preserve metadata**
 - [ ] **Step 4: Refresh cached personal vehicle summaries**
 

@@ -19,7 +19,7 @@ local function detectFramework()
     Config.HasOxInventory = Config.Inventory == 'ox_inventory'
     Config.HasQBXVehicles = (qbxVehState == 'started' or qbxVehState == 'starting') and true or false
 
-    print(('[es_admin] Framework: %s | Inventory: %s | Vehicles: %s'):format(
+    print(('[cortex-admin] Framework: %s | Inventory: %s | Vehicles: %s'):format(
         Config.Framework,
         Config.Inventory,
         Config.HasQBXVehicles and 'qbx_vehicles' or 'none'

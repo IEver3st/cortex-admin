@@ -95,58 +95,60 @@ Config.WeaponList = {
 }
 
 Config.KvpKeys = {
-    settings = 'es_admin_settings',
-    favorites = 'es_admin_favorites',
-    bans = 'es_admin_bans',
+    settings = 'cortex-admin_settings',
+    favorites = 'cortex-admin_favorites',
+    bans = 'cortex-admin_bans',
 }
 
 Config.Permissions = {
-    all = 'es_admin.all',
-    player = 'es_admin.player',
-    vehicle = 'es_admin.vehicle',
-    vehicle_custom = 'es_admin.vehicle',
-    world = 'es_admin.world',
-    weapons = 'es_admin.weapons',
-    teleport = 'es_admin.teleport',
-    dev = 'es_admin.dev',
-    options = 'es_admin.options',
-    server = 'es_admin.server',
-    inventory = 'es_admin.inventory',
-    garage = 'es_admin.garage',
+    all = 'cortex-admin.all',
+    player = 'cortex-admin.player',
+    vehicle = 'cortex-admin.vehicle',
+    vehicle_custom = 'cortex-admin.vehicle',
+    world = 'cortex-admin.world',
+    weapons = 'cortex-admin.weapons',
+    teleport = 'cortex-admin.teleport',
+    dev = 'cortex-admin.dev',
+    options = 'cortex-admin.options',
+    server = 'cortex-admin.server',
+    inventory = 'cortex-admin.inventory',
+    garage = 'cortex-admin.garage',
 }
 
 Config.ActionPermissions = {
-    ['player.kick'] = 'es_admin.server.kick',
-    ['player.ban'] = 'es_admin.server.ban',
-    ['player.unban'] = 'es_admin.server.ban',
-    ['player.freeze'] = 'es_admin.server.freeze',
-    ['player.bring'] = 'es_admin.server.teleport',
-    ['player.kill'] = 'es_admin.player',
-    ['player.reviveTarget'] = 'es_admin.player',
-    ['player.sitInVehicle'] = 'es_admin.player',
-    ['player.setJob'] = 'es_admin.player',
-    ['player.setGang'] = 'es_admin.player',
-    ['player.setCash'] = 'es_admin.player',
-    ['player.setBank'] = 'es_admin.player',
-    ['player.giveMoney'] = 'es_admin.player',
-    ['player.setFood'] = 'es_admin.player',
-    ['player.setThirst'] = 'es_admin.player',
-    ['player.setStress'] = 'es_admin.player',
-    ['player.openInventory'] = 'es_admin.inventory',
-    ['player.setRoutingBucket'] = 'es_admin.server',
-    ['vehicle.adminCar'] = 'es_admin.vehicle',
-    ['vehicle.giveKeys'] = 'es_admin.vehicle',
-    ['world.weather'] = 'es_admin.world.weather',
-    ['world.weatherEditor'] = 'es_admin.world.weather.editor',
-    ['world.weatherReload'] = 'es_admin.world.weather.reload',
-    ['world.weatherForce'] = 'es_admin.world.weather.force',
-    ['world.weatherForceCurrent'] = 'es_admin.world.weather.force',
-    ['world.time'] = 'es_admin.world.time',
-    ['world.freezeTime'] = 'es_admin.world.time',
-    ['world.blackout'] = 'es_admin.world.blackout',
-    ['inventory.giveItem'] = 'es_admin.inventory',
-    ['garage.spawnVehicle'] = 'es_admin.garage',
-    ['server.pullStash'] = 'es_admin.server',
+    ['player.kick'] = 'cortex-admin.server.kick',
+    ['player.ban'] = 'cortex-admin.server.ban',
+    ['player.unban'] = 'cortex-admin.server.ban',
+    ['player.freeze'] = 'cortex-admin.server.freeze',
+    ['player.bring'] = 'cortex-admin.server.teleport',
+    ['player.goto'] = 'cortex-admin.server.teleport',
+    ['player.kill'] = 'cortex-admin.player',
+    ['player.reviveTarget'] = 'cortex-admin.player',
+    ['player.sitInVehicle'] = 'cortex-admin.player',
+    ['player.setJob'] = 'cortex-admin.player',
+    ['player.setGang'] = 'cortex-admin.player',
+    ['player.setCash'] = 'cortex-admin.player',
+    ['player.setBank'] = 'cortex-admin.player',
+    ['player.giveMoney'] = 'cortex-admin.player',
+    ['player.setFood'] = 'cortex-admin.player',
+    ['player.setThirst'] = 'cortex-admin.player',
+    ['player.setStress'] = 'cortex-admin.player',
+    ['player.openInventory'] = 'cortex-admin.inventory',
+    ['player.setRoutingBucket'] = 'cortex-admin.server',
+    ['vehicle.adminCar'] = 'cortex-admin.vehicle',
+    ['vehicle.giveKeys'] = 'cortex-admin.vehicle',
+    ['vehicle.liveTuning'] = 'cortex-admin.vehicle',
+    ['world.weather'] = 'cortex-admin.world.weather',
+    ['world.weatherEditor'] = 'cortex-admin.world.weather.editor',
+    ['world.weatherReload'] = 'cortex-admin.world.weather.reload',
+    ['world.weatherForce'] = 'cortex-admin.world.weather.force',
+    ['world.weatherForceCurrent'] = 'cortex-admin.world.weather.force',
+    ['world.time'] = 'cortex-admin.world.time',
+    ['world.freezeTime'] = 'cortex-admin.world.time',
+    ['world.blackout'] = 'cortex-admin.world.blackout',
+    ['inventory.giveItem'] = 'cortex-admin.inventory',
+    ['garage.spawnVehicle'] = 'cortex-admin.garage',
+    ['server.pullStash'] = 'cortex-admin.server',
 }
 
 Config.BanIdentifierTypes = { 'license', 'license2', 'steam', 'discord', 'fivem', 'xbl', 'live' }
@@ -154,10 +156,10 @@ Config.BanIdentifierTypes = { 'license', 'license2', 'steam', 'discord', 'fivem'
 -- =============================================================================
 -- QBX PERMISSION MAPPING
 -- When QBX is detected, players in these ACE groups automatically receive
--- the listed es_admin permissions without needing separate es_admin.* ACEs.
+-- the listed cortex-admin permissions without needing separate cortex-admin.* ACEs.
 -- Permissions are checked in order; first matching group wins.
 --
--- 'all' grants full access (same as es_admin.all)
+-- 'all' grants full access (same as cortex-admin.all)
 -- Tab names grant access to that tab (e.g. 'player', 'vehicle', 'world')
 -- Action IDs grant access to specific actions (e.g. 'player.kick')
 -- =============================================================================
@@ -170,7 +172,7 @@ Config.QBXPermissions = {
     },
     -- admin group: full access to everything
     ['admin'] = {
-        acePerms = { 'admin', 'command' },
+        acePerms = { 'admin' },
         grant = 'all',
     },
     -- mod group: limited access (no dev, server, ban)
