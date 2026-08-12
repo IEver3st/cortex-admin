@@ -20,7 +20,11 @@ env:
     client
     server
     shared
-    ui
+    ui/index.html
+    ui/app.js
+    ui/style.css
+    ui/preview-shim.js
+    ui/vendor
 
 jobs:
   release:
