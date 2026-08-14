@@ -14,6 +14,38 @@ function notify(type, message)
     Admin.notify(type, message)
 end
 
+local function modelAuthorizationError(reason)
+    if reason == 'model_forbidden' then return 'Your ACE permissions do not allow that whitelisted model.' end
+    if reason == 'forbidden' then return 'You do not have permission to use that model action.' end
+    if reason == 'rate_limited' then return 'Model authorization is being requested too quickly. Try again in a moment.' end
+    if reason == 'timeout' then return 'Model authorization timed out. Try again.' end
+    return 'The server could not authorize that model.'
+end
+
+local function authorizeModel(kind, model, actionId, silent)
+    if type(Admin.authorizeVmenuModel) ~= 'function' then
+        if not silent then notify('error', 'Server model authorization is unavailable.') end
+        return false, 'unavailable'
+    end
+    local allowed, reason, token = Admin.authorizeVmenuModel(kind, model, actionId)
+    if not allowed and not silent then notify('error', modelAuthorizationError(reason)) end
+    return allowed == true, reason, token
+end
+
+local function authorizeModelBatch(kind, models, actionId, silent)
+    if type(Admin.authorizeVmenuModels) ~= 'function' then
+        if not silent then notify('error', 'Server model authorization is unavailable.') end
+        return nil, 'unavailable'
+    end
+    local result = Admin.authorizeVmenuModels(kind, models, actionId)
+    if type(result) ~= 'table' or result.ok ~= true or type(result.allowed) ~= 'table' then
+        local reason = type(result) == 'table' and result.error or 'unavailable'
+        if not silent then notify('error', modelAuthorizationError(reason)) end
+        return nil, reason
+    end
+    return result.allowed, result.error, result.token
+end
+
 function ensureVehicle()
     local ped = getPed()
     local vehicle = GetVehiclePedIsIn(ped, false)
@@ -2250,7 +2282,9 @@ function buildSharedWardrobeData(ped)
 end
 
 function applyMpPedData(ped, data)
-    if not data then return end
+    if not data then return false end
+    if data.ModelHash and data.ModelHash ~= 0
+        and not authorizeModel('ped', data.ModelHash, 'player.loadMpPed') then return false end
     
     print('[cortex-admin] Applying MP Ped data...')
 
@@ -2372,12 +2406,13 @@ function applyMpPedData(ped, data)
     end
     
     print('[cortex-admin] MP Ped data applied successfully')
+    return true
 end
 
 -- Register early so startup restore in main.lua can use this even if later init code fails.
 Admin.loadMpPedData = function(data)
-    if not data then return end
-    applyMpPedData(getPed(), data)
+    if not data then return false end
+    return applyMpPedData(getPed(), data)
 end
 
 local VEHICLE_CLASS_CATEGORY_MAP = {
@@ -2447,6 +2482,7 @@ function captureVehicleData(vehicle, saveName)
         customWheels = GetVehicleModVariation(vehicle, 23),
         customWheelsRear = GetVehicleModVariation(vehicle, 24),
         tyresCanBurst = GetVehicleTyresCanBurst(vehicle),
+        enveffScale = GetVehicleEnveffScale(vehicle),
         version = 1,
     }
 
@@ -2626,9 +2662,14 @@ function applyVehicleData(vehicle, props)
     if props.tyresCanBurst ~= nil then
         SetVehicleTyresCanBurst(vehicle, props.tyresCanBurst == true)
     end
+
+    local enveffScale = tonumber(props.enveffScale)
+    if enveffScale and enveffScale == enveffScale and enveffScale >= 0.0 and enveffScale <= 1.0 then
+        SetVehicleEnveffScale(vehicle, enveffScale)
+    end
 end
 
-Admin.giveKeysForVehicle = function(vehicle, silent)
+Admin.giveKeysForVehicle = function(vehicle, silent, authorizationToken, authorizationActionId)
     if not vehicle or vehicle == 0 then return end
     if GetResourceState('qbx_vehiclekeys') ~= 'started' then return end
 
@@ -2644,26 +2685,45 @@ Admin.giveKeysForVehicle = function(vehicle, silent)
     TriggerServerEvent('cortex-admin:server:giveVehicleKeys', {
         netId = netId ~= 0 and netId or nil,
         silent = silent == true,
+        authorizationToken = authorizationToken,
+        authorizationActionId = authorizationActionId,
     })
 end
+
+local previousCortexSpawnedVehicle = 0
 
 function deleteOccupiedVehicleIfReplaceSpawnEnabled()
     if state.settings.replacePersonalVehicle == false then
         return
     end
-    local ped = getPed()
-    local currentVeh = GetVehiclePedIsIn(ped, false)
-    if currentVeh ~= 0 then
-        SetEntityAsMissionEntity(currentVeh, true, true)
-        DeleteEntity(currentVeh)
+    if previousCortexSpawnedVehicle ~= 0 and DoesEntityExist(previousCortexSpawnedVehicle) then
+        SetEntityAsMissionEntity(previousCortexSpawnedVehicle, true, true)
+        DeleteEntity(previousCortexSpawnedVehicle)
+    end
+    previousCortexSpawnedVehicle = 0
+end
+
+function registerCortexSpawnedVehicle(vehicle)
+    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        previousCortexSpawnedVehicle = vehicle
     end
 end
 
-function spawnVehicleWithProps(props)
+function seatPedInSpawnedVehicle(ped, vehicle)
+    if state.settings.spawnInsideVehicle ~= false then
+        SetPedIntoVehicle(ped, vehicle, -1)
+    end
+end
+
+function spawnVehicleWithProps(props, authorizationActionId)
     if not props or not props.model then
         notify('error', 'Invalid vehicle data.')
         return
     end
+
+    local modelActionId = authorizationActionId or 'vehicle.personal'
+    local modelAuthorized, _, modelToken = authorizeModel('vehicle', props.model, modelActionId)
+    if not modelAuthorized then return end
 
     deleteOccupiedVehicleIfReplaceSpawnEnabled()
 
@@ -2682,10 +2742,11 @@ function spawnVehicleWithProps(props)
         return
     end
 
-    SetPedIntoVehicle(ped, vehicle, -1)
+    registerCortexSpawnedVehicle(vehicle)
+    seatPedInSpawnedVehicle(ped, vehicle)
     Wait(0)
     applyVehicleData(vehicle, props)
-    Admin.giveKeysForVehicle(vehicle, true)
+    Admin.giveKeysForVehicle(vehicle, true, modelToken, modelActionId)
     SetModelAsNoLongerNeeded(props.model)
     notify('success', 'Vehicle spawned.')
 end
@@ -2852,7 +2913,17 @@ function convertVmenuDataToProps(saveName, data)
         mods = normalizeNumberKeyMap(data.mods, function(value)
             return tonumber(value) or -1
         end),
-        modColors = {},
+        modColors = {
+            primary = {
+                type = math.max(0, math.min(math.floor(tonumber(colors.PrimaryPaintFinish) or 0), 5)),
+                color = 0,
+                pearlescent = tonumber(colors.pearlescent) or 0,
+            },
+            secondary = {
+                type = math.max(0, math.min(math.floor(tonumber(colors.SecondaryPaintFinish) or 0), 5)),
+                color = 0,
+            },
+        },
         extras = normalizeNumberKeyMap(data.extras, function(value)
             return value == true
         end),
@@ -2884,6 +2955,7 @@ function convertVmenuDataToProps(saveName, data)
         customWheels = data.customWheels == true,
         customWheelsRear = data.customWheels == true,
         tyresCanBurst = data.bulletProofTires ~= true,
+        enveffScale = math.max(0.0, math.min(tonumber(data.enveffScale) or 0.0, 1.0)),
         version = tonumber(data.version) or 1,
     }
 
@@ -2933,6 +3005,8 @@ function buildVmenuVehicleDataFromProps(saveName, category, props)
             customSecondaryR = tonumber(customSecondary[1]) or -1,
             customSecondaryG = tonumber(customSecondary[2]) or -1,
             customSecondaryB = tonumber(customSecondary[3]) or -1,
+            PrimaryPaintFinish = props.modColors and props.modColors.primary and tonumber(props.modColors.primary.type) or nil,
+            SecondaryPaintFinish = props.modColors and props.modColors.secondary and tonumber(props.modColors.secondary.type) or nil,
         },
         customWheels = props.customWheels == true,
         extras = normalizeNumberKeyMap(props.extras, function(value)
@@ -2958,7 +3032,7 @@ function buildVmenuVehicleDataFromProps(saveName, category, props)
         xenonHeadlights = props.xenonHeadlights == true,
         bulletProofTires = props.tyresCanBurst == false,
         headlightColor = tonumber(props.xenonColor) or -1,
-        enveffScale = 0.0,
+        enveffScale = math.max(0.0, math.min(tonumber(props.enveffScale) or 0.0, 1.0)),
         Category = category or 'Uncategorized',
     }
 end
@@ -3042,14 +3116,264 @@ function savePersonalVehicles(data)
     saveKvpJson(C.PERSONAL_VEHICLES_KEY, persist)
 end
 
+local function emptyDomainResult(total)
+    return { imported = 0, skipped = 0, invalid = 0, failed = 0, total = total or 0 }
+end
+
+local function safeImportedKey(value, requiredPrefix)
+    if type(value) ~= 'string' or value == '' or #value > 128 or value:find('[%z\1-\31\127]') then return nil end
+    if requiredPrefix and value:sub(1, #requiredPrefix) ~= requiredPrefix then return nil end
+    return value
+end
+
+local function importVmenuNonMpPeds(snapshot)
+    local source = type(snapshot) == 'table' and snapshot.nonMpPeds or nil
+    local result = emptyDomainResult(type(source) == 'table' and #source or 0)
+    if type(source) ~= 'table' then result.reason = 'unavailable'; return result end
+    for index = 1, #source do
+        local item = source[index]
+        local key = item and safeImportedKey(item.key, 'ped_')
+        local data = item and cloneJsonTable(item.data)
+        local model = data and tonumber(data.ModelHash or data.model)
+        if not key or not data or not model or model ~= math.floor(model) then
+            result.invalid = result.invalid + 1
+        elseif GetResourceKvpString(key) then
+            result.skipped = result.skipped + 1
+        else
+            data.ModelHash = model
+            data.model = model
+            data.SaveName = type(data.SaveName) == 'string' and data.SaveName or key:sub(5)
+            data.ImportedFrom = C.MP_PED_SOURCE_VMENU
+            data.ImportedSourceKey = key
+            if saveKvpJson(key, data) then result.imported = result.imported + 1 else result.failed = result.failed + 1 end
+        end
+    end
+    return result
+end
+
+local function normalizeImportedWeapon(raw)
+    if type(raw) ~= 'table' then return nil end
+    local name = raw.SpawnName or raw.spawnName or raw.name
+    if type(name) ~= 'string' or #name > 64 or not name:lower():match('^weapon_[%w_]+$') then return nil end
+    local components = {}
+    if type(raw.Components or raw.components) == 'table' then
+        for key, value in pairs(raw.Components or raw.components) do
+            local component = tonumber(value) or (type(key) == 'string' and key:match('^component_') and key:lower() or nil)
+            if component and #components < 64 then components[#components + 1] = component end
+        end
+    end
+    return {
+        name = name:lower(),
+        ammo = math.max(0, math.min(math.floor(tonumber(raw.CurrentAmmo or raw.ammo) or 250), 9999)),
+        components = components,
+        tint = math.max(0, math.min(math.floor(tonumber(raw.CurrentTint or raw.tint) or 0), 31)),
+    }
+end
+
+local function convertVmenuLoadout(raw)
+    if type(raw) ~= 'table' then return nil end
+    local weapons = {}
+    for index = 1, math.min(#raw, 256) do
+        local weapon = normalizeImportedWeapon(raw[index])
+        if weapon then weapons[#weapons + 1] = weapon end
+    end
+    if #weapons == 0 and #raw > 0 then return nil end
+    return { weapons = weapons, savedAt = os.time(), importedFrom = 'vmenu' }
+end
+
+local function importVmenuWeaponLoadouts(snapshot)
+    local source = type(snapshot) == 'table' and snapshot.weaponLoadouts or nil
+    local total = type(source) == 'table' and #source or 0
+    if type(snapshot) == 'table' and type(snapshot.temporaryLoadout) == 'table' then total = total + 1 end
+    local result = emptyDomainResult(total)
+    if type(source) ~= 'table' then result.reason = 'unavailable'; return result end
+    local existing = loadWeaponLoadoutsRaw()
+    local sourceToName = {}
+    local function importOne(sourceKey, raw, fallbackName)
+        local key = safeImportedKey(sourceKey)
+        local name = key and key:match('^vmenu_string_saved_weapon_loadout_(.+)$') or fallbackName
+        if not name or name == '' or #name > 64 then result.invalid = result.invalid + 1; return end
+        sourceToName[key or sourceKey] = name
+        if existing[name] then result.skipped = result.skipped + 1; return end
+        local converted = convertVmenuLoadout(raw)
+        if not converted then result.invalid = result.invalid + 1; return end
+        converted.importedSourceKey = sourceKey
+        existing[name] = converted
+        result.imported = result.imported + 1
+    end
+    for index = 1, #source do
+        local item = source[index]
+        importOne(item and item.key, item and item.data)
+    end
+    if type(snapshot.temporaryLoadout) == 'table' then
+        importOne('vmenu_temp_weapons_loadout_before_respawn', snapshot.temporaryLoadout, 'Recovered pre-respawn')
+    end
+    if result.imported > 0 and not saveKvpJson(C.WEAPON_LOADOUTS_KEY, existing) then
+        result.failed = result.failed + result.imported
+        result.imported = 0
+    end
+    local defaultKey = type(snapshot.defaultLoadout) == 'string' and snapshot.defaultLoadout or nil
+    local defaultName = defaultKey and (sourceToName[defaultKey] or defaultKey:match('^vmenu_string_saved_weapon_loadout_(.+)$')) or nil
+    if defaultName and existing[defaultName] then result.defaultName = defaultName end
+    return result
+end
+
+local vmenuSettingToggles = {
+    autoEquipParachuteWhenInPlane = 'weapons.autoEquipParachute', everyoneIgnorePlayer = 'player.everyoneIgnores',
+    fastRun = 'player.fastRun', fastSwim = 'player.fastSwim', neverWanted = 'player.neverWanted', noRagdoll = 'player.noRagdoll',
+    playerGodMode = 'player.godmode', playerStayInVehicle = 'player.stayInVehicle', superJump = 'player.superjump',
+    unlimitedStamina = 'player.infiniteStamina', vehicleAnchorBoat = 'vehicle.anchorBoat', vehicleBikeSeatbelt = 'vehicle.bikeSeatbelt',
+    vehicleEngineAlwaysOn = 'vehicle.engineAlwaysOn', vehicleGodAutoRepair = 'vehicle.autoRepair', vehicleGodEngine = 'vehicle.preventEngineDamage',
+    vehicleGodInvincible = 'vehicle.invincible', vehicleGodStrongWheels = 'vehicle.strongWheels', vehicleGodVisual = 'vehicle.preventVisualDamage',
+    vehicleHighbeamsOnHonk = 'vehicle.flashHighbeams', vehicleNeverDirty = 'vehicle.keepClean', vehicleNoBikeHelmet = 'vehicle.noHelmet',
+    vehicleNoSiren = 'vehicle.noSiren', voiceChatEnabled = 'voice.enabled', voiceChatShowSpeaker = 'voice.showSpeaker',
+    voiceChatShowVoiceStatus = 'voice.showStatus', weaponLoadoutsSetLoadoutOnRespawn = 'weapons.restoreLoadoutOnRespawn',
+    weaponsNoReload = 'weapons.noReload', weaponsUnlimitedAmmo = 'weapons.infiniteAmmo', weaponsUnlimitedParachutes = 'weapons.unlimitedParachutes',
+    miscDeathNotifications = 'dev.deathNotifications', miscJoinQuitNotifications = 'dev.joinQuitNotifications', miscLocationBlips = 'dev.locationBlips',
+    miscShowOverheadNames = 'dev.overheadNames', miscShowPlayerBlips = 'dev.playerBlips', miscShowTime = 'dev.showTime',
+    miscShowLocation = 'dev.showCoords', miscRestorePlayerWeapons = 'weapons.restoreLoadoutOnRespawn',
+    kbDriftMode = 'dev.driftMode', kbTpToWaypoint = 'options.teleportWaypointKey', vehicleSpawnerReplacePrevious = 'options.replacePersonalVehicle',
+}
+
+local function importVmenuSettings(snapshot)
+    local settings = type(snapshot) == 'table' and snapshot.settings or nil
+    local result = emptyDomainResult(countTableEntries(settings))
+    if type(settings) ~= 'table' then result.reason = 'unavailable'; return result end
+    for sourceKey, actionId in pairs(vmenuSettingToggles) do
+        local value = settings[sourceKey]
+        if type(value) == 'boolean' then
+            if type(Admin.toggleAction) == 'function' then
+                Admin.toggleAction(actionId, value)
+                result.imported = result.imported + 1
+            else
+                result.failed = result.failed + 1
+            end
+        end
+    end
+    if type(settings.miscRightAlignMenu) == 'boolean' then
+        state.settings.menuPosition = settings.miscRightAlignMenu and 'right' or 'left'
+        result.imported = result.imported + 1
+    end
+    if type(settings.miscSpeedoKmh) == 'boolean' and settings.miscSpeedoKmh then
+        state.settings.speedHudUnits = 'kph'; result.imported = result.imported + 1
+        if type(Admin.toggleAction) == 'function' then Admin.toggleAction('dev.showSpeed', true) end
+    elseif type(settings.miscSpeedoMph) == 'boolean' and settings.miscSpeedoMph then
+        state.settings.speedHudUnits = 'mph'; result.imported = result.imported + 1
+        if type(Admin.toggleAction) == 'function' then Admin.toggleAction('dev.showSpeed', true) end
+    end
+    if type(settings.miscRestorePlayerAppearance) == 'boolean' then
+        state.settings.restorePedOnDeath = settings.miscRestorePlayerAppearance; result.imported = result.imported + 1
+    end
+    if type(settings.vehicleDisableHelicopterTurbulence) == 'boolean' or type(settings.vehicleDisablePlaneTurbulence) == 'boolean' then
+        state.settings.disableAircraftTurbulence = settings.vehicleDisableHelicopterTurbulence == true or settings.vehicleDisablePlaneTurbulence == true
+        result.imported = result.imported + 1
+    end
+    if EsAdmin.saveSettings then EsAdmin.saveSettings() end
+    return result
+end
+
+local VMENU_CONFIG_DOMAIN_NAMES = { 'addons', 'extras', 'locations', 'modelWhitelists', 'tattoos' }
+
+local function fetchVmenuConfigDomains(serverState)
+    local domains = {}
+    local failures = {}
+    local metadata = type(serverState) == 'table' and serverState.config and serverState.config.domains or {}
+    for index = 1, #VMENU_CONFIG_DOMAIN_NAMES do
+        local domain = VMENU_CONFIG_DOMAIN_NAMES[index]
+        local entry = type(metadata) == 'table' and metadata[domain] or nil
+        if type(entry) == 'table' and entry.available == true and type(Admin.getVmenuConfigDomain) == 'function' then
+            local data, reason = Admin.getVmenuConfigDomain(domain)
+            if type(data) == 'table' then
+                domains[domain] = data
+            else
+                failures[domain] = reason or 'unavailable'
+            end
+        end
+    end
+    return domains, failures
+end
+
+local function importVmenuCategories(snapshot)
+    local output = { peds = {}, vehicles = {} }
+    local summary = { peds = 0, vehicles = 0, invalid = 0 }
+    local sources = {
+        { name = 'peds', entries = type(snapshot) == 'table' and snapshot.pedCategories or nil },
+        { name = 'vehicles', entries = type(snapshot) == 'table' and snapshot.vehicleCategories or nil },
+    }
+
+    for sourceIndex = 1, #sources do
+        local source = sources[sourceIndex]
+        local entries = type(source.entries) == 'table' and source.entries or {}
+        for index = 1, math.min(#entries, 1024) do
+            local entry = entries[index]
+            local key = entry and safeImportedKey(entry.key)
+            local data = entry and cloneJsonTable(entry.data)
+            if key and data then
+                output[source.name][#output[source.name] + 1] = { key = key, data = data }
+                summary[source.name] = summary[source.name] + 1
+            else
+                summary.invalid = summary.invalid + 1
+            end
+        end
+    end
+
+    local saved = type(Admin.setVmenuImportedCategories) == 'function' and Admin.setVmenuImportedCategories(output) == true
+    summary.saved = saved
+    if not saved and (summary.peds > 0 or summary.vehicles > 0) then summary.failed = 1 else summary.failed = 0 end
+    return summary
+end
+
+local function importVmenuLocations(configDomains)
+    local locations = type(configDomains) == 'table' and configDomains.locations or nil
+    local teleports = type(locations) == 'table' and locations.teleports or nil
+    local result = emptyDomainResult(type(teleports) == 'table' and #teleports or 0)
+    if type(teleports) ~= 'table' then result.reason = 'unavailable'; return result end
+    local existing = loadSavedTeleportLocationsRaw()
+    for index = 1, math.min(#teleports, 1024) do
+        local entry = teleports[index]
+        local coords = type(entry) == 'table' and entry.coordinates or nil
+        local name = type(entry) == 'table' and entry.name or nil
+        local x, y, z = coords and tonumber(coords.x), coords and tonumber(coords.y), coords and tonumber(coords.z)
+        if type(name) ~= 'string' or name == '' or #name > 96 or not x or not y or not z
+            or x ~= x or y ~= y or z ~= z or math.abs(x) > 20000 or math.abs(y) > 20000 or math.abs(z) > 20000 then
+            result.invalid = result.invalid + 1
+        elseif existing[name] then
+            result.skipped = result.skipped + 1
+        else
+            existing[name] = { x = x, y = y, z = z, h = tonumber(entry.heading) or 0.0, importedFrom = 'vmenu' }
+            result.imported = result.imported + 1
+        end
+    end
+    if result.imported > 0 and not saveKvpJson(C.TELEPORT_LOCATIONS_KEY, existing) then
+        result.failed = result.failed + result.imported; result.imported = 0
+    end
+    return result
+end
+
 Admin.getVmenuMigrationSnapshot = function()
     local pedPayload, defaultPedKey, pedSource = getVmenuSavedPedPayload()
     local vehiclePayload, vehicleSource = getVmenuVehiclePayload()
+    local fallback = getVmenuFallbackSnapshot()
+    local serverState = type(Admin.getVmenuServerState) == 'function' and Admin.getVmenuServerState(false) or nil
     local storedVehicles = loadStoredPersonalVehicles()
     local storedVehicleCount = storedVehicles and storedVehicles.vehicles and #storedVehicles.vehicles or 0
+    local configDomains = {}
+    if type(serverState) == 'table' and type(serverState.config) == 'table' and type(serverState.config.domains) == 'table' then
+        for domain, entry in pairs(serverState.config.domains) do
+            configDomains[domain] = {
+                available = type(entry) == 'table' and entry.available == true,
+                count = type(entry) == 'table' and tonumber(entry.count) or 0,
+                sourceResource = type(entry) == 'table' and entry.sourceResource or nil,
+                importedAt = type(entry) == 'table' and entry.importedAt or nil,
+            }
+        end
+    end
+    local ledger = loadKvpJson(Config.KvpKeys.vmenuImport, {})
+    local storedCategories = loadKvpJson(Config.KvpKeys.vmenuCategories, {})
 
     return {
         vmenuRunning = GetResourceState('vMenu') == 'started',
+        generatedAt = os.time(),
         peds = {
             available = type(pedPayload) == 'table',
             count = type(pedPayload) == 'table' and #pedPayload or 0,
@@ -3063,6 +3387,45 @@ Admin.getVmenuMigrationSnapshot = function()
             source = vehicleSource or 'unavailable',
             importedCount = storedVehicleCount,
         },
+        nonMpPeds = {
+            available = type(fallback) == 'table' and type(fallback.nonMpPeds) == 'table',
+            count = type(fallback) == 'table' and type(fallback.nonMpPeds) == 'table' and #fallback.nonMpPeds or 0,
+            source = type(fallback) == 'table' and fallback.scope or 'unavailable',
+        },
+        weaponLoadouts = {
+            available = type(fallback) == 'table' and type(fallback.weaponLoadouts) == 'table',
+            count = type(fallback) == 'table' and type(fallback.weaponLoadouts) == 'table' and #fallback.weaponLoadouts or 0,
+            hasTemporary = type(fallback) == 'table' and type(fallback.temporaryLoadout) == 'table',
+            defaultKey = type(fallback) == 'table' and fallback.defaultLoadout or nil,
+            importedCount = countTableEntries(loadWeaponLoadoutsRaw()),
+        },
+        settings = {
+            available = type(fallback) == 'table' and type(fallback.settings) == 'table',
+            count = type(fallback) == 'table' and countTableEntries(fallback.settings) or 0,
+        },
+        categories = {
+            peds = type(fallback) == 'table' and type(fallback.pedCategories) == 'table' and #fallback.pedCategories or 0,
+            vehicles = type(fallback) == 'table' and type(fallback.vehicleCategories) == 'table' and #fallback.vehicleCategories or 0,
+            importedPeds = type(storedCategories.peds) == 'table' and #storedCategories.peds or 0,
+            importedVehicles = type(storedCategories.vehicles) == 'table' and #storedCategories.vehicles or 0,
+        },
+        config = {
+            available = type(serverState) == 'table' and serverState.ok == true,
+            resource = type(serverState) == 'table' and serverState.resource or nil,
+            domains = configDomains,
+        },
+        bans = {
+            available = type(serverState) == 'table' and serverState.ok == true,
+            count = type(serverState) == 'table' and serverState.bans and tonumber(serverState.bans.count) or 0,
+        },
+        fallback = type(fallback) == 'table' and {
+            ok = fallback.ok == true,
+            reason = fallback.reason,
+            scope = fallback.scope,
+            localHostOnly = fallback.localHostOnly == true,
+            parser = fallback.parser,
+        } or { ok = false, reason = 'unavailable' },
+        previousImport = type(ledger) == 'table' and ledger or {},
         permissions = getPermissionMigrationSummary(),
     }
 end
@@ -3150,14 +3513,78 @@ Admin.importVmenuSavedVehicles = function(options)
 end
 
 Admin.importVmenuMigrationData = function()
+    local fallback = getVmenuFallbackSnapshot(true) or {}
+    local serverState = type(Admin.getVmenuServerState) == 'function' and Admin.getVmenuServerState(true) or nil
+    local configDomains, configFailures = fetchVmenuConfigDomains(serverState)
     local pedOk, pedResult = Admin.importVmenuSavedPeds({ silent = true })
     local vehicleOk, vehicleResult = Admin.importVmenuSavedVehicles({ silent = true })
+    local nonMpPedResult = importVmenuNonMpPeds(fallback)
+    local loadoutResult = importVmenuWeaponLoadouts(fallback)
+    local settingResult = importVmenuSettings(fallback)
+    local locationResult = importVmenuLocations(configDomains)
+    local categoryResult = importVmenuCategories(fallback)
+    local configSaved = type(Admin.setVmenuImportedConfig) == 'function' and Admin.setVmenuImportedConfig(configDomains) == true
+
+    if loadoutResult.defaultName and type(Admin.executeAction) == 'function' then
+        Admin.executeAction('weapons.defaultLoadout', { name = loadoutResult.defaultName })
+    end
+
     local summary = {
-        ok = pedOk == true or vehicleOk == true,
+        ok = false,
         peds = pedResult or { reason = 'not_attempted' },
+        nonMpPeds = nonMpPedResult,
         vehicles = vehicleResult or { reason = 'not_attempted' },
+        weaponLoadouts = loadoutResult,
+        settings = settingResult,
+        locations = locationResult,
+        categories = categoryResult,
+        config = {
+            saved = configSaved,
+            failures = configFailures,
+            domains = type(serverState) == 'table' and serverState.config and serverState.config.domains or {},
+            importResult = type(serverState) == 'table' and serverState.config and serverState.config.importResult or nil,
+        },
+        bans = type(serverState) == 'table' and serverState.bans or { reason = 'unavailable' },
         permissions = getPermissionMigrationSummary(),
+        completedAt = os.time(),
     }
+
+    local domains = { summary.peds, summary.nonMpPeds, summary.vehicles, summary.weaponLoadouts, summary.settings, summary.locations }
+    for index = 1, #domains do
+        local domain = domains[index]
+        if type(domain) == 'table' and ((tonumber(domain.total) or 0) > 0 or (tonumber(domain.imported) or 0) > 0) then
+            summary.ok = true
+            break
+        end
+    end
+    if type(serverState) == 'table' and serverState.config and serverState.config.importResult
+        and (tonumber(serverState.config.importResult.imported) or 0) > 0 then summary.ok = true end
+    if configSaved and next(configDomains) ~= nil then summary.ok = true end
+    if categoryResult.saved and ((categoryResult.peds or 0) > 0 or (categoryResult.vehicles or 0) > 0) then summary.ok = true end
+
+    local persisted = {
+        version = 2,
+        importedAt = summary.completedAt,
+        domains = {
+            peds = summary.peds, nonMpPeds = summary.nonMpPeds, vehicles = summary.vehicles,
+            weaponLoadouts = summary.weaponLoadouts, settings = summary.settings, locations = summary.locations,
+            categories = summary.categories,
+        },
+        server = type(serverState) == 'table' and {
+            config = {
+                domains = serverState.config and serverState.config.domains or {},
+                importResult = serverState.config and serverState.config.importResult or nil,
+                savedLocally = configSaved,
+            },
+            bans = { count = serverState.bans and serverState.bans.count or 0 },
+            resource = serverState.resource,
+        } or nil,
+    }
+    if type(Admin.setVmenuImportedData) == 'function' then
+        Admin.setVmenuImportedData(persisted)
+    else
+        saveKvpJson(Config.KvpKeys.vmenuImport, persisted)
+    end
 
     if not summary.ok then
         notify('error', 'vMenu migration failed. No importable data was found.')
@@ -3166,7 +3593,10 @@ Admin.importVmenuMigrationData = function()
 
     local segments = {}
     segments[#segments + 1] = ('outfits imported %d'):format(tonumber(summary.peds.imported) or 0)
+    segments[#segments + 1] = ('peds imported %d'):format(tonumber(summary.nonMpPeds.imported) or 0)
     segments[#segments + 1] = ('vehicles imported %d'):format(tonumber(summary.vehicles.imported) or 0)
+    segments[#segments + 1] = ('loadouts imported %d'):format(tonumber(summary.weaponLoadouts.imported) or 0)
+    segments[#segments + 1] = ('locations imported %d'):format(tonumber(summary.locations.imported) or 0)
     notify('success', ('vMenu migration complete: %s. ACE permissions remain active.'):format(table.concat(segments, ', ')))
     return true, summary
 end
@@ -3241,7 +3671,7 @@ function actionLoadVehicle(data)
         return
     end
 
-    spawnVehicleWithProps(props)
+    spawnVehicleWithProps(props, 'vehicle.load')
 end
 
 function actionSavePersonalVehicle(data)
@@ -3388,7 +3818,7 @@ function actionSpawnPersonalVehicle(data)
         return
     end
 
-    spawnVehicleWithProps(props)
+    spawnVehicleWithProps(props, 'vehicle.personal')
 end
 
 function actionSaveMpPed(data)
@@ -3471,7 +3901,7 @@ function actionLoadMpPed(data)
         return
     end
 
-    applyMpPedData(getPed(), mpData)
+    if not applyMpPedData(getPed(), mpData) then return end
 
     setLastSavedPedReference({
         name = entry.name,
@@ -3516,6 +3946,8 @@ function actionLoadPed(data)
         return
     end
 
+    if not authorizeModel('ped', payload.ModelHash, 'player.loadPed') then return end
+
     if not exports['cortex-lib']:requestModel(payload.ModelHash, 5000) then
         notify('error', 'Failed to load model.')
         return
@@ -3526,16 +3958,49 @@ function actionLoadPed(data)
     notify('success', 'Ped loaded.')
 end
 
+local function configuredWeaponModels()
+    local output = {}
+    local seen = {}
+    local function append(value)
+        if type(value) ~= 'string' then return end
+        local name = value:match('^%s*(.-)%s*$'):lower()
+        if name == '' or not name:match('^[%w_%-]+$') then return end
+        if name ~= 'gadget_parachute' and name:sub(1, 7) ~= 'weapon_' then name = 'weapon_' .. name end
+        if not seen[name] then
+            seen[name] = true
+            output[#output + 1] = name
+        end
+    end
+
+    for index = 1, #(Config.WeaponList or {}) do append(Config.WeaponList[index]) end
+    local imported = type(Admin.getVmenuImportedConfig) == 'function' and Admin.getVmenuImportedConfig() or {}
+    local addons = type(imported.addons) == 'table' and imported.addons or {}
+    local weapons = type(addons.weapons) == 'table' and addons.weapons or {}
+    for index = 1, math.min(#weapons, 512) do append(weapons[index]) end
+    return output
+end
+
 function actionGiveAllWeapons()
     local ped = getPed()
-    local weaponList = Config.WeaponList or {}
+    local weaponList = configuredWeaponModels()
+    if #weaponList == 0 then
+        notify('error', 'No weapon models are configured.')
+        return
+    end
+    local authorized, reason = authorizeModelBatch('weapon', weaponList, 'weapons.giveAll')
+    if not authorized then return end
     CreateThread(function()
         local granted = 0
+        local denied = 0
         for i = 1, #weaponList do
-            local weaponHash = joaat(weaponList[i])
-            if not HasPedGotWeapon(ped, weaponHash, false) then
-                GiveWeaponToPed(ped, weaponHash, 250, false, false)
-                granted = granted + 1
+            if authorized[i] == true then
+                local weaponHash = joaat(weaponList[i])
+                if not HasPedGotWeapon(ped, weaponHash, false) then
+                    GiveWeaponToPed(ped, weaponHash, 250, false, false)
+                    granted = granted + 1
+                end
+            else
+                denied = denied + 1
             end
 
             if i % 8 == 0 then
@@ -3544,7 +4009,9 @@ function actionGiveAllWeapons()
         end
 
         if granted > 0 then
-            notify('success', ('Granted %d weapons.'):format(granted))
+            notify('success', ('Granted %d weapons%s.'):format(granted, denied > 0 and (', skipped ' .. denied .. ' restricted') or ''))
+        elseif denied > 0 then
+            notify('error', modelAuthorizationError(reason or 'model_forbidden'))
         else
             notify('success', 'All listed weapons already owned.')
         end
@@ -3561,7 +4028,7 @@ function prettifyWeaponComponentLabel(hashStr)
 end
 
 function weaponNameFromHash(weaponHash)
-    local list = Config.WeaponList or {}
+    local list = configuredWeaponModels()
     for i = 1, #list do
         if joaat(list[i]) == weaponHash then
             return list[i]
@@ -3652,7 +4119,7 @@ Admin.saveWeaponLoadout = function(name)
     local ped = getPed()
     local loadouts = loadWeaponLoadoutsRaw()
     local weapons = {}
-    local weaponList = Config.WeaponList or {}
+    local weaponList = configuredWeaponModels()
 
     for i = 1, #weaponList do
         local weaponName = weaponList[i]
@@ -3688,6 +4155,30 @@ Admin.loadWeaponLoadout = function(name)
         return false
     end
 
+    if #loadout.weapons > 256 then
+        notify('error', 'Weapon loadout is too large to authorize safely.')
+        return false
+    end
+    local models = {}
+    for index = 1, #loadout.weapons do
+        local weapon = loadout.weapons[index]
+        if type(weapon) ~= 'table' or type(weapon.name) ~= 'string' then
+            notify('error', 'Weapon loadout contains an invalid model.')
+            return false
+        end
+        models[index] = weapon.name
+    end
+    if #models > 0 then
+        local authorized, reason = authorizeModelBatch('weapon', models, 'weapons.loadLoadout')
+        if not authorized then return false end
+        for index = 1, #authorized do
+            if authorized[index] ~= true then
+                notify('error', modelAuthorizationError(reason or 'model_forbidden'))
+                return false
+            end
+        end
+    end
+
     local ped = getPed()
     RemoveAllPedWeapons(ped, true)
     for i = 1, #loadout.weapons do
@@ -3699,14 +4190,16 @@ Admin.loadWeaponLoadout = function(name)
             if type(comps) == 'table' then
                 for c = 1, #comps do
                     local cname = comps[c]
-                    if type(cname) == 'string' then
-                        local cHash = joaat(cname)
+                    if type(cname) == 'string' or type(cname) == 'number' then
+                        local cHash = type(cname) == 'number' and cname or joaat(cname)
                         if DoesWeaponTakeWeaponComponent(wHash, cHash) then
                             GiveWeaponComponentToPed(ped, wHash, cHash)
                         end
                     end
                 end
             end
+            local tint = tonumber(weapon.tint)
+            if tint and tint >= 0 and tint <= 31 then SetPedWeaponTintIndex(ped, wHash, math.floor(tint)) end
         end
     end
 
@@ -4309,6 +4802,8 @@ function actionSetModel(data)
         return
     end
 
+    if not authorizeModel('ped', model, 'player.setModel') then return end
+
     if not exports['cortex-lib']:requestModel(model, 5000) then
         notify('error', 'Failed to load model.')
         return
@@ -4481,11 +4976,15 @@ function spawnPreviewVehicleEntity(model, networkShared, transform)
     return true
 end
 
-function spawnVehicleAtPedWithExtras(model, extraStates)
+function spawnVehicleAtPedWithExtras(model, extraStates, authorizationActionId)
     if not model or model == '' then
         notify('error', 'Vehicle model required.')
         return false
     end
+
+    local modelActionId = authorizationActionId or 'vehicle.spawn'
+    local modelAuthorized, _, modelToken = authorizeModel('vehicle', model, modelActionId)
+    if not modelAuthorized then return false end
 
     if not exports['cortex-lib']:requestModel(model, 5000) then
         notify('error', 'Unable to load vehicle model.')
@@ -4510,9 +5009,10 @@ function spawnVehicleAtPedWithExtras(model, extraStates)
         applyVehicleExtraStates(vehicle, extraStates)
     end
 
-    SetPedIntoVehicle(ped, vehicle, -1)
+    registerCortexSpawnedVehicle(vehicle)
+    seatPedInSpawnedVehicle(ped, vehicle)
     Wait(0)
-    Admin.giveKeysForVehicle(vehicle, true)
+    Admin.giveKeysForVehicle(vehicle, true, modelToken, modelActionId)
     SetModelAsNoLongerNeeded(joaat(model))
     notify('success', 'Vehicle spawned.')
     return true
@@ -4552,6 +5052,7 @@ function startVehiclePreview(model)
         return false
     end
 
+    if not authorizeModel('vehicle', model, 'vehicle.preview') then return false end
     clearVehiclePreview()
     if not spawnPreviewVehicleEntity(model, false, nil) then
         return false
@@ -4651,7 +5152,7 @@ Admin.spawnVehicleFromPreview = function()
 
     local extrasSnapshot = collectPreviewExtraStates()
     clearVehiclePreview()
-    return spawnVehicleAtPedWithExtras(model, extrasSnapshot) == true
+    return spawnVehicleAtPedWithExtras(model, extrasSnapshot, 'vehicle.spawn') == true
 end
 
 function actionSpawnVehicle(data)
@@ -4662,7 +5163,7 @@ function actionSpawnVehicle(data)
     end
 
     clearVehiclePreview()
-    spawnVehicleAtPedWithExtras(model, nil)
+    spawnVehicleAtPedWithExtras(model, nil, 'vehicle.spawn')
 end
 
 function actionRepairVehicle()
@@ -5208,14 +5709,20 @@ exports('teleportToCoords', teleportToCoords)
 
 function actionGiveWeapon(data)
     local weapon = data and (data.weapon or data.value)
-    if not weapon or weapon == '' then
+    if type(weapon) ~= 'string' then
         notify('error', 'Weapon name required.')
         return
     end
-
-    if not weapon:find('weapon_') then
-        weapon = 'weapon_' .. weapon:lower()
+    weapon = weapon:match('^%s*(.-)%s*$'):lower()
+    if weapon == '' or #weapon > 64 or not weapon:match('^[%w_%-]+$') then
+        notify('error', 'Enter a valid weapon model name.')
+        return
     end
+    if weapon ~= 'gadget_parachute' and weapon:sub(1, 7) ~= 'weapon_' then weapon = 'weapon_' .. weapon end
+
+    local authorizationAction = data and data.authorizationAction == 'weapons.giveCustom'
+        and 'weapons.giveCustom' or 'weapons.give'
+    if not authorizeModel('weapon', weapon, authorizationAction) then return end
 
     GiveWeaponToPed(getPed(), joaat(weapon), 250, false, true)
     notify('success', ('Weapon given: %s'):format(weapon))
@@ -5238,6 +5745,7 @@ function actionGiveParachute(value)
 
     local ped = getPed()
     local playerId = PlayerId()
+    if not authorizeModel('weapon', 'gadget_parachute', 'weapons.parachute') then return end
     if not HasPedGotWeapon(ped, PARACHUTE_WEAPON_HASH, false) then
         GiveWeaponToPed(ped, PARACHUTE_WEAPON_HASH, 1, false, true)
     end
@@ -5557,7 +6065,10 @@ Admin.executeAction = function(actionId, data)
     elseif actionId == 'weapons.give' then
         return actionGiveWeapon(data)
     elseif actionId == 'weapons.giveCustom' then
-        return actionGiveWeapon(data)
+        return actionGiveWeapon({
+            weapon = data and (data.weapon or data.value),
+            authorizationAction = 'weapons.giveCustom',
+        })
     elseif actionId == 'weapons.giveAll' then
         return actionGiveAllWeapons()
     elseif actionId == 'weapons.removeAll' then
@@ -5638,7 +6149,9 @@ Admin.executeAction = function(actionId, data)
     elseif actionId == 'vehicle.giveKeys' then
         local vehicle = ensureVehicle()
         if not vehicle then return end
-        Admin.giveKeysForVehicle(vehicle, false)
+        local model = GetEntityModel(vehicle)
+        local authorized, _, token = authorizeModel('vehicle', model, 'vehicle.giveKeys')
+        if authorized then Admin.giveKeysForVehicle(vehicle, false, token, 'vehicle.giveKeys') end
         return
     elseif actionId == 'server.pullStash' then
         -- Handled via inline prompt in the NUI
@@ -5803,7 +6316,11 @@ Admin.toggleAction = function(actionId, enabled)
         state.coordHudDirty = enabled == true
         SendNUIMessage({
             action = 'cortex-admin:setCoordHud',
-            data = { visible = enabled }
+            data = {
+                visible = enabled == true or state.toggles['dev.locationDisplay'] == true,
+                showCoordinates = enabled == true,
+                showLocation = state.toggles['dev.locationDisplay'] == true,
+            }
         })
     elseif actionId == 'dev.showSpeed' then
         state.speedHudDirty = enabled == true
@@ -5815,7 +6332,7 @@ Admin.toggleAction = function(actionId, enabled)
                 units = state.settings.speedHudUnits or 'mph',
             }
         })
-    elseif actionId == 'options.compactMode' or actionId == 'options.showTargetInfo' or actionId == 'options.doubleClickToRun' or actionId == 'options.autoLoadSavedPed' or actionId == 'options.restorePedOnDeath' or actionId == 'options.defaultToMpPed' or actionId == 'options.replacePersonalVehicle' or actionId == 'options.disableAircraftTurbulence' or actionId == 'options.quitSessionInRockstarEditor' then
+    elseif actionId == 'options.compactMode' or actionId == 'options.showTargetInfo' or actionId == 'options.doubleClickToRun' or actionId == 'options.autoLoadSavedPed' or actionId == 'options.restorePedOnDeath' or actionId == 'options.defaultToMpPed' or actionId == 'options.replacePersonalVehicle' or actionId == 'options.spawnInsideVehicle' or actionId == 'options.disableAircraftTurbulence' or actionId == 'options.disablePlaneTurbulence' or actionId == 'options.disableHelicopterTurbulence' or actionId == 'options.disablePrivateMessages' or actionId == 'options.disableControllerSupport' or actionId == 'options.recordingControls' or actionId == 'options.minimapControls' or actionId == 'options.fingerPointControls' or actionId == 'options.quitSessionInRockstarEditor' then
         local settingKey = actionId:gsub('options%.', '')
         if settingKey == 'compactMode' then
             state.settings.compactMode = nil
@@ -5859,6 +6376,8 @@ Admin.selectAction = function(actionId, value)
         return
     elseif actionId == 'world.weather' then
         return actionSetWeather(value)
+    elseif actionId == 'world.weatherForceCurrent' then
+        return actionForceCurrentZoneWeather({ value = value })
     elseif actionId == 'world.time' then
         return actionSetTime(value)
     elseif actionId == 'world.clearArea' then
@@ -6199,15 +6718,15 @@ CreateThread(function()
     while true do
         local waitMs = 500
         local settings = state.settings
-        if settings and settings.disableAircraftTurbulence == true then
+        if settings and (settings.disableAircraftTurbulence == true or settings.disablePlaneTurbulence == true or settings.disableHelicopterTurbulence == true) then
             local ped = PlayerPedId()
             local vehicle = GetVehiclePedIsIn(ped, false)
             if vehicle ~= 0 then
                 local model = GetEntityModel(vehicle)
-                if IsThisModelAPlane(model) then
+                if IsThisModelAPlane(model) and (settings.disableAircraftTurbulence == true or settings.disablePlaneTurbulence == true) then
                     SetPlaneTurbulenceMultiplier(vehicle, 0.0)
                     waitMs = 0
-                elseif IsThisModelAHeli(model) and SetHeliTurbulenceScalar then
+                elseif IsThisModelAHeli(model) and (settings.disableAircraftTurbulence == true or settings.disableHelicopterTurbulence == true) and SetHeliTurbulenceScalar then
                     SetHeliTurbulenceScalar(vehicle, 0.0)
                     waitMs = 0
                 end
@@ -6217,23 +6736,118 @@ CreateThread(function()
     end
 end)
 
-Admin.getVehicleCustomization = function()
+local function getDrivenCustomizationVehicle()
     local ped = getPed()
     local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 then return nil end
+    if vehicle == 0 or not DoesEntityExist(vehicle) then return nil, 'no_vehicle' end
+    if GetPedInVehicleSeat(vehicle, -1) ~= ped then return nil, 'driver_required' end
+    if IsEntityDead(vehicle) then return nil, 'vehicle_destroyed' end
+    return vehicle
+end
+
+local function customizationInteger(value, minimum, maximum)
+    local number = tonumber(value)
+    if not number or number ~= number or number == math.huge or number == -math.huge
+        or number ~= math.floor(number) or number < minimum or number > maximum then
+        return nil
+    end
+    return number
+end
+
+local function customizationNumber(value, minimum, maximum)
+    local number = tonumber(value)
+    if not number or number ~= number or number == math.huge or number == -math.huge
+        or number < minimum or number > maximum then
+        return nil
+    end
+    return number
+end
+
+local function customizationRgb(value)
+    if type(value) ~= 'table' then return nil end
+    local red = customizationInteger(value[1], 0, 255)
+    local green = customizationInteger(value[2], 0, 255)
+    local blue = customizationInteger(value[3], 0, 255)
+    if red == nil or green == nil or blue == nil then return nil end
+    return { red, green, blue }
+end
+
+local function importedExtraLabelsForVehicle(modelHash)
+    local labels = {}
+    local config = type(Admin.getVmenuImportedConfig) == 'function' and Admin.getVmenuImportedConfig() or {}
+    local extras = type(config.extras) == 'table' and config.extras or {}
+    local targetHash = toUnsignedModelHash(modelHash)
+    local visited = 0
+
+    for rawModel, rawLabels in pairs(extras) do
+        visited = visited + 1
+        if visited > 4096 then break end
+        local candidateHash = type(rawModel) == 'string' and toUnsignedModelHash(joaat(rawModel))
+            or toUnsignedModelHash(rawModel)
+        if candidateHash == targetHash and type(rawLabels) == 'table' then
+            for rawId, rawLabel in pairs(rawLabels) do
+                local id = customizationInteger(rawId, 0, 20)
+                if id ~= nil and type(rawLabel) == 'string' then
+                    local label = trimString(rawLabel)
+                    if label then labels[id] = label:sub(1, 80) end
+                end
+            end
+            break
+        end
+    end
+    return labels
+end
+
+Admin.getVehicleCustomization = function()
+    local vehicle, errorReason = getDrivenCustomizationVehicle()
+    if not vehicle then return nil, errorReason end
 
     SetVehicleModKit(vehicle, 0)
 
     local neonR, neonG, neonB = GetVehicleNeonLightsColour(vehicle)
     local smokeR, smokeG, smokeB = GetVehicleTyreSmokeColor(vehicle)
+    local primaryPaintType, primaryPaintColor, primaryPearlescent = GetVehicleModColor_1(vehicle)
+    local secondaryPaintType, secondaryPaintColor = GetVehicleModColor_2(vehicle)
+    local primaryCustom = GetIsVehiclePrimaryColourCustom(vehicle) == true
+    local secondaryCustom = GetIsVehicleSecondaryColourCustom(vehicle) == true
+    local primaryCustomColor = { 0, 0, 0 }
+    local secondaryCustomColor = { 0, 0, 0 }
+    if primaryCustom then
+        local red, green, blue = GetVehicleCustomPrimaryColour(vehicle)
+        primaryCustomColor = { red, green, blue }
+    end
+    if secondaryCustom then
+        local red, green, blue = GetVehicleCustomSecondaryColour(vehicle)
+        secondaryCustomColor = { red, green, blue }
+    end
 
     local data = {
+        vehicle = {
+            model = GetEntityModel(vehicle),
+            label = getVehicleLabel(GetEntityModel(vehicle)),
+            plate = GetVehicleNumberPlateText(vehicle),
+        },
         mods = {},
         colors = {},
+        paintFinish = {
+            primary = customizationInteger(primaryPaintType, 0, 5) or 0,
+            secondary = customizationInteger(secondaryPaintType, 0, 5) or 0,
+        },
+        paintColor = {
+            primary = customizationInteger(primaryPaintColor, 0, 255) or 0,
+            secondary = customizationInteger(secondaryPaintColor, 0, 255) or 0,
+            pearlescent = customizationInteger(primaryPearlescent, 0, 255) or 0,
+        },
+        customPrimary = { enabled = primaryCustom, value = primaryCustomColor },
+        customSecondary = { enabled = secondaryCustom, value = secondaryCustomColor },
+        extras = {},
+        liveries = {},
+        livery = GetVehicleLivery(vehicle),
         plate = GetVehicleNumberPlateTextIndex(vehicle),
         windowTint = GetVehicleWindowTint(vehicle),
         wheelType = GetVehicleWheelType(vehicle),
         xenonColor = GetVehicleXenonLightsColour(vehicle),
+        enveffScale = GetVehicleEnveffScale(vehicle),
         neonFront = IsVehicleNeonLightEnabled(vehicle, 0),
         neonBack = IsVehicleNeonLightEnabled(vehicle, 1),
         neonLeft = IsVehicleNeonLightEnabled(vehicle, 2),
@@ -6243,14 +6857,14 @@ Admin.getVehicleCustomization = function()
     }
 
     for i = 0, 49 do
-        local max = GetNumVehicleMods(vehicle, i)
+        local max = math.max(0, math.min(GetNumVehicleMods(vehicle, i) or 0, 4096))
         local current = GetVehicleMod(vehicle, i)
         local names = {}
-        
+
         for m = 0, max - 1 do
             local label = GetModTextLabel(vehicle, i, m)
             local name = label and GetLabelText(label)
-            if name == "NULL" or name == "" then name = nil end
+            if name == 'NULL' or name == '' then name = nil end
             names[tostring(m)] = name
         end
 
@@ -6258,89 +6872,171 @@ Admin.getVehicleCustomization = function()
             current = current,
             max = max,
             names = names,
-            isToggle = (i >= 17 and i <= 22)
+            isToggle = i == 18 or i == 20 or i == 22,
         }
     end
 
-    data.mods["18"] = { isToggle = true, enabled = IsToggleModOn(vehicle, 18) }
-    data.mods["20"] = { isToggle = true, enabled = IsToggleModOn(vehicle, 20) }
-    data.mods["22"] = { isToggle = true, enabled = IsToggleModOn(vehicle, 22) }
+    data.mods['18'] = { isToggle = true, enabled = IsToggleModOn(vehicle, 18) }
+    data.mods['20'] = { isToggle = true, enabled = IsToggleModOn(vehicle, 20) }
+    data.mods['22'] = { isToggle = true, enabled = IsToggleModOn(vehicle, 22) }
 
     local primary, secondary = GetVehicleColours(vehicle)
     local pearlescent, wheelColor = GetVehicleExtraColours(vehicle)
-    local dashColor = GetVehicleDashboardColour(vehicle)
-    local trimColor = GetVehicleInteriorColour(vehicle)
-
     data.colors = {
         primary = primary,
         secondary = secondary,
         pearlescent = pearlescent,
         wheel = wheelColor,
-        dashboard = dashColor,
-        trim = trimColor
+        dashboard = GetVehicleDashboardColour(vehicle),
+        trim = GetVehicleInteriorColour(vehicle),
     }
+
+    local extraLabels = importedExtraLabelsForVehicle(GetEntityModel(vehicle))
+    for extraId = 0, 20 do
+        if DoesExtraExist(vehicle, extraId) then
+            data.extras[#data.extras + 1] = {
+                id = extraId,
+                label = extraLabels[extraId] or ('Extra #%d'):format(extraId),
+                enabled = IsVehicleExtraTurnedOn(vehicle, extraId) == true,
+            }
+        end
+    end
+
+    local liveryCount = customizationInteger(GetVehicleLiveryCount(vehicle), 0, 255) or 0
+    for index = 0, liveryCount - 1 do
+        local labelKey = GetLiveryName(vehicle, index)
+        local label = type(labelKey) == 'string' and labelKey ~= '' and GetLabelText(labelKey) or nil
+        if label == 'NULL' or label == '' then label = nil end
+        data.liveries[#data.liveries + 1] = { value = index, label = label or ('Livery #%d'):format(index + 1) }
+    end
 
     return data
 end
 
 Admin.setVehicleCustomization = function(data)
-    local ped = getPed()
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 then return end
+    if type(data) ~= 'table' or type(data.type) ~= 'string' then return false, 'invalid_payload' end
+    local vehicle, errorReason = getDrivenCustomizationVehicle()
+    if not vehicle then return false, errorReason end
 
     SetVehicleModKit(vehicle, 0)
 
     if data.type == 'mod' then
-        if data.isToggle then
-            ToggleVehicleMod(vehicle, data.id, data.enabled)
+        local id = customizationInteger(data.id, 0, 49)
+        if id == nil then return false, 'invalid_mod' end
+        if data.isToggle == true then
+            if (id ~= 18 and id ~= 20 and id ~= 22) or type(data.enabled) ~= 'boolean' then
+                return false, 'invalid_mod_toggle'
+            end
+            ToggleVehicleMod(vehicle, id, data.enabled)
         else
-            SetVehicleMod(vehicle, data.id, data.value, false)
+            local value = customizationInteger(data.value, -1, 4096)
+            local count = GetNumVehicleMods(vehicle, id) or 0
+            if value == nil or count <= 0 or value >= count then return false, 'invalid_mod_value' end
+            SetVehicleMod(vehicle, id, value, GetVehicleModVariation(vehicle, id) == true)
         end
     elseif data.type == 'color' then
+        local value = customizationInteger(data.value, 0, 255)
+        if value == nil then return false, 'invalid_color' end
         local primary, secondary = GetVehicleColours(vehicle)
         local pearlescent, wheelColor = GetVehicleExtraColours(vehicle)
-        
+        if data.id == 'primary' and (value <= 160 or (value >= 223 and value <= 238)) then
+            ClearVehicleCustomPrimaryColour(vehicle)
+            SetVehicleColours(vehicle, value, secondary)
+        elseif data.id == 'secondary' and (value <= 160 or (value >= 223 and value <= 238)) then
+            ClearVehicleCustomSecondaryColour(vehicle)
+            SetVehicleColours(vehicle, primary, value)
+        elseif data.id == 'pearlescent' and value <= 160 then
+            SetVehicleExtraColours(vehicle, value, wheelColor)
+        elseif data.id == 'wheel' and value <= 160 then
+            SetVehicleExtraColours(vehicle, pearlescent, value)
+        elseif data.id == 'dashboard' and value <= 160 then
+            SetVehicleDashboardColour(vehicle, value)
+        elseif data.id == 'trim' and value <= 160 then
+            SetVehicleInteriorColour(vehicle, value)
+        else
+            return false, 'invalid_color'
+        end
+    elseif data.type == 'paintFinish' then
+        local value = customizationInteger(data.value, 0, 5)
+        if value == nil then return false, 'invalid_paint_finish' end
+        local pearlescent, wheelColor = GetVehicleExtraColours(vehicle)
         if data.id == 'primary' then
-            SetVehicleColours(vehicle, data.value, secondary)
+            SetVehicleModColor_1(vehicle, value, 0, 0)
         elseif data.id == 'secondary' then
-            SetVehicleColours(vehicle, primary, data.value)
-        elseif data.id == 'pearlescent' then
-            SetVehicleExtraColours(vehicle, data.value, wheelColor)
-        elseif data.id == 'wheel' then
-            SetVehicleExtraColours(vehicle, pearlescent, data.value)
-        elseif data.id == 'dashboard' then
-            SetVehicleDashboardColour(vehicle, data.value)
-        elseif data.id == 'trim' then
-            SetVehicleInteriorColour(vehicle, data.value)
+            SetVehicleModColor_2(vehicle, value, 0)
+        else
+            return false, 'invalid_paint_finish'
+        end
+        SetVehicleExtraColours(vehicle, pearlescent, wheelColor)
+    elseif data.type == 'customColor' then
+        if (data.id ~= 'primary' and data.id ~= 'secondary') or type(data.enabled) ~= 'boolean' then
+            return false, 'invalid_custom_color'
+        end
+        if not data.enabled then
+            if data.id == 'primary' then ClearVehicleCustomPrimaryColour(vehicle) else ClearVehicleCustomSecondaryColour(vehicle) end
+        else
+            local color = customizationRgb(data.value)
+            if not color then return false, 'invalid_custom_color' end
+            if data.id == 'primary' then
+                SetVehicleCustomPrimaryColour(vehicle, color[1], color[2], color[3])
+            else
+                SetVehicleCustomSecondaryColour(vehicle, color[1], color[2], color[3])
+            end
         end
     elseif data.type == 'plate' then
-        SetVehicleNumberPlateTextIndex(vehicle, data.value)
+        local value = customizationInteger(data.value, 0, 12)
+        if value == nil then return false, 'invalid_plate' end
+        SetVehicleNumberPlateTextIndex(vehicle, value)
     elseif data.type == 'window' then
-        SetVehicleWindowTint(vehicle, data.value)
+        local value = customizationInteger(data.value, 0, 6)
+        if value == nil then return false, 'invalid_window_tint' end
+        SetVehicleWindowTint(vehicle, value)
     elseif data.type == 'wheelType' then
-        SetVehicleWheelType(vehicle, data.value)
+        local value = customizationInteger(data.value, 0, 20)
+        if value == nil then return false, 'invalid_wheel_type' end
+        SetVehicleWheelType(vehicle, value)
     elseif data.type == 'xenonColor' then
-        SetVehicleXenonLightsColour(vehicle, data.value)
+        local value = customizationInteger(data.value, -1, 255)
+        if value == nil or (value > 12 and value ~= 255) then return false, 'invalid_xenon_color' end
+        SetVehicleXenonLightsColour(vehicle, value)
     elseif data.type == 'neon' then
-        if data.id == 'front' then
-            SetVehicleNeonLightEnabled(vehicle, 0, data.value)
-        elseif data.id == 'back' then
-            SetVehicleNeonLightEnabled(vehicle, 1, data.value)
-        elseif data.id == 'left' then
-            SetVehicleNeonLightEnabled(vehicle, 2, data.value)
-        elseif data.id == 'right' then
-            SetVehicleNeonLightEnabled(vehicle, 3, data.value)
-        elseif data.id == 'all' then
-            SetVehicleNeonLightEnabled(vehicle, 0, data.value)
-            SetVehicleNeonLightEnabled(vehicle, 1, data.value)
-            SetVehicleNeonLightEnabled(vehicle, 2, data.value)
-            SetVehicleNeonLightEnabled(vehicle, 3, data.value)
+        if type(data.value) ~= 'boolean' then return false, 'invalid_neon' end
+        local neonIds = { front = 0, back = 1, left = 2, right = 3 }
+        if data.id == 'all' then
+            for index = 0, 3 do SetVehicleNeonLightEnabled(vehicle, index, data.value) end
+        elseif neonIds[data.id] ~= nil then
+            SetVehicleNeonLightEnabled(vehicle, neonIds[data.id], data.value)
+        else
+            return false, 'invalid_neon'
         end
-    elseif data.type == 'neonColor' then
-        SetVehicleNeonLightsColour(vehicle, data.value[1] or 255, data.value[2] or 255, data.value[3] or 255)
-    elseif data.type == 'tyreSmokeColor' then
-        SetVehicleTyreSmokeColor(vehicle, data.value[1] or 255, data.value[2] or 255, data.value[3] or 255)
+    elseif data.type == 'neonColor' or data.type == 'tyreSmokeColor' then
+        local color = customizationRgb(data.value)
+        if not color then return false, 'invalid_rgb' end
+        if data.type == 'neonColor' then
+            SetVehicleNeonLightsColour(vehicle, color[1], color[2], color[3])
+        else
+            SetVehicleTyreSmokeColor(vehicle, color[1], color[2], color[3])
+        end
+    elseif data.type == 'livery' then
+        local value = customizationInteger(data.value, -1, 255)
+        local count = GetVehicleLiveryCount(vehicle) or -1
+        if value == nil or count <= 0 or value >= count then return false, 'invalid_livery' end
+        SetVehicleLivery(vehicle, value)
+    elseif data.type == 'extra' then
+        local id = customizationInteger(data.id, 0, 20)
+        if id == nil or type(data.enabled) ~= 'boolean' or not DoesExtraExist(vehicle, id) then
+            return false, 'invalid_extra'
+        end
+        SetVehicleExtra(vehicle, id, data.enabled and 0 or 1)
+    elseif data.type == 'enveff' then
+        local value = customizationNumber(data.value, 0.0, 1.0)
+        if value == nil then return false, 'invalid_enveff' end
+        SetVehicleEnveffScale(vehicle, value)
+    else
+        return false, 'invalid_customization_type'
     end
+
+    return true
 end
 
 -- ============================================================================
@@ -6352,6 +7048,9 @@ RegisterNetEvent('cortex-admin:client:spawnGarageVehicle', function(data)
         notify('error', 'Invalid vehicle data')
         return
     end
+
+    local modelAuthorized, _, modelToken = authorizeModel('vehicle', data.model, 'garage.spawnVehicle')
+    if not modelAuthorized then return end
 
     local modelHash = type(data.model) == 'number' and data.model or joaat(data.model)
 
@@ -6374,7 +7073,8 @@ RegisterNetEvent('cortex-admin:client:spawnGarageVehicle', function(data)
         return
     end
 
-    SetPedIntoVehicle(ped, vehicle, -1)
+    registerCortexSpawnedVehicle(vehicle)
+    seatPedInSpawnedVehicle(ped, vehicle)
     SetModelAsNoLongerNeeded(modelHash)
 
     if data.props and type(data.props) == 'table' then
@@ -6395,7 +7095,7 @@ RegisterNetEvent('cortex-admin:client:spawnGarageVehicle', function(data)
     end
 
     Wait(0)
-    Admin.giveKeysForVehicle(vehicle, true)
+    Admin.giveKeysForVehicle(vehicle, true, modelToken, 'garage.spawnVehicle')
     notify('success', ('Spawned: %s'):format(data.label or data.model))
 end)
 

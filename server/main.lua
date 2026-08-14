@@ -6,6 +6,7 @@ for _, action in ipairs(Actions.actions) do
 end
 
 local worldState = {}
+EsAdminServer.worldState = worldState
 local mathAbs = math.abs
 local mathFloor = math.floor
 local stringUpper = string.upper
@@ -31,6 +32,7 @@ local allowedWorldWeather = {
 }
 
 local allowedPlayerActions = {
+    ['goto'] = true,
     kick = true,
     ban = true,
     freeze = true,
@@ -215,8 +217,21 @@ end
 local function canOpenMenu(src)
     if IsPlayerAceAllowed(src, Config.Permissions.all)
         or IsPlayerAceAllowed(src, 'command.' .. Config.Command)
-        or IsPlayerAceAllowed(src, 'command.esadmin') then
+        or IsPlayerAceAllowed(src, 'command.esadmin')
+        or IsPlayerAceAllowed(src, 'command.vmenu')
+        or IsPlayerAceAllowed(src, 'vMenu.Everything') then
         return true
+    end
+
+    local vmenuMenus = {
+        'vMenu.OnlinePlayers.Menu', 'vMenu.PlayerOptions.Menu', 'vMenu.VehicleOptions.Menu',
+        'vMenu.VehicleSpawner.Menu', 'vMenu.SavedVehicles.Menu', 'vMenu.PersonalVehicle.Menu',
+        'vMenu.PlayerAppearance.Menu', 'vMenu.TimeOptions.Menu', 'vMenu.WeatherOptions.Menu',
+        'vMenu.WeaponOptions.Menu', 'vMenu.WeaponLoadouts.Menu', 'vMenu.VoiceChat.Menu',
+        'vMenu.MiscSettings.Menu', 'vMenu.MiscSettings.All', 'vMenu.NoClip',
+    }
+    for index = 1, #vmenuMenus do
+        if IsPlayerAceAllowed(src, vmenuMenus[index]) then return true end
     end
 
     return Config.HasQBX
@@ -375,8 +390,16 @@ end
 
 local function hasPermission(src, actionId)
     -- Check for full admin access via cortex-admin ACE
-    if IsPlayerAceAllowed(src, Config.Permissions.all) then
+    if IsPlayerAceAllowed(src, Config.Permissions.all) or IsPlayerAceAllowed(src, 'vMenu.Everything') then
         return true
+    end
+
+    local vmenuPermissions = Config.VmenuAcePermissions and Config.VmenuAcePermissions[actionId]
+    if type(vmenuPermissions) == 'table' then
+        for index = 1, #vmenuPermissions do
+            local permission = vmenuPermissions[index]
+            if type(permission) == 'string' and IsPlayerAceAllowed(src, permission) then return true end
+        end
     end
 
     -- QBX Permission Bridge: When QBX is active, check if the player belongs to
@@ -408,6 +431,14 @@ local function hasPermission(src, actionId)
     return false
 end
 
+EsAdminServer.hasPermission = hasPermission
+EsAdminServer.canOpenMenu = canOpenMenu
+EsAdminServer.allowRequest = allowRequest
+EsAdminServer.toInteger = toInteger
+EsAdminServer.toBoolean = toBoolean
+EsAdminServer.trimString = trimString
+EsAdminServer.sanitizeCoords = sanitizeCoords
+
 local function buildPermissionSnapshot(src)
     local now = GetGameTimer()
     local cached = permissionCache[src]
@@ -437,6 +468,34 @@ RegisterNetEvent('cortex-admin:server:requestPermissions', function()
     local src = source
     if not allowRequest(src, 'menu-read', 12, 5000) or not canOpenMenu(src) then return end
     TriggerClientEvent('cortex-admin:client:permissions', src, buildPermissionSnapshot(src))
+end)
+
+local function buildPlayerDirectory(requester)
+    local directory = {}
+    local players = GetPlayers()
+    for index = 1, #players do
+        local playerSource = toInteger(players[index], 1, 65535)
+        if playerSource and GetPlayerName(playerSource) then
+            local ped = GetPlayerPed(playerSource)
+            local health = ped and ped > 0 and DoesEntityExist(ped) and GetEntityHealth(ped) or nil
+            directory[#directory + 1] = {
+                id = playerSource,
+                name = trimString(GetPlayerName(playerSource), 96) or ('Player %d'):format(playerSource),
+                ping = toInteger(GetPlayerPing(playerSource), 0, 9999) or 0,
+                bucket = toInteger(GetPlayerRoutingBucket(playerSource), 0, 65535) or 0,
+                dead = health ~= nil and health <= 0 or false,
+                isSelf = playerSource == requester,
+            }
+        end
+    end
+    table.sort(directory, function(first, second) return first.id < second.id end)
+    return directory
+end
+
+RegisterNetEvent('cortex-admin:server:requestPlayerDirectory', function()
+    local src = source
+    if not allowRequest(src, 'player-directory-read', 6, 10000) or not canOpenMenu(src) then return end
+    TriggerClientEvent('cortex-admin:client:setPlayerDirectory', src, buildPlayerDirectory(src))
 end)
 
 RegisterNetEvent('cortex-admin:server:setWorldState', function(payload)
@@ -591,15 +650,30 @@ RegisterNetEvent('cortex-admin:server:playerAction', function(data)
 
     if action == 'kick' then
         if not hasPermission(src, 'player.kick') then return end
-        DropPlayer(target, trimString(data.reason, 160) or 'Kicked by staff.')
+        if IsPlayerAceAllowed(target, 'vMenu.DontKickMe') then
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'That player is protected from kicks.')
+            return
+        end
+        local reason = trimString(data.reason, 160) or 'Kicked by staff.'
+        print(('[cortex-admin] %s kicked %s (%d): %s'):format(GetPlayerName(src) or 'Console', GetPlayerName(target) or 'Unknown', target, reason))
+        DropPlayer(target, reason)
     elseif action == 'ban' then
         if not hasPermission(src, 'player.ban') then return end
+        if IsPlayerAceAllowed(target, 'vMenu.DontBanMe') then
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'That player is protected from bans.')
+            return
+        end
         local identifiers = GetPlayerIdentifiers(target)
         local reason = trimString(data.reason, 160) or 'Banned by staff.'
         local duration = toInteger(data.duration, 0, 525600)
         if duration == nil then return end
         local adminName = GetPlayerName(src) or 'Console'
-        EsAdminServer.addBan(identifiers, reason, adminName, duration)
+        local entry = EsAdminServer.addBan(identifiers, reason, adminName, duration, GetPlayerName(target))
+        if not entry then
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'The ban could not be saved because no durable identifier was available.')
+            return
+        end
+        print(('[cortex-admin] %s banned %s (%d, %s): %s'):format(adminName, GetPlayerName(target) or 'Unknown', target, entry.id or 'unknown', reason))
         DropPlayer(target, reason)
     elseif action == 'freeze' then
         if not hasPermission(src, 'player.freeze') then return end
@@ -615,6 +689,18 @@ RegisterNetEvent('cortex-admin:server:playerAction', function(data)
         if not coords or not heading or heading ~= heading then return end
         heading = heading % 360
         TriggerClientEvent('cortex-admin:client:teleport', target, coords, heading)
+    elseif action == 'goto' then
+        if not hasPermission(src, 'player.goto') then return end
+        if GetPlayerRoutingBucket(src) ~= GetPlayerRoutingBucket(target) then
+            TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target is in a different routing bucket.')
+            return
+        end
+        local targetPed = GetPlayerPed(target)
+        if not targetPed or targetPed <= 0 or not DoesEntityExist(targetPed) or GetEntityType(targetPed) ~= 1 then return end
+        local coords = sanitizeCoords(GetEntityCoords(targetPed))
+        local heading = GetEntityHeading(targetPed)
+        if not coords or type(heading) ~= 'number' or heading ~= heading then return end
+        TriggerClientEvent('cortex-admin:client:teleport', src, coords, heading % 360)
     end
 end)
 
@@ -622,7 +708,8 @@ AddEventHandler('playerConnecting', function(name, setKickReason)
     local identifiers = GetPlayerIdentifiers(source)
     local entry = EsAdminServer.findBan(identifiers)
     if entry then
-        local expiresText = entry.expires and os.date('%c', entry.expires) or 'Never'
+        local expiresAt = entry.expiresAt or entry.expires
+        local expiresText = expiresAt and os.date('%c', expiresAt) or 'Never'
         setKickReason(('Banned: %s (Expires: %s)'):format(entry.reason or 'No reason', expiresText))
         CancelEvent()
     end
@@ -1452,6 +1539,18 @@ RegisterNetEvent('cortex-admin:server:spawnGarageVehicle', function(data)
         return
     end
 
+    if type(EsAdminServer.authorizeModel) ~= 'function' then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Server model authorization is unavailable')
+        return
+    end
+    local modelAllowed, modelReason = EsAdminServer.authorizeModel(src, 'vehicle', targetVehicle.model, 'garage.spawnVehicle')
+    if not modelAllowed then
+        TriggerClientEvent('cortex-admin:client:notify', src, 'error', modelReason == 'model_forbidden'
+            and 'Your ACE permissions do not allow that whitelisted vehicle model'
+            or 'Vehicle model authorization failed')
+        return
+    end
+
     -- Send vehicle data to client for spawning
     TriggerClientEvent('cortex-admin:client:spawnGarageVehicle', src, {
         id = targetVehicle.id,
@@ -1487,13 +1586,18 @@ RegisterNetEvent('cortex-admin:server:giveVehicleKeys', function(data)
     if not allowRequest(src, 'privileged-write', 15, 5000) then return end
     local silent = type(data) == 'table' and data.silent == true
 
-    local hasAccess = hasPermission(src, 'vehicle.giveKeys')
-    if not hasAccess and silent then
-        hasAccess = hasPermission(src, 'vehicle.spawn')
-            or hasPermission(src, 'vehicle.personal')
-            or hasPermission(src, 'garage.spawnVehicle')
-    end
-    if not hasAccess then return end
+    if type(data) ~= 'table' then return end
+    local authorizationActionId = trimString(data.authorizationActionId, 96)
+    local keyGrantActions = {
+        ['vehicle.giveKeys'] = true,
+        ['vehicle.spawn'] = true,
+        ['vehicle.personal'] = true,
+        ['vehicle.load'] = true,
+        ['garage.spawnVehicle'] = true,
+    }
+    if not authorizationActionId or keyGrantActions[authorizationActionId] ~= true
+        or (not silent and authorizationActionId ~= 'vehicle.giveKeys')
+        or not hasPermission(src, authorizationActionId) then return end
 
     local function notifyError(message)
         if silent then return end
@@ -1525,6 +1629,24 @@ RegisterNetEvent('cortex-admin:server:giveVehicleKeys', function(data)
 
     if vehicle ~= currentVehicle then
         notifyError('You must be inside the selected vehicle')
+        return
+    end
+
+    if GetEntityType(vehicle) ~= 2 then
+        notifyError('The selected entity is not a vehicle')
+        return
+    end
+
+    local vehicleModel = GetEntityModel(vehicle)
+    if type(EsAdminServer.consumeModelAuthorization) ~= 'function'
+        or not EsAdminServer.consumeModelAuthorization(
+            src,
+            data.authorizationToken,
+            'vehicle',
+            authorizationActionId,
+            vehicleModel
+        ) then
+        notifyError('Vehicle model authorization expired or did not match this vehicle')
         return
     end
 

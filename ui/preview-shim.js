@@ -14,6 +14,32 @@
     };
 
     const origFetch = window.fetch.bind(window);
+    const previewScenario = params.get('state') || 'ready';
+    const requestedTab = params.get('tab') || '';
+    let previewBans = [
+        { id: 'cortex-2026-00041', playerName: 'Rowan Cross', reason: 'Repeated combat logging after staff warning', adminName: 'PreviewAdmin', expiresAt: 0, provenance: 'cortex' },
+        { id: 'vmenu-import-91a2', playerName: 'Taylor Knox', reason: 'Harassment', adminName: 'Legacy Staff', expiresAt: Math.floor(Date.now() / 1000) + 86400, provenance: 'vmenu' },
+        { id: 'cortex-2026-00038', playerName: 'Jordan Vale', reason: 'Injected vehicle spawn events', adminName: 'Cortex Security', expiresAt: Math.floor(Date.now() / 1000) + 604800, provenance: 'cortex' },
+    ];
+    const previewLocations = [
+        { name: 'Mission Row PD', x: 441.2, y: -981.9, z: 30.7, h: 90.0 },
+        { name: 'Sandy Shores Airfield', x: 1742.5, y: 3271.3, z: 41.1, h: 193.0 },
+        { name: 'Paleto Bay Sheriff', x: -447.1, y: 6013.4, z: 31.7, h: 314.0 },
+    ];
+
+    function requestBody(opts) {
+        try {
+            return JSON.parse((opts && opts.body) || '{}');
+        } catch (err) {
+            return {};
+        }
+    }
+
+    function delayedResponse(factory) {
+        return new Promise(function (resolve) {
+            window.setTimeout(function () { resolve(factory()); }, 30000);
+        });
+    }
 
     function jsonResponse(obj) {
         return new Response(JSON.stringify(obj), {
@@ -50,20 +76,47 @@
     }
 
     function emptyVehicleCustomization() {
+        const mods = {};
+        [0, 1, 2, 3, 4, 6, 7, 10, 11, 12, 13, 14, 15, 16, 23, 24, 27, 28, 30, 32, 33, 38, 48].forEach(function (id) {
+            mods[String(id)] = { current: id === 11 ? 2 : 0, max: id === 11 ? 4 : 6, names: {} };
+        });
+        mods['18'] = { isToggle: true, enabled: true };
+        mods['20'] = { isToggle: true, enabled: false };
+        mods['22'] = { isToggle: true, enabled: true };
         return {
-            mods: {},
+            ok: true,
+            vehicle: { model: 1663218586, label: 'Albany Police Cruiser', plate: 'CORTEX' },
+            permissions: { mods: true, colors: true, liveries: true, extras: true, underglow: true, plate: true },
+            mods,
             colors: {
-                primary: 0,
+                primary: 12,
                 secondary: 0,
-                pearlescent: 0,
-                wheel: 0,
+                pearlescent: 111,
+                wheel: 156,
                 dashboard: 0,
                 trim: 0
             },
+            paintFinish: { primary: 1, secondary: 0 },
+            paintColor: { primary: 0, secondary: 0, pearlescent: 111 },
+            customPrimary: { enabled: false, value: [36, 89, 156] },
+            customSecondary: { enabled: true, value: [16, 18, 22] },
+            extras: [
+                { id: 1, label: 'Push bar', enabled: true },
+                { id: 2, label: 'Roof lightbar', enabled: true },
+                { id: 5, label: 'Spotlights', enabled: false },
+                { id: 8, label: 'Rear antenna', enabled: false }
+            ],
+            liveries: [
+                { value: 0, label: 'Los Santos Police' },
+                { value: 1, label: 'Blaine County Sheriff' },
+                { value: 2, label: 'Highway Patrol' }
+            ],
+            livery: 0,
             plate: 0,
             windowTint: 0,
             wheelType: 0,
             xenonColor: 0,
+            enveffScale: 0.2,
             neonFront: false,
             neonBack: false,
             neonLeft: false,
@@ -121,6 +174,10 @@
             { id: 'recording', label: 'Recording' },
             { id: 'options', label: 'Options' },
             { id: 'server', label: 'Server' },
+            { id: 'voice', label: 'Voice' },
+            { id: 'migration', label: 'vMenu Import' },
+            { id: 'bans', label: 'Banned Players' },
+            { id: 'imported', label: 'Imported Data' },
             { id: 'favorites', label: 'Favorites' }
         ],
         actions: [
@@ -184,8 +241,9 @@
         },
         allowed: {},
         players: [
-            { id: 1, name: 'You (preview)', ping: 12, dead: false },
-            { id: 2, name: 'Other Player', ping: 48, dead: false }
+            { id: 1, name: 'PreviewClient', ping: 12, bucket: 0, dead: false, isSelf: true },
+            { id: 2, name: 'Avery Stone', ping: 48, bucket: 0, dead: false, isSelf: false },
+            { id: 17, name: 'Morgan Reed', ping: 83, bucket: 2, dead: true, isSelf: false }
         ],
         wardrobeShareRequests: [],
         playerName: 'PreviewClient',
@@ -241,8 +299,28 @@
             })
             .then(function (data) {
                 const merged = mergeToggleDefaults(data);
+                if (previewScenario === 'permission') {
+                    merged.allowed = {
+                        ...(merged.allowed || {}),
+                        'migration.read': false,
+                        'migration.import': false,
+                        'player.viewBans': false,
+                        'player.unban': false,
+                    };
+                }
+                if (previewScenario === 'empty') {
+                    merged.players = [];
+                }
                 window.postMessage({ action: 'cortex-admin:setState', data: merged }, '*');
                 window.postMessage({ action: 'cortex-admin:open' }, '*');
+                if (requestedTab) {
+                    window.postMessage({ action: 'cortex-admin:setTab', data: { tab: requestedTab } }, '*');
+                }
+                if (params.get('huds') === '1') {
+                    window.postMessage({ action: 'cortex-admin:setVehicleHealthHud', data: { visible: true, engine: 742, body: 915, tank: 624 } }, '*');
+                    window.postMessage({ action: 'cortex-admin:setVoiceHud', data: { visible: true, talking: true, speakers: ['Avery Stone', 'Carmen Vega'] } }, '*');
+                    window.postMessage({ action: 'cortex-admin:setTimeHud', data: { visible: true, hour: 14, minute: 32 } }, '*');
+                }
             });
     }
 
@@ -258,7 +336,7 @@
             return jsonResponse([]);
         },
         'cortex-admin:getSavedTeleportLocations': function () {
-            return jsonResponse([]);
+            return jsonResponse(previewScenario === 'empty' ? [] : previewLocations);
         },
         'cortex-admin:getVehicleCustomization': function () {
             return jsonResponse(emptyVehicleCustomization());
@@ -306,12 +384,145 @@
             return jsonResponse({ ok: true, weaponName: '', components: {} });
         },
         'cortex-admin:getVmenuMigrationSnapshot': function () {
+            if (previewScenario === 'loading') {
+                return delayedResponse(function () { return jsonResponse({ ok: false, error: 'preview_timeout' }); });
+            }
+            if (previewScenario === 'error') {
+                return jsonResponse({ ok: false, error: 'The preview migration bridge is unavailable.' });
+            }
+            if (previewScenario === 'permission') {
+                return jsonResponse({ ok: false, error: 'forbidden' });
+            }
+            if (previewScenario === 'empty') {
+                return jsonResponse({
+                    ok: true,
+                    vmenuRunning: false,
+                    peds: { available: false, count: 0, source: 'not detected', importedCount: 0 },
+                    nonMpPeds: { available: false, count: 0, source: 'not detected' },
+                    vehicles: { available: false, count: 0, source: 'not detected', importedCount: 0 },
+                    weaponLoadouts: { available: false, count: 0, importedCount: 0 },
+                    settings: { available: false, count: 0 },
+                    categories: { peds: 0, vehicles: 0, importedPeds: 0, importedVehicles: 0 },
+                    config: { available: false, resource: null, domains: {} },
+                    permissions: { mode: 'ace-aliases', note: 'No recoverable vMenu data was detected.' },
+                    fallback: { ok: false, reason: 'not_found', scope: 'host LevelDB', localHostOnly: true }
+                });
+            }
             return jsonResponse({
-                vmenuRunning: false,
-                peds: { available: false, count: 0, source: 'preview', importedCount: 0 },
-                vehicles: { available: false, count: 0, source: 'preview', importedCount: 0 },
-                permissions: { mode: 'preview', note: 'Browser preview mode.' }
+                ok: true,
+                vmenuRunning: true,
+                peds: { available: true, count: 4, source: 'vMenu client KVP', importedCount: 2 },
+                nonMpPeds: { available: true, count: 2, source: 'host LevelDB' },
+                vehicles: { available: true, count: 7, source: 'vMenu client KVP', importedCount: 3 },
+                weaponLoadouts: { available: true, count: 3, importedCount: 1 },
+                settings: { available: true, count: 58 },
+                categories: { peds: 3, vehicles: 5, importedPeds: 1, importedVehicles: 2 },
+                config: {
+                    available: true,
+                    resource: 'vMenu',
+                    domains: {
+                        addons: { available: true, count: 18, sourcePath: 'config/addons.json' },
+                        extras: { available: true, count: 6, sourcePath: 'config/extras.json' },
+                        locations: { available: true, count: 12, sourcePath: 'config/locations.json' },
+                        modelWhitelists: { available: true, count: 9, sourcePath: 'config/model-whitelists.json' },
+                        tattoos: { available: true, count: 41, sourcePath: 'config/tattoos.json' }
+                    }
+                },
+                bans: { available: true, count: previewBans.length },
+                permissions: { mode: 'ace-aliases', note: 'Existing vMenu.* grants are resolved as Cortex permission aliases.' },
+                fallback: { ok: true, scope: 'FXServer host LevelDB', localHostOnly: true, parser: 'leveldb-log-v1' }
             });
+        },
+        'cortex-admin:importVmenuMigrationData': function () {
+            if (previewScenario === 'error') return jsonResponse({ ok: false, error: 'preview_import_failed' });
+            return jsonResponse({
+                ok: true,
+                result: {
+                    ok: true,
+                    peds: { imported: 2, skipped: 2 },
+                    nonMpPeds: { imported: 2, skipped: 0 },
+                    vehicles: { imported: 4, skipped: 3 },
+                    weaponLoadouts: { imported: 2, skipped: 1 },
+                    settings: { imported: 11, skipped: 47 },
+                    locations: { imported: 3, skipped: 0 },
+                    bans: { imported: 2, skipped: 1 }
+                }
+            });
+        },
+        'cortex-admin:getVmenuImportedConfiguration': function () {
+            if (previewScenario === 'permission') return jsonResponse({ ok: false, error: 'forbidden' });
+            if (previewScenario === 'error') return jsonResponse({ ok: false, error: 'Imported configuration could not be read.' });
+            const empty = previewScenario === 'empty';
+            return jsonResponse({
+                ok: true,
+                domains: {
+                    addons: {
+                        vehicles: { count: empty ? 0 : 12, sample: empty ? [] : ['cortexbuffalo', 'elegyr', 'police5'] },
+                        peds: { count: empty ? 0 : 3, sample: empty ? [] : ['s_m_y_sheriff_02', 'a_m_m_business_01'] },
+                        weapons: { count: empty ? 0 : 3, sample: empty ? [] : ['WEAPON_CARBINERIFLE', 'WEAPON_FLASHLIGHT'] }
+                    },
+                    extras: { count: empty ? 0 : 6, sample: empty ? [] : ['police5', 'ambulance'] },
+                    locations: {
+                        teleports: { count: empty ? 0 : 3, sample: empty ? [] : ['Mission Row PD', 'Sandy Shores Airfield'] },
+                        blips: { count: empty ? 0 : 5, sample: empty ? [] : ['Police Stations', 'Hospitals'] }
+                    },
+                    modelWhitelists: {
+                        vehicles: { count: empty ? 0 : 4, sample: empty ? [] : ['police5', 'ambulance'] },
+                        peds: { count: empty ? 0 : 2, sample: empty ? [] : ['s_m_y_sheriff_02'] },
+                        weapons: { count: empty ? 0 : 3, sample: empty ? [] : ['WEAPON_CARBINERIFLE'] }
+                    },
+                    tattoos: { count: empty ? 0 : 41, sample: empty ? [] : ['MP_Buis_M_Neck_000', 'MP_Buis_M_Head_000'] }
+                },
+                categories: {
+                    peds: { count: empty ? 0 : 3, sample: empty ? [] : ['Emergency', 'Civilians'] },
+                    vehicles: { count: empty ? 0 : 5, sample: empty ? [] : ['Emergency', 'Sports'] }
+                }
+            });
+        },
+        'cortex-admin:getBanList': function (opts) {
+            if (previewScenario === 'loading') return delayedResponse(function () { return jsonResponse({ ok: false, error: 'preview_timeout', records: [] }); });
+            if (previewScenario === 'permission') return jsonResponse({ ok: false, error: 'forbidden', records: [] });
+            if (previewScenario === 'error') return jsonResponse({ ok: false, error: 'Ban storage is unavailable.', records: [] });
+            const body = requestBody(opts);
+            const query = String(body.query || '').trim().toLowerCase();
+            const offset = Math.max(0, Number(body.offset) || 0);
+            const limit = Math.min(100, Math.max(1, Number(body.limit) || 50));
+            const source = previewScenario === 'empty' ? [] : previewBans;
+            const matched = source.filter(function (record) {
+                if (!query) return true;
+                return [record.id, record.playerName, record.reason, record.adminName].some(function (value) {
+                    return String(value || '').toLowerCase().includes(query);
+                });
+            });
+            const records = matched.slice(offset, offset + limit);
+            return jsonResponse({ ok: true, records, total: matched.length, offset, limit, hasMore: offset + records.length < matched.length });
+        },
+        'cortex-admin:unban': function (opts) {
+            const body = requestBody(opts);
+            const before = previewBans.length;
+            previewBans = previewBans.filter(function (record) { return record.id !== body.id; });
+            return jsonResponse({ ok: previewBans.length < before, id: body.id, error: previewBans.length < before ? undefined : 'not_found' });
+        },
+        'cortex-admin:playerAction': function (opts) {
+            const body = requestBody(opts);
+            if (body.action === 'identifiers') {
+                window.postMessage({
+                    action: 'cortex-admin:setPlayerIdentifiers',
+                    data: {
+                        target: body.target,
+                        name: body.target === 17 ? 'Morgan Reed' : 'Avery Stone',
+                        identifiers: ['license:preview7f3a12c9', 'discord:102938475610293847', 'fivem:812045']
+                    }
+                }, '*');
+            }
+            return jsonResponse({ ok: true });
+        },
+        'cortex-admin:favorite': function () {
+            return jsonResponse({ ok: true });
+        },
+        'cortex-admin:close': function () {
+            window.postMessage({ action: 'cortex-admin:close' }, '*');
+            return jsonResponse({ ok: true });
         },
         'cortex-admin:getWardrobeShareTargets': function () {
             return jsonResponse({ ok: true, targets: [] });

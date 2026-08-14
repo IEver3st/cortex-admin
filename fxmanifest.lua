@@ -12,20 +12,24 @@ shared_scripts {
     'shared/weapon_component_hashes.lua',
     'shared/bridge.lua',
     'shared/actions.lua',
+    'shared/vmenu_compat.lua',
 }
 
 client_scripts {
     'client/bridge.lua',
     'client/main.lua',
     'client/actions.lua',
+    'client/vmenu_compat.lua',
     'client/nui.lua',
 }
 
 server_scripts {
     'server/bridge.lua',
     'server/actions.lua',
+    'server/leveldb_reader.lua',
     'server/vmenu_fallback.lua',
     'server/main.lua',
+    'server/vmenu_compat.lua',
 }
 
 dependency 'cortex-lib'

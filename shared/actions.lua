@@ -397,6 +397,7 @@ EsAdminActions = {
             description = 'Edit handling and engine audio on the vehicle you are driving',
             tab = 'vehicle',
             type = 'workspace',
+            workspaceTab = 'vehicle_tuning',
             hidden = true,
         },
         {
@@ -858,6 +859,7 @@ EsAdminActions = {
             description = 'Give parachute + set canopy style (0–13)',
             tab = 'weapons',
             type = 'select',
+            hidden = true,
             values = {
                 { label = '0 Rainbow', value = 0 },
                 { label = '1 Red', value = 1 },
@@ -1152,7 +1154,7 @@ EsAdminActions = {
         {
             id = 'options.replacePersonalVehicle',
             label = 'Replace Previous Spawned Vehicle',
-            description = 'When enabled, deletes the vehicle you are in before spawning from vehicle list, preview spawn, personal vehicles, or garage',
+            description = 'Delete the previous vehicle created by Cortex before spawning another one',
             tab = 'options',
             type = 'toggle',
         },
@@ -1162,6 +1164,7 @@ EsAdminActions = {
             description = 'Removes turbulence shake while piloting planes and helicopters',
             tab = 'options',
             type = 'toggle',
+            hidden = true,
         },
         {
             id = 'options.quitSessionInRockstarEditor',

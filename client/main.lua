@@ -341,6 +341,8 @@ end
 local cachedData = {
     personalVehicles = nil,
     addonVehicles = {},
+    scannedAddonVehicles = {},
+    importedAddonVehicles = {},
     playerName = nil,
     actions = nil,
     tabs = nil,
@@ -471,6 +473,13 @@ local function normalizeAddonVehicles(list)
     local seenModels = {}
     for i = 1, #list do
         local entry = list[i]
+        if type(entry) == 'string' then
+            entry = {
+                model = entry,
+                name = prettifyModelName(entry),
+                sourceType = 'vmenu-config',
+            }
+        end
         if type(entry) == 'table' then
             local model = trimString(entry.model):lower()
             if model ~= '' and not seenModels[model] then
@@ -504,6 +513,36 @@ local function normalizeAddonVehicles(list)
     end)
 
     return normalized
+end
+
+local function mergeAddonVehicles(scanned, imported)
+    local combined = {}
+    local seen = {}
+    for _, list in ipairs({ scanned, imported }) do
+        for index = 1, #(type(list) == 'table' and list or {}) do
+            local entry = list[index]
+            local model = type(entry) == 'table' and trimString(entry.model):lower() or ''
+            if model ~= '' and not seen[model] then
+                seen[model] = true
+                combined[#combined + 1] = entry
+            end
+        end
+    end
+    tableSort(combined, function(a, b)
+        local first = (a.name or a.model or ''):lower()
+        local second = (b.name or b.model or ''):lower()
+        if first ~= second then return first < second end
+        return (a.model or '') < (b.model or '')
+    end)
+    return combined
+end
+
+EsAdmin.setImportedAddonVehicles = function(vehicles)
+    cachedData.importedAddonVehicles = normalizeAddonVehicles(vehicles)
+    cachedData.addonVehicles = mergeAddonVehicles(cachedData.scannedAddonVehicles, cachedData.importedAddonVehicles)
+    if state.open then
+        SendNUIMessage({ action = 'cortex-admin:setState', data = { addonVehicles = cachedData.addonVehicles } })
+    end
 end
 
 local function refreshPersonalVehiclesCache()
@@ -797,6 +836,7 @@ local function setOpen(open)
         menuIdleCamTick = 0
         menuFocusTick = 0
         refreshPlayerList()
+        TriggerServerEvent('cortex-admin:server:requestPlayerDirectory')
         sendUiState()
         SendNUIMessage({ action = 'cortex-admin:open' })
         startMenuControlThread()
@@ -1353,6 +1393,15 @@ end
 -- Set default MP Ped model (male or female based on random or preference)
 local function setDefaultMpPed()
     local model = joaat('mp_m_freemode_01')
+    if type(EsAdmin.authorizeVmenuModel) ~= 'function' then
+        print('[cortex-admin] Default MP ped restore skipped because server model authorization is unavailable.')
+        return false
+    end
+    local authorized = EsAdmin.authorizeVmenuModel('ped', model, 'player.loadMpPed')
+    if not authorized then
+        print('[cortex-admin] Default MP ped restore was denied by server model permissions.')
+        return false
+    end
     if exports['cortex-lib']:requestModel(model, 5000) then
         SetPlayerModel(PlayerId(), model)
         SetModelAsNoLongerNeeded(model)
@@ -1371,7 +1420,9 @@ local function setDefaultMpPed()
         SetPedComponentVariation(ped, 11, 0, 0, 2) -- Torso
         
         print('[cortex-admin] Set default MP Freemode ped')
+        return true
     end
+    return false
 end
 
 -- Main function to load or restore MP ped
@@ -1384,16 +1435,14 @@ local function loadOrRestoreMpPed(isRespawn)
     if pedData then
         print(('[cortex-admin] Loading saved MP Ped: %s (source: %s)'):format(pedName, source))
         if type(EsAdmin.loadMpPedData) == 'function' then
-            EsAdmin.loadMpPedData(pedData)
-            return true
+            return EsAdmin.loadMpPedData(pedData) == true
         end
         print('[cortex-admin] WARNING: loadMpPedData is unavailable during startup restore.')
     end
     
     -- No saved ped found, check if we should default to MP ped
     if settings.defaultToMpPed then
-        setDefaultMpPed()
-        return true
+        return setDefaultMpPed() == true
     end
     
     return false
@@ -1469,8 +1518,32 @@ RegisterNetEvent('cortex-admin:client:permissions', function(allowed)
     end
 end)
 
+RegisterNetEvent('cortex-admin:client:setPlayerDirectory', function(players)
+    if type(players) ~= 'table' then return end
+    local normalized = {}
+    for index = 1, math.min(#players, 2048) do
+        local entry = players[index]
+        local id = type(entry) == 'table' and tonumber(entry.id) or nil
+        local name = type(entry) == 'table' and trimString(entry.name) or ''
+        if id and id >= 1 and id <= 65535 and id == math.floor(id) and name ~= '' then
+            normalized[#normalized + 1] = {
+                id = id,
+                name = name:sub(1, 96),
+                ping = math.max(0, math.min(9999, math.floor(tonumber(entry.ping) or 0))),
+                bucket = math.max(0, math.min(65535, math.floor(tonumber(entry.bucket) or 0))),
+                dead = entry.dead == true,
+                isSelf = entry.isSelf == true,
+            }
+        end
+    end
+    tableSort(normalized, function(first, second) return first.id < second.id end)
+    state.playerList = normalized
+    if state.open then sendRuntimeUiState(true, true) end
+end)
+
 RegisterNetEvent('cortex-admin:client:setAddonVehicles', function(vehicles)
-    cachedData.addonVehicles = normalizeAddonVehicles(vehicles)
+    cachedData.scannedAddonVehicles = normalizeAddonVehicles(vehicles)
+    cachedData.addonVehicles = mergeAddonVehicles(cachedData.scannedAddonVehicles, cachedData.importedAddonVehicles)
     menuDataCache.addonVehiclesLoaded = true
     if state.open then
         SendNUIMessage({
@@ -1527,11 +1600,16 @@ RegisterNetEvent('cortex-admin:client:updateWorldState', function(payload)
 end)
 
 RegisterNetEvent('cortex-admin:client:teleport', function(coords, heading)
-    if not coords then return end
+    if type(coords) ~= 'table' then return end
+    local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
+    if not x or not y or not z or x ~= x or y ~= y or z ~= z
+        or math.abs(x) > 20000 or math.abs(y) > 20000 or math.abs(z) > 20000 then return end
     local ped = PlayerPedId()
-    SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false)
-    if heading then
-        SetEntityHeading(ped, heading)
+    state.lastCoords = GetEntityCoords(ped)
+    SetEntityCoordsNoOffset(ped, x, y, z, false, false, false)
+    local safeHeading = tonumber(heading)
+    if safeHeading and safeHeading == safeHeading then
+        SetEntityHeading(ped, safeHeading % 360.0)
     end
 end)
 
@@ -1585,8 +1663,7 @@ CreateThread(function()
             -- Player list update every 10 seconds while open
             if now - lastPlayerListUpdate > 10000 then
                 lastPlayerListUpdate = now
-                refreshPlayerList()
-                sendRuntimeUiState(true, false)
+                TriggerServerEvent('cortex-admin:server:requestPlayerDirectory')
             elseif now - lastWorldUiUpdate > 1000 then
                 sendRuntimeUiState(false, false)
             end
@@ -1610,6 +1687,7 @@ end)
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName ~= currentResourceName then return end
     TriggerServerEvent('cortex-admin:server:requestWorldState')
+    TriggerServerEvent('cortex-admin:server:requestVmenuWorldState')
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)

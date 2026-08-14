@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const luaPath = join(root, 'shared', 'actions.lua');
+const vmenuCompatPath = join(root, 'shared', 'vmenu_compat.lua');
 const configPath = join(root, 'shared', 'config.lua');
 const outPath = join(root, 'ui', 'preview-state.json');
 
@@ -73,7 +74,7 @@ function tokenize(input) {
             continue;
         }
 
-        if ('{},='.includes(c)) {
+        if ('{},=()'.includes(c)) {
             push('PUNCT', c);
             i += 1;
             continue;
@@ -152,6 +153,16 @@ function parseValue(tokens, start) {
         if (t.value === 'false') return [false, start + 1];
         if (t.value === 'nil') return [null, start + 1];
         if (t.value.startsWith('Config.')) return [`__LUA_REF__:${t.value}`, start + 1];
+        if (t.value === 'values'
+            && tokens[start + 1]?.type === 'PUNCT'
+            && tokens[start + 1]?.value === '(') {
+            const [value, next] = parseValue(tokens, start + 2);
+            if (tokens[next]?.type !== 'PUNCT' || tokens[next]?.value !== ')') {
+                throw new Error('Expected ) after values() at ' + next);
+            }
+            return [value, next + 1];
+        }
+        return [`__LUA_REF__:${t.value}`, start + 1];
     }
 
     if (t.type === 'PUNCT' && t.value === '{') {
@@ -253,6 +264,7 @@ function resolveLuaRefs(value, references) {
 }
 
 const lua = readFileSync(luaPath, 'utf8');
+const vmenuCompatLua = readFileSync(vmenuCompatPath, 'utf8');
 const configLua = readFileSync(configPath, 'utf8');
 const references = {
     'Config.ClearRadiusOptions': parseAssignedTable(configLua, 'Config.ClearRadiusOptions ='),
@@ -261,9 +273,64 @@ const references = {
 const parsedActions = resolveLuaRefs(parseEsAdminActions(lua), references);
 const tabs = parsedActions.tabs;
 const actions = parsedActions.actions;
+const compatibilityReferences = {
+    drivingStyles: parseAssignedTable(vmenuCompatLua, 'local drivingStyles ='),
+    doorValues: parseAssignedTable(vmenuCompatLua, 'local doorValues ='),
+    windowValues: parseAssignedTable(vmenuCompatLua, 'local windowValues ='),
+    lightValues: parseAssignedTable(vmenuCompatLua, 'local lightValues ='),
+    parachuteStyles: parseAssignedTable(vmenuCompatLua, 'local parachuteStyles ='),
+    radioStations: parseAssignedTable(vmenuCompatLua, 'local radioStations ='),
+};
+const compatibilityActions = resolveLuaRefs(parseAssignedTable(vmenuCompatLua, 'local actions ='), compatibilityReferences);
 
 if (!Array.isArray(tabs) || !Array.isArray(actions)) {
     throw new Error('Parsed root missing tabs/actions arrays');
+}
+
+if (!Array.isArray(compatibilityActions)) {
+    throw new Error('Parsed compatibility catalog missing actions array');
+}
+
+const knownActionIds = new Set(actions.map((action) => action && action.id).filter(Boolean));
+for (const action of compatibilityActions) {
+    if (action && action.id && !knownActionIds.has(action.id)) {
+        actions.push(action);
+        knownActionIds.add(action.id);
+    }
+}
+
+const knownTabIds = new Set(tabs.map((tab) => tab && tab.id).filter(Boolean));
+for (const tab of [
+    { id: 'voice', label: 'Voice' },
+    { id: 'migration', label: 'vMenu Import' },
+    { id: 'bans', label: 'Banned Players' },
+    { id: 'imported', label: 'Imported Data' },
+]) {
+    if (!knownTabIds.has(tab.id)) {
+        tabs.push(tab);
+        knownTabIds.add(tab.id);
+    }
+}
+
+const sectionPrefixes = [
+    ['player.auto', 'Autopilot'], ['player.driving', 'Autopilot'], ['player.scenario', 'Scenarios'],
+    ['vehicle.personal', 'Personal Vehicle'], ['world.weather', 'Weather'], ['world.dynamic', 'Weather'],
+    ['world.random', 'Weather'], ['world.remove', 'Weather'], ['world.snow', 'Weather'],
+    ['weapons.reserve', 'Parachutes'], ['weapons.parachute', 'Parachutes'],
+    ['weapons.autoEquip', 'Parachutes'], ['weapons.unlimitedParachutes', 'Parachutes'],
+    ['weapons.rename', 'Weapon Loadouts'], ['weapons.clone', 'Weapon Loadouts'], ['weapons.default', 'Weapon Loadouts'],
+    ['dev.entity', 'Developer Tools'], ['dev.spawn', 'Developer Tools'], ['dev.clearSpawned', 'Developer Tools'],
+    ['voice.', 'Voice Chat'],
+];
+const defaultSections = {
+    player: 'Player Options', vehicle: 'Vehicle Options', world: 'Time & Weather', weapons: 'Weapon Options',
+    teleport: 'Teleport', appearance: 'Appearance', vehicle_custom: 'Vehicle Customization', dev: 'Miscellaneous',
+    recording: 'Recording', options: 'Preferences', server: 'Server Tools', inventory: 'Inventory', garage: 'Garage',
+};
+for (const action of actions) {
+    if (!action || action.section) continue;
+    const match = sectionPrefixes.find(([prefix]) => action.id.startsWith(prefix));
+    action.section = match ? match[1] : (defaultSections[action.tab] || 'General');
 }
 
 const payload = {
@@ -285,8 +352,10 @@ const payload = {
     },
     allowed: {},
     players: [
-        { id: 1, name: 'You (preview)', ping: 12, dead: false },
-        { id: 2, name: 'Other Player', ping: 48, dead: false },
+        { id: 1, name: 'PreviewClient', ping: 12, bucket: 0, dead: false, isSelf: true },
+        { id: 2, name: 'Avery Stone', ping: 48, bucket: 0, dead: false, isSelf: false },
+        { id: 17, name: 'Morgan Reed', ping: 83, bucket: 2, dead: true, isSelf: false },
+        { id: 42, name: 'Carmen Vega', ping: 31, bucket: 0, dead: false, isSelf: false },
     ],
     wardrobeShareRequests: [],
     playerName: 'PreviewClient',

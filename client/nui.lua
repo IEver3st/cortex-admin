@@ -60,6 +60,32 @@ local function toInteger(value, minValue, maxValue)
     return number
 end
 
+local function toFiniteNumber(value, minValue, maxValue)
+    local number = tonumber(value)
+    if not number or number ~= number or number == math.huge or number == -math.huge then
+        return nil
+    end
+    if minValue and number < minValue then return nil end
+    if maxValue and number > maxValue then return nil end
+    return number
+end
+
+local function sanitizeRgb(value)
+    if type(value) ~= 'table' then return nil end
+    local count = 0
+    for key in pairs(value) do
+        if key ~= 1 and key ~= 2 and key ~= 3 then return nil end
+        count = count + 1
+    end
+    if count ~= 3 then return nil end
+
+    local red = toInteger(value[1], 0, 255)
+    local green = toInteger(value[2], 0, 255)
+    local blue = toInteger(value[3], 0, 255)
+    if red == nil or green == nil or blue == nil then return nil end
+    return { red, green, blue }
+end
+
 local function replyError(cb, message)
     cb({ ok = false, error = message or 'invalid_payload' })
 end
@@ -83,7 +109,15 @@ local function sanitizeSetting(key, value)
         restorePedOnDeath = true,
         defaultToMpPed = true,
         replacePersonalVehicle = true,
+        spawnInsideVehicle = true,
         disableAircraftTurbulence = true,
+        disablePlaneTurbulence = true,
+        disableHelicopterTurbulence = true,
+        disablePrivateMessages = true,
+        disableControllerSupport = true,
+        recordingControls = true,
+        minimapControls = true,
+        fingerPointControls = true,
         quitSessionInRockstarEditor = true,
     }
     if booleanSettings[key] then
@@ -414,7 +448,12 @@ RegisterNUICallback('cortex-admin:playerAction', function(data, cb)
     local action = trimString(data and data.action, 16)
     local target = toInteger(data and data.target, 1)
     local actionPermissions = {
-        goto = 'player.goto',
+        ['goto'] = 'player.goto',
+        waypoint = 'player.waypoint',
+        spectate = 'player.spectate',
+        message = 'player.message',
+        identifiers = 'player.identifiers',
+        kill = 'player.kill',
         kick = 'player.kick',
         ban = 'player.ban',
         freeze = 'player.freeze',
@@ -442,39 +481,17 @@ RegisterNUICallback('cortex-admin:playerAction', function(data, cb)
         data.duration = duration
     end
 
-    if action == 'goto' then
-        local targetId = GetPlayerFromServerId(target)
-        if targetId == -1 then
-            replyError(cb, 'player_not_found')
-            return
-        end
-
-        local ped = GetPlayerPed(targetId)
-        if ped == 0 or not DoesEntityExist(ped) then
-            replyError(cb, 'player_not_found')
-            return
-        end
-
-        local coords = GetEntityCoords(ped)
-        EsAdmin.state.lastCoords = GetEntityCoords(PlayerPedId())
-        SetEntityCoordsNoOffset(PlayerPedId(), coords.x, coords.y, coords.z, false, false, false)
-        cb({ ok = true })
-        return
-    end
-
-    if action == 'bring' then
-        local coords = GetEntityCoords(PlayerPedId())
-        data.coords = { x = coords.x, y = coords.y, z = coords.z }
-        data.heading = GetEntityHeading(PlayerPedId())
-    end
-
     if action == 'freeze' then
         local current = freezeState[target] or false
         freezeState[target] = not current
         data.enabled = freezeState[target]
     end
 
-    TriggerServerEvent('cortex-admin:server:playerAction', data)
+    if action == 'waypoint' or action == 'spectate' or action == 'message' or action == 'identifiers' or action == 'kill' then
+        TriggerServerEvent('cortex-admin:server:vmenuPlayerAction', data)
+    else
+        TriggerServerEvent('cortex-admin:server:playerAction', data)
+    end
     cb({ ok = true })
 end)
 
@@ -546,7 +563,28 @@ end)
 
 -- Vehicle Customization
 RegisterNUICallback('cortex-admin:getVehicleCustomization', function(_, cb)
-    cb(Admin.getVehicleCustomization())
+    local permissions = {
+        mods = canInvokeAction('vehicle.customMods'),
+        colors = canInvokeAction('vehicle.customColors'),
+        liveries = canInvokeAction('vehicle.customLiveries'),
+        extras = canInvokeAction('vehicle.customExtras'),
+        underglow = canInvokeAction('vehicle.customUnderglow'),
+        plate = canInvokeAction('vehicle.plateType'),
+    }
+    if not permissions.mods and not permissions.colors and not permissions.liveries
+        and not permissions.extras and not permissions.underglow and not permissions.plate then
+        replyError(cb, 'forbidden')
+        return
+    end
+
+    local data, errorReason = Admin.getVehicleCustomization()
+    if type(data) ~= 'table' then
+        replyError(cb, errorReason or 'no_vehicle')
+        return
+    end
+    data.ok = true
+    data.permissions = permissions
+    cb(data)
 end)
 
 RegisterNUICallback('cortex-admin:setVehicleCustomization', function(data, cb)
@@ -555,7 +593,133 @@ RegisterNUICallback('cortex-admin:setVehicleCustomization', function(data, cb)
         return
     end
 
-    Admin.setVehicleCustomization(data)
+    local kind = trimString(data.type, 32)
+    local permissionByType = {
+        mod = 'vehicle.customMods',
+        wheelType = 'vehicle.customMods',
+        window = 'vehicle.customMods',
+        xenonColor = 'vehicle.customMods',
+        color = 'vehicle.customColors',
+        paintFinish = 'vehicle.customColors',
+        customColor = 'vehicle.customColors',
+        tyreSmokeColor = 'vehicle.customColors',
+        enveff = 'vehicle.customColors',
+        livery = 'vehicle.customLiveries',
+        extra = 'vehicle.customExtras',
+        neon = 'vehicle.customUnderglow',
+        neonColor = 'vehicle.customUnderglow',
+        plate = 'vehicle.plateType',
+    }
+    local actionId = kind and permissionByType[kind] or nil
+    if not actionId then
+        replyError(cb, 'invalid_customization_type')
+        return
+    end
+    if not canInvokeAction(actionId) then
+        replyError(cb, 'forbidden')
+        return
+    end
+
+    local sanitized = { type = kind }
+    if kind == 'mod' then
+        sanitized.id = toInteger(data.id, 0, 49)
+        if sanitized.id == nil or (data.isToggle ~= nil and type(data.isToggle) ~= 'boolean') then
+            replyError(cb, 'invalid_mod')
+            return
+        end
+        sanitized.isToggle = data.isToggle == true
+        if sanitized.isToggle then
+            if sanitized.id ~= 18 and sanitized.id ~= 20 and sanitized.id ~= 22
+                or type(data.enabled) ~= 'boolean' then
+                replyError(cb, 'invalid_mod_toggle')
+                return
+            end
+            sanitized.enabled = data.enabled
+        else
+            sanitized.value = toInteger(data.value, -1, 4096)
+            if sanitized.value == nil then
+                replyError(cb, 'invalid_mod_value')
+                return
+            end
+        end
+    elseif kind == 'color' then
+        local colorIds = { primary = true, secondary = true, pearlescent = true, wheel = true, dashboard = true, trim = true }
+        sanitized.id = trimString(data.id, 24)
+        sanitized.value = toInteger(data.value, 0, 255)
+        local allowsChameleon = sanitized.id == 'primary' or sanitized.id == 'secondary'
+        local validColor = sanitized.value ~= nil and (sanitized.value <= 160
+            or (allowsChameleon and sanitized.value >= 223 and sanitized.value <= 238))
+        if not sanitized.id or not colorIds[sanitized.id] or not validColor then
+            replyError(cb, 'invalid_color')
+            return
+        end
+    elseif kind == 'paintFinish' then
+        sanitized.id = trimString(data.id, 16)
+        sanitized.value = toInteger(data.value, 0, 5)
+        if (sanitized.id ~= 'primary' and sanitized.id ~= 'secondary') or sanitized.value == nil then
+            replyError(cb, 'invalid_paint_finish')
+            return
+        end
+    elseif kind == 'customColor' then
+        sanitized.id = trimString(data.id, 16)
+        sanitized.enabled = type(data.enabled) == 'boolean' and data.enabled or nil
+        if (sanitized.id ~= 'primary' and sanitized.id ~= 'secondary') or sanitized.enabled == nil then
+            replyError(cb, 'invalid_custom_color')
+            return
+        end
+        if sanitized.enabled then
+            sanitized.value = sanitizeRgb(data.value)
+            if not sanitized.value then
+                replyError(cb, 'invalid_custom_color')
+                return
+            end
+        end
+    elseif kind == 'neonColor' or kind == 'tyreSmokeColor' then
+        sanitized.value = sanitizeRgb(data.value)
+        if not sanitized.value then
+            replyError(cb, 'invalid_rgb')
+            return
+        end
+    elseif kind == 'neon' then
+        local neonIds = { front = true, back = true, left = true, right = true, all = true }
+        sanitized.id = trimString(data.id, 16)
+        if not sanitized.id or not neonIds[sanitized.id] or type(data.value) ~= 'boolean' then
+            replyError(cb, 'invalid_neon')
+            return
+        end
+        sanitized.value = data.value
+    elseif kind == 'plate' then
+        sanitized.value = toInteger(data.value, 0, 12)
+        if sanitized.value == nil then replyError(cb, 'invalid_plate'); return end
+    elseif kind == 'window' then
+        sanitized.value = toInteger(data.value, 0, 6)
+        if sanitized.value == nil then replyError(cb, 'invalid_window_tint'); return end
+    elseif kind == 'wheelType' then
+        sanitized.value = toInteger(data.value, 0, 20)
+        if sanitized.value == nil then replyError(cb, 'invalid_wheel_type'); return end
+    elseif kind == 'xenonColor' then
+        sanitized.value = toInteger(data.value, -1, 255)
+        if sanitized.value == nil or (sanitized.value > 12 and sanitized.value ~= 255) then
+            replyError(cb, 'invalid_xenon_color')
+            return
+        end
+    elseif kind == 'livery' then
+        sanitized.value = toInteger(data.value, -1, 255)
+        if sanitized.value == nil then replyError(cb, 'invalid_livery'); return end
+    elseif kind == 'extra' then
+        sanitized.id = toInteger(data.id, 0, 20)
+        sanitized.enabled = type(data.enabled) == 'boolean' and data.enabled or nil
+        if sanitized.id == nil or sanitized.enabled == nil then replyError(cb, 'invalid_extra'); return end
+    elseif kind == 'enveff' then
+        sanitized.value = toFiniteNumber(data.value, 0.0, 1.0)
+        if sanitized.value == nil then replyError(cb, 'invalid_enveff'); return end
+    end
+
+    local ok, errorReason = Admin.setVehicleCustomization(sanitized)
+    if ok ~= true then
+        replyError(cb, errorReason or 'customization_failed')
+        return
+    end
     cb({ ok = true })
 end)
 
@@ -1029,6 +1193,10 @@ RegisterNUICallback('cortex-admin:importVmenuSavedPeds', function(_, cb)
 end)
 
 RegisterNUICallback('cortex-admin:getVmenuMigrationSnapshot', function(_, cb)
+    if not canInvokeAction('migration.read') then
+        replyError(cb, 'forbidden')
+        return
+    end
     if type(Admin.getVmenuMigrationSnapshot) ~= 'function' then
         replyError(cb, 'migration_unavailable')
         return
@@ -1066,7 +1234,120 @@ RegisterNUICallback('cortex-admin:getVmenuMigrationSnapshot', function(_, cb)
     end)
 end)
 
+RegisterNUICallback('cortex-admin:getVmenuImportedConfiguration', function(_, cb)
+    if type(Admin.getVmenuImportedConfig) ~= 'function' or not canInvokeAction('migration.read') then
+        replyError(cb, 'forbidden')
+        return
+    end
+
+    local config = Admin.getVmenuImportedConfig()
+    local categories = type(Admin.getVmenuImportedCategories) == 'function' and Admin.getVmenuImportedCategories() or {}
+    local function sampleList(entries)
+        local sample = {}
+        if type(entries) ~= 'table' then return sample end
+        for index = 1, math.min(#entries, 8) do
+            local entry = entries[index]
+            local value = type(entry) == 'string' and entry
+                or type(entry) == 'table' and (entry.name or entry.label or entry.model or entry.key)
+                or nil
+            value = trimString(value, 96)
+            if value then sample[#sample + 1] = value end
+        end
+        return sample
+    end
+    local function groupSummary(entries)
+        return {
+            count = type(entries) == 'table' and #entries or 0,
+            sample = sampleList(entries),
+        }
+    end
+    local function mapSummary(entries)
+        local keys = {}
+        local count = 0
+        if type(entries) == 'table' then
+            for key in pairs(entries) do
+                count = count + 1
+                local clean = trimString(type(key) == 'string' and key or tostring(key), 96)
+                if clean and #keys < 8 then keys[#keys + 1] = clean end
+            end
+        end
+        table.sort(keys)
+        return { count = count, sample = keys }
+    end
+
+    local addons = type(config.addons) == 'table' and config.addons or {}
+    local whitelists = type(config.modelWhitelists) == 'table' and config.modelWhitelists or {}
+    local locations = type(config.locations) == 'table' and config.locations or {}
+    local tattooList = type(config.tattoos) == 'table' and config.tattoos or {}
+    local domainPayload = {
+        addons = {
+            vehicles = groupSummary(addons.vehicles),
+            peds = groupSummary(addons.peds),
+            weapons = groupSummary(addons.weapons),
+            components = groupSummary(addons.weapon_components),
+        },
+        extras = mapSummary(config.extras),
+        locations = {
+            teleports = groupSummary(locations.teleports),
+            blips = groupSummary(locations.blips),
+        },
+        modelWhitelists = {
+            vehicles = groupSummary(whitelists.whitelistedvehicle),
+            peds = groupSummary(whitelists.whitelistedpeds),
+            weapons = groupSummary(whitelists.whitelistedweapons),
+        },
+        tattoos = groupSummary(tattooList),
+    }
+
+    cb({
+        ok = true,
+        domains = domainPayload,
+        categories = {
+            peds = groupSummary(type(categories.peds) == 'table' and categories.peds or {}),
+            vehicles = groupSummary(type(categories.vehicles) == 'table' and categories.vehicles or {}),
+        },
+    })
+end)
+
+RegisterNUICallback('cortex-admin:getBanList', function(data, cb)
+    if type(Admin.getBanList) ~= 'function' or not canInvokeAction('player.viewBans') then
+        replyError(cb, 'forbidden')
+        return
+    end
+    local query = trimString(data and data.query, 64) or ''
+    local offset = toInteger(data and data.offset, 0, 100000) or 0
+    local limit = toInteger(data and data.limit, 1, 100) or 50
+    CreateThread(function()
+        local ok, page = pcall(Admin.getBanList, { query = query, offset = offset, limit = limit })
+        if not ok or type(page) ~= 'table' then
+            cb({ ok = false, error = ok and 'timeout' or 'exception', records = {} })
+            return
+        end
+        cb(page)
+    end)
+end)
+
+RegisterNUICallback('cortex-admin:unban', function(data, cb)
+    local banId = trimString(data and data.id, 96)
+    if not banId or type(Admin.unbanPlayer) ~= 'function' or not canInvokeAction('player.unban') then
+        replyError(cb, 'forbidden')
+        return
+    end
+    CreateThread(function()
+        local ok, result = pcall(Admin.unbanPlayer, banId)
+        if not ok or type(result) ~= 'table' then
+            cb({ ok = false, error = ok and 'timeout' or 'exception' })
+            return
+        end
+        cb(result)
+    end)
+end)
+
 RegisterNUICallback('cortex-admin:importVmenuMigrationData', function(_, cb)
+    if not canInvokeAction('migration.import') then
+        replyError(cb, 'forbidden')
+        return
+    end
     if type(Admin.importVmenuMigrationData) ~= 'function' then
         replyError(cb, 'migration_unavailable')
         return
