@@ -29,6 +29,7 @@ server_scripts {
     'server/actions.lua',
     'server/leveldb_reader.lua',
     'server/vmenu_fallback.lua',
+    'server/permissions.lua',
     'server/main.lua',
     'server/vmenu_compat.lua',
 }

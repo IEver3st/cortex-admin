@@ -395,48 +395,14 @@ local function arePlayersNearby(firstSource, secondSource, maxDistance)
     return WardrobeSharePolicy.isDistanceSquaredWithinRadius(distanceSquared, maxDistance)
 end
 
-local function hasPermission(src, actionId)
-    -- Check for full admin access via cortex-admin ACE
-    if IsPlayerAceAllowed(src, Config.Permissions.all) or IsPlayerAceAllowed(src, 'vMenu.Everything') then
-        return true
+local hasPermission = EsAdminPermissions.build(
+    Config,
+    actionIndex,
+    IsPlayerAceAllowed,
+    function(src, actionId, tab)
+        return EsAdminBridge.checkQBXPermission(src, actionId, tab)
     end
-
-    local vmenuPermissions = Config.VmenuAcePermissions and Config.VmenuAcePermissions[actionId]
-    if type(vmenuPermissions) == 'table' then
-        for index = 1, #vmenuPermissions do
-            local permission = vmenuPermissions[index]
-            if type(permission) == 'string' and IsPlayerAceAllowed(src, permission) then return true end
-        end
-    end
-
-    -- QBX Permission Bridge: When QBX is active, check if the player belongs to
-    -- a configured QBX admin group (god, admin, mod, etc.) and resolve permissions
-    -- from Config.QBXPermissions mapping. This lets QBX admins use the menu
-    -- without needing separate cortex-admin.* ACE entries.
-    if Config.HasQBX then
-        local action = actionIndex[actionId]
-        local tab = action and action.tab or actionId:match('^([^.]+)%.')
-        local qbxResult = EsAdminBridge.checkQBXPermission(src, actionId, tab)
-        if qbxResult == true then return true end
-        if qbxResult == false then return false end
-        -- nil = no QBX group matched, fall through to standard ACE checks
-    end
-
-    -- Check for specific action permission
-    local actionPerm = Config.ActionPermissions[actionId]
-    if actionPerm and IsPlayerAceAllowed(src, actionPerm) then
-        return true
-    end
-
-    -- Check for tab-level permission
-    local action = actionIndex[actionId]
-    local tab = action and action.tab or actionId:match('^([^.]+)%.')
-    if tab and Config.Permissions[tab] and IsPlayerAceAllowed(src, Config.Permissions[tab]) then
-        return true
-    end
-
-    return false
-end
+)
 
 EsAdminServer.hasPermission = hasPermission
 EsAdminServer.canOpenMenu = canOpenMenu

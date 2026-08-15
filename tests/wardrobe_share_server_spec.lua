@@ -82,6 +82,7 @@ exports = {}
 
 local printed = print
 print = function() end
+dofile(resourceRoot .. '/server/permissions.lua')
 dofile(resourceRoot .. '/server/main.lua')
 print = printed
 

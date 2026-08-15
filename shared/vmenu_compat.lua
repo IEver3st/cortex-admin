@@ -296,7 +296,9 @@ local actionPermissionDefaults = {
     vehicle = 'cortex-admin.vehicle',
     world = 'cortex-admin.world',
     weapons = 'cortex-admin.weapons',
+    appearance = 'cortex-admin.appearance',
     dev = 'cortex-admin.dev',
+    recording = 'cortex-admin.recording',
     options = 'cortex-admin.options',
     voice = 'cortex-admin.voice',
     vehicle_custom = 'cortex-admin.vehicle',
@@ -309,6 +311,10 @@ end
 -- Each entry is checked as an alias in addition to Cortex/QBX permissions.
 -- Menu/All aliases intentionally mirror vMenu's own fallback hierarchy.
 Config.VmenuAcePermissions = Config.VmenuAcePermissions or {}
+Config.VmenuAceExcludedTabs = Config.VmenuAceExcludedTabs or {}
+-- Recording has no vMenu-equivalent tab ACE. Do not inherit unrelated
+-- Player/Misc aliases; vMenu.Everything remains the global full-access grant.
+Config.VmenuAceExcludedTabs.recording = true
 
 local function ace(actionId, ...)
     Config.VmenuAcePermissions[actionId] = { ... }
@@ -374,20 +380,21 @@ for actionId, permission in pairs(aliasById) do
         or actionId:sub(1, 5) == 'world' and { 'vMenu.TimeOptions.All', 'vMenu.WeatherOptions.All', 'vMenu.Everything' }
         or actionId:sub(1, 3) == 'dev' and miscMenu
         or actionId:sub(1, 8) == 'teleport' and miscMenu
-        or playerMenu
-    Config.VmenuAcePermissions[actionId] = withFallback(permission, fallback)
+        or actionId:sub(1, 6) == 'player' and playerMenu
+    Config.VmenuAcePermissions[actionId] = withFallback(permission, fallback or {})
 end
 
 for _, action in ipairs(actions) do
-    if not Config.VmenuAcePermissions[action.id] then
+    local aliasesExcluded = Config.VmenuAceExcludedTabs[action.tab] == true
+    if not aliasesExcluded and not Config.VmenuAcePermissions[action.id] then
         local fallback = action.tab == 'vehicle' and vehicleMenu
             or action.tab == 'weapons' and weaponMenu
             or action.tab == 'voice' and voiceMenu
             or action.tab == 'dev' and miscMenu
             or action.tab == 'options' and miscMenu
             or action.tab == 'world' and { 'vMenu.TimeOptions.All', 'vMenu.WeatherOptions.All', 'vMenu.Everything' }
-            or playerMenu
-        Config.VmenuAcePermissions[action.id] = fallback
+            or action.tab == 'player' and playerMenu
+        if fallback then Config.VmenuAcePermissions[action.id] = fallback end
     end
 end
 
