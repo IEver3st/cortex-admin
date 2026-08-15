@@ -12,6 +12,8 @@ local mathFloor = math.floor
 local stringUpper = string.upper
 local tonumber = tonumber
 local type = type
+local vmenuCompatibilityEnabled = not Config.VmenuCompatibility
+    or Config.VmenuCompatibility.enabled ~= false
 
 local allowedWorldWeather = {
     EXTRASUNNY = true,
@@ -217,21 +219,26 @@ end
 local function canOpenMenu(src)
     if IsPlayerAceAllowed(src, Config.Permissions.all)
         or IsPlayerAceAllowed(src, 'command.' .. Config.Command)
-        or IsPlayerAceAllowed(src, 'command.esadmin')
-        or IsPlayerAceAllowed(src, 'command.vmenu')
-        or IsPlayerAceAllowed(src, 'vMenu.Everything') then
+        or IsPlayerAceAllowed(src, 'command.esadmin') then
         return true
     end
 
-    local vmenuMenus = {
-        'vMenu.OnlinePlayers.Menu', 'vMenu.PlayerOptions.Menu', 'vMenu.VehicleOptions.Menu',
-        'vMenu.VehicleSpawner.Menu', 'vMenu.SavedVehicles.Menu', 'vMenu.PersonalVehicle.Menu',
-        'vMenu.PlayerAppearance.Menu', 'vMenu.TimeOptions.Menu', 'vMenu.WeatherOptions.Menu',
-        'vMenu.WeaponOptions.Menu', 'vMenu.WeaponLoadouts.Menu', 'vMenu.VoiceChat.Menu',
-        'vMenu.MiscSettings.Menu', 'vMenu.MiscSettings.All', 'vMenu.NoClip',
-    }
-    for index = 1, #vmenuMenus do
-        if IsPlayerAceAllowed(src, vmenuMenus[index]) then return true end
+    if vmenuCompatibilityEnabled then
+        if IsPlayerAceAllowed(src, 'command.vmenu')
+            or IsPlayerAceAllowed(src, 'vMenu.Everything') then
+            return true
+        end
+
+        local vmenuMenus = {
+            'vMenu.OnlinePlayers.Menu', 'vMenu.PlayerOptions.Menu', 'vMenu.VehicleOptions.Menu',
+            'vMenu.VehicleSpawner.Menu', 'vMenu.SavedVehicles.Menu', 'vMenu.PersonalVehicle.Menu',
+            'vMenu.PlayerAppearance.Menu', 'vMenu.TimeOptions.Menu', 'vMenu.WeatherOptions.Menu',
+            'vMenu.WeaponOptions.Menu', 'vMenu.WeaponLoadouts.Menu', 'vMenu.VoiceChat.Menu',
+            'vMenu.MiscSettings.Menu', 'vMenu.MiscSettings.All', 'vMenu.NoClip',
+        }
+        for index = 1, #vmenuMenus do
+            if IsPlayerAceAllowed(src, vmenuMenus[index]) then return true end
+        end
     end
 
     return Config.HasQBX
@@ -390,15 +397,19 @@ end
 
 local function hasPermission(src, actionId)
     -- Check for full admin access via cortex-admin ACE
-    if IsPlayerAceAllowed(src, Config.Permissions.all) or IsPlayerAceAllowed(src, 'vMenu.Everything') then
+    if IsPlayerAceAllowed(src, Config.Permissions.all) then
         return true
     end
 
-    local vmenuPermissions = Config.VmenuAcePermissions and Config.VmenuAcePermissions[actionId]
-    if type(vmenuPermissions) == 'table' then
-        for index = 1, #vmenuPermissions do
-            local permission = vmenuPermissions[index]
-            if type(permission) == 'string' and IsPlayerAceAllowed(src, permission) then return true end
+    if vmenuCompatibilityEnabled then
+        if IsPlayerAceAllowed(src, 'vMenu.Everything') then return true end
+
+        local vmenuPermissions = Config.VmenuAcePermissions and Config.VmenuAcePermissions[actionId]
+        if type(vmenuPermissions) == 'table' then
+            for index = 1, #vmenuPermissions do
+                local permission = vmenuPermissions[index]
+                if type(permission) == 'string' and IsPlayerAceAllowed(src, permission) then return true end
+            end
         end
     end
 
@@ -650,7 +661,7 @@ RegisterNetEvent('cortex-admin:server:playerAction', function(data)
 
     if action == 'kick' then
         if not hasPermission(src, 'player.kick') then return end
-        if IsPlayerAceAllowed(target, 'vMenu.DontKickMe') then
+        if vmenuCompatibilityEnabled and IsPlayerAceAllowed(target, 'vMenu.DontKickMe') then
             TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'That player is protected from kicks.')
             return
         end
@@ -659,7 +670,7 @@ RegisterNetEvent('cortex-admin:server:playerAction', function(data)
         DropPlayer(target, reason)
     elseif action == 'ban' then
         if not hasPermission(src, 'player.ban') then return end
-        if IsPlayerAceAllowed(target, 'vMenu.DontBanMe') then
+        if vmenuCompatibilityEnabled and IsPlayerAceAllowed(target, 'vMenu.DontBanMe') then
             TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'That player is protected from bans.')
             return
         end

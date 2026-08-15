@@ -47,6 +47,8 @@ local TriggerServerEvent = TriggerServerEvent
 local GetResourceKvpString = GetResourceKvpString
 local SetResourceKvp = SetResourceKvp
 local GetResourceState = GetResourceState
+local vmenuCompatibilityEnabled = not Config.VmenuCompatibility
+    or Config.VmenuCompatibility.enabled ~= false
 
 -- Cached math/table functions
 local pairs = pairs
@@ -1687,7 +1689,9 @@ end)
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName ~= currentResourceName then return end
     TriggerServerEvent('cortex-admin:server:requestWorldState')
-    TriggerServerEvent('cortex-admin:server:requestVmenuWorldState')
+    if vmenuCompatibilityEnabled then
+        TriggerServerEvent('cortex-admin:server:requestVmenuWorldState')
+    end
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)

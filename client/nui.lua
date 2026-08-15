@@ -4,6 +4,15 @@ local mathFloor = math.floor
 local tonumber = tonumber
 local type = type
 local nativeRegisterNUICallback = RegisterNUICallback
+local vmenuCompatibilityEnabled = not Config.VmenuCompatibility
+    or Config.VmenuCompatibility.enabled ~= false
+local compatibilityPlayerActions = {
+    waypoint = true,
+    spectate = true,
+    message = true,
+    identifiers = true,
+    kill = true,
+}
 
 local function RegisterNUICallback(name, handler)
     nativeRegisterNUICallback(name, function(data, cb)
@@ -487,8 +496,10 @@ RegisterNUICallback('cortex-admin:playerAction', function(data, cb)
         data.enabled = freezeState[target]
     end
 
-    if action == 'waypoint' or action == 'spectate' or action == 'message' or action == 'identifiers' or action == 'kill' then
+    if vmenuCompatibilityEnabled and compatibilityPlayerActions[action] then
         TriggerServerEvent('cortex-admin:server:vmenuPlayerAction', data)
+    elseif action == 'kill' then
+        TriggerServerEvent('cortex-admin:server:killPlayer', { target = target })
     else
         TriggerServerEvent('cortex-admin:server:playerAction', data)
     end

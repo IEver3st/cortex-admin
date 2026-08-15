@@ -1,4 +1,7 @@
 local Server = EsAdminServer
+local vmenuCompatibilityEnabled = not Config.VmenuCompatibility
+    or Config.VmenuCompatibility.enabled ~= false
+
 local resourceName = GetCurrentResourceName()
 local spectating = {}
 local pendingBanImports = {}
@@ -211,6 +214,19 @@ end
 
 Server.authorizeModel = authorizeModel
 Server.refreshModelWhitelistIndex = refreshModelWhitelistIndex
+
+if not vmenuCompatibilityEnabled then
+    -- No imported allowlist is loaded when compatibility is disabled, so the
+    -- authorizer above preserves core model validation and Cortex permissions.
+    -- Key grants still need the companion consumer, but no compat events do.
+    Server.consumeModelAuthorization = function(src, _, kind, actionId, model)
+        return type(src) == 'number' and src > 0
+            and type(kind) == 'string'
+            and type(actionId) == 'string'
+            and model ~= nil
+    end
+    return
+end
 
 local function buildAuthorizedModelSet(kind, models)
     local result = { names = {}, hashes = {} }

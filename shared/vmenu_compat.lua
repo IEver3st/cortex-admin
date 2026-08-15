@@ -39,6 +39,12 @@ Config.KvpKeys.vmenuServerImport = Config.KvpKeys.vmenuServerImport or 'cortex-a
 Config.KvpKeys.vmenuClientConfig = Config.KvpKeys.vmenuClientConfig or 'cortex-admin_vmenu_client_config_v1'
 Config.KvpKeys.vmenuCategories = Config.KvpKeys.vmenuCategories or 'cortex-admin_vmenu_categories_v1'
 
+-- The read-only KVP fallback is an independent migration mechanism. Keep its
+-- configuration and keys available even when the compatibility surface is off.
+if Config.VmenuCompatibility.enabled == false then
+    return
+end
+
 local function values(list)
     local output = {}
     for index = 1, #list do

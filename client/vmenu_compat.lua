@@ -7,6 +7,29 @@
 
 local Admin = EsAdmin
 local state = Admin.state
+local vmenuCompatibilityEnabled = not Config.VmenuCompatibility
+    or Config.VmenuCompatibility.enabled ~= false
+
+if not vmenuCompatibilityEnabled then
+    -- Core model actions use this API for the optional imported vMenu
+    -- allowlists. With compatibility disabled there is no imported allowlist,
+    -- so preserve the core action flow without registering any compat events.
+    Admin.authorizeVmenuModels = function(kind, models, actionId)
+        if type(kind) ~= 'string' or type(models) ~= 'table' or #models < 1 or #models > 256
+            or type(actionId) ~= 'string' then
+            return { ok = false, error = 'invalid_request', allowed = {} }
+        end
+        local allowed = {}
+        for index = 1, #models do allowed[index] = true end
+        return { ok = true, allowed = allowed }
+    end
+    Admin.authorizeVmenuModel = function(kind, model, actionId)
+        local result = Admin.authorizeVmenuModels(kind, { model }, actionId)
+        return result.ok == true and result.allowed[1] == true, result.error, nil
+    end
+    return
+end
+
 local resourceName = GetCurrentResourceName()
 
 local compat = {
