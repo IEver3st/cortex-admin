@@ -79,8 +79,7 @@ end
 local function saveBans()
     local ok, encoded = pcall(json.encode, store)
     if not ok or type(encoded) ~= 'string' or #encoded > 4 * 1024 * 1024 then return false end
-    SetResourceKvp(Config.KvpKeys.bans, encoded)
-    return true
+    return pcall(SetResourceKvp, Config.KvpKeys.bans, encoded)
 end
 
 local function migrateLegacy(decoded)
@@ -214,8 +213,12 @@ local function removeBan(id)
     if not id then return false end
     for index = 1, #store.records do
         if store.records[index].id == id then
-            table.remove(store.records, index)
-            return saveBans()
+            local removed = table.remove(store.records, index)
+            if not saveBans() then
+                table.insert(store.records, index, removed)
+                return false
+            end
+            return true
         end
     end
     return false
