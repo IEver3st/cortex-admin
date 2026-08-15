@@ -53,6 +53,12 @@ local requestBuckets = {}
 local pendingAdminCarRequests = {}
 local PERMISSION_CACHE_MS = 10000
 local ADMIN_CAR_REQUEST_MS = 5000
+local configuredWardrobeShareRadius = WardrobeSharePolicy.validateRadius(Config.WardrobeShareRadius)
+local WARDROBE_SHARE_RADIUS = configuredWardrobeShareRadius or WardrobeSharePolicy.DEFAULT_RADIUS
+
+if not configuredWardrobeShareRadius then
+    print(('[cortex-admin] Invalid Config.WardrobeShareRadius; using %.1fm.'):format(WARDROBE_SHARE_RADIUS))
+end
 
 local moneyActions = {
     ['player.setCash'] = 'cash',
@@ -385,7 +391,8 @@ local function arePlayersNearby(firstSource, secondSource, maxDistance)
     local dx = firstCoords.x - secondCoords.x
     local dy = firstCoords.y - secondCoords.y
     local dz = firstCoords.z - secondCoords.z
-    return dx * dx + dy * dy + dz * dz <= maxDistance * maxDistance
+    local distanceSquared = dx * dx + dy * dy + dz * dz
+    return WardrobeSharePolicy.isDistanceSquaredWithinRadius(distanceSquared, maxDistance)
 end
 
 local function hasPermission(src, actionId)
@@ -582,13 +589,16 @@ RegisterNetEvent('cortex-admin:server:requestWardrobeShareTargets', function(req
         if playerId ~= src
             and isOpen == true
             and GetPlayerName(playerId)
-            and arePlayersNearby(src, playerId, 12.0) then
+            and arePlayersNearby(src, playerId, WARDROBE_SHARE_RADIUS) then
             targets[#targets + 1] = playerId
         end
     end
 
     table.sort(targets)
-    TriggerClientEvent('cortex-admin:client:receiveWardrobeShareTargets', src, requestId, targets)
+    TriggerClientEvent('cortex-admin:client:receiveWardrobeShareTargets', src, requestId, {
+        radius = WARDROBE_SHARE_RADIUS,
+        targets = targets,
+    })
 end)
 
 RegisterNetEvent('cortex-admin:server:shareWardrobe', function(data)
@@ -611,7 +621,7 @@ RegisterNetEvent('cortex-admin:server:shareWardrobe', function(data)
         return
     end
 
-    if not arePlayersNearby(src, target, 12.0) then
+    if not arePlayersNearby(src, target, WARDROBE_SHARE_RADIUS) then
         TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Target player must be nearby.')
         return
     end

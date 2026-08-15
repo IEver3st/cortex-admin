@@ -6,6 +6,7 @@
     "build": "bun run vendor:ui && bun run preview:state",
     "dev": "bun tools/dev-server.ts",
     "preview:state": "bun tools/export-preview-state.mjs",
+    "test": "python tools/run-lua-tests.py",
     "vendor:ui": "bun tools/vendor-ui.mjs"
   },
   "dependencies": {

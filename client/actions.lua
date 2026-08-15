@@ -485,7 +485,7 @@ function getCurrentHairColors(ped)
     return hairColor or 0, hairHighlightColor or 0
 end
 
-function getWardrobeShareTargetIds()
+function getWardrobeShareTargetSnapshot()
     local requestId = ('%s:wardrobe:%d:%d'):format(GetCurrentResourceName(), GetGameTimer(), math.random(1000, 9999))
     local pending = promise.new()
     pendingWardrobeShareTargetRequests[requestId] = pending
@@ -502,11 +502,7 @@ function getWardrobeShareTargetIds()
     Admin.debugTrace('wardrobe_targets', 'before_await', { requestId = requestId })
     local payload = Citizen.Await(pending)
     Admin.debugTrace('wardrobe_targets', 'after_await', { ok = type(payload) == 'table' })
-    if type(payload) ~= 'table' then
-        return {}
-    end
-
-    return payload
+    return WardrobeSharePolicy.validateTargetSnapshot(payload)
 end
 
 function clampInteger(value, minValue, maxValue)
@@ -1691,7 +1687,13 @@ end)
 
 Admin.getNearbyWardrobeShareTargets = function()
     Admin.debugTrace('wardrobe_targets', 'enter', {})
-    local openTargetIds = getWardrobeShareTargetIds()
+    local targetSnapshot = getWardrobeShareTargetSnapshot()
+    if not targetSnapshot then
+        Admin.debugTrace('wardrobe_targets', 'exit', { n = 0 })
+        return {}
+    end
+
+    local openTargetIds = targetSnapshot.targets
     local openLookup = {}
     for i = 1, #openTargetIds do
         local id = tonumber(openTargetIds[i])
@@ -1701,8 +1703,7 @@ Admin.getNearbyWardrobeShareTargets = function()
     end
 
     local nearby = {}
-    local radius = tonumber(Config.WardrobeShareRadius) or 8.0
-    local radiusSq = radius * radius
+    local radius = targetSnapshot.radius
     local myCoords = GetEntityCoords(getPed())
     local players = GetActivePlayers()
 
@@ -1718,7 +1719,7 @@ Admin.getNearbyWardrobeShareTargets = function()
                     local dy = coords.y - myCoords.y
                     local dz = coords.z - myCoords.z
                     local distanceSq = (dx * dx) + (dy * dy) + (dz * dz)
-                    if distanceSq <= radiusSq then
+                    if WardrobeSharePolicy.isDistanceSquaredWithinRadius(distanceSq, radius) then
                         nearby[#nearby + 1] = {
                             id = serverId,
                             name = GetPlayerName(player) or ('Player %d'):format(serverId),
