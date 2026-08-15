@@ -1,0 +1,27 @@
+{
+  "storedRecord": {
+    "id": "vmenu-production-fixture",
+    "playerName": "Production Fixture Player",
+    "identifiers": [
+      "license:fixture-7f3a12c9"
+    ],
+    "reason": "Imported production-shaped fixture",
+    "admin": "Legacy Staff",
+    "createdAt": 1780000000,
+    "expiresAt": 1890000000,
+    "importedFrom": "vmenu"
+  },
+  "expectedDto": {
+    "id": "vmenu-production-fixture",
+    "playerName": "Production Fixture Player",
+    "identifiers": [
+      "license:fixture-7f3a12c9"
+    ],
+    "reason": "Imported production-shaped fixture",
+    "adminName": "Legacy Staff",
+    "createdAt": 1780000000,
+    "expiresAt": 1890000000,
+    "provenance": "vmenu"
+  },
+  "adminQuery": "legacy staff"
+}

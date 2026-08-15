@@ -187,21 +187,25 @@ local function addBan(identifiers, reason, adminName, durationMinutes, playerNam
     return record
 end
 
+local function toBanDto(entry)
+    return {
+        id = entry.id,
+        playerName = entry.playerName,
+        identifiers = entry.identifiers,
+        reason = entry.reason,
+        adminName = entry.admin,
+        createdAt = entry.createdAt,
+        expiresAt = entry.expiresAt,
+        provenance = entry.importedFrom,
+    }
+end
+
 local function listBans()
     cleanupExpired(true)
     local output = {}
     for index = 1, #store.records do
         local entry = store.records[index]
-        output[#output + 1] = {
-            id = entry.id,
-            playerName = entry.playerName,
-            identifiers = entry.identifiers,
-            reason = entry.reason,
-            admin = entry.admin,
-            createdAt = entry.createdAt,
-            expiresAt = entry.expiresAt,
-            importedFrom = entry.importedFrom,
-        }
+        output[#output + 1] = toBanDto(entry)
     end
     table.sort(output, function(first, second)
         return (first.createdAt or 0) > (second.createdAt or 0)
