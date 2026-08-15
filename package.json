@@ -2,15 +2,19 @@
   "name": "cortex-admin",
   "private": true,
   "scripts": {
-    "audit:actions": "bun tools/audit-action-parity.mjs",
+    "audit:actions": "bun run preview:state && bun tools/audit-action-parity.mjs",
     "build": "bun run vendor:ui && bun run preview:state",
     "dev": "bun tools/dev-server.ts",
     "preview:state": "bun tools/export-preview-state.mjs",
+    "test": "bun test",
     "vendor:ui": "bun tools/vendor-ui.mjs"
   },
   "dependencies": {
     "lucide": "0.462.0",
     "react": "18.2.0",
     "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "wasmoon": "^1.16.0"
   }
 }

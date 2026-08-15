@@ -98,9 +98,9 @@ local MODEL_ACTIONS = {
 }
 
 local modelWhitelistIndex = {
-    vehicle = { names = {}, hashes = {}, count = 0 },
-    ped = { names = {}, hashes = {}, count = 0 },
-    weapon = { names = {}, hashes = {}, count = 0 },
+    vehicle = { names = {}, hashes = {}, count = 0, configured = false },
+    ped = { names = {}, hashes = {}, count = 0, configured = false },
+    weapon = { names = {}, hashes = {}, count = 0, configured = false },
 }
 
 local function unsignedHash(value)
@@ -136,9 +136,9 @@ end
 
 local function refreshModelWhitelistIndex()
     modelWhitelistIndex = {
-        vehicle = { names = {}, hashes = {}, count = 0 },
-        ped = { names = {}, hashes = {}, count = 0 },
-        weapon = { names = {}, hashes = {}, count = 0 },
+        vehicle = { names = {}, hashes = {}, count = 0, configured = false },
+        ped = { names = {}, hashes = {}, count = 0, configured = false },
+        weapon = { names = {}, hashes = {}, count = 0, configured = false },
     }
 
     local domain = configStore.domains and configStore.domains.modelWhitelists
@@ -150,6 +150,7 @@ local function refreshModelWhitelistIndex()
         for keyIndex = 1, #rule.keys do
             local entries = data[rule.keys[keyIndex]]
             if type(entries) == 'table' then
+                if #entries > 0 then index.configured = true end
                 for entryIndex = 1, math.min(#entries, 20000) do
                     local name = normalizeModelName(kind, entries[entryIndex])
                     if name and not index.names[name] then
@@ -196,7 +197,10 @@ local function authorizeModel(src, kind, model, actionId)
 
     local descriptors, errorReason, normalized = requiredModelDescriptors(kind, model)
     if errorReason then return false, errorReason end
-    if type(descriptors) ~= 'table' or #descriptors == 0 then return true, nil, normalized end
+    if type(descriptors) ~= 'table' or #descriptors == 0 then
+        if modelWhitelistIndex[kind].configured then return false, 'model_forbidden', normalized end
+        return true, nil, normalized
+    end
 
     if IsPlayerAceAllowed(src, Config.Permissions.all)
         or IsPlayerAceAllowed(src, 'vMenu.Everything')
