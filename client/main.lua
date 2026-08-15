@@ -594,13 +594,13 @@ local function buildUiState()
         cachedData.playerName = GetPlayerName(PlayerId()) or 'Admin'
     end
     
-    -- Cache actions/tabs (static)
+    -- Cache static actions/tabs, but always read framework capabilities live.
     if not cachedData.actions then
         cachedData.actions = Actions.actions
         cachedData.tabs = Actions.tabs
-        cachedData.frameworkInfo = EsAdminBridge.getFrameworkInfo()
     end
-    
+    cachedData.frameworkInfo = EsAdminBridge.getFrameworkInfo()
+
     -- Cache personal vehicles (only refresh on demand)
     if not cachedData.personalVehicles then
         refreshPersonalVehiclesCache()

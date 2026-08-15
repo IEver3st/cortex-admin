@@ -9,6 +9,7 @@ EsAdminBridge = EsAdminBridge or {}
 local cachedItems = nil
 local cachedItemsTime = 0
 local ITEM_CACHE_TTL = 60 -- seconds
+local frameworkGeneration = 0
 
 -- ============================================================================
 -- PLAYER FUNCTIONS
@@ -70,6 +71,8 @@ end
 function EsAdminBridge.getAllItems()
     if not Config.HasOxInventory then return {} end
 
+    local requestGeneration = frameworkGeneration
+
     -- Use cache if fresh
     local now = os.time()
     if cachedItems and (now - cachedItemsTime) < ITEM_CACHE_TTL then
@@ -79,6 +82,10 @@ function EsAdminBridge.getAllItems()
     local ok, rawItems = pcall(function()
         return exports.ox_inventory:Items()
     end)
+
+    if requestGeneration ~= frameworkGeneration or not Config.HasOxInventory then
+        return {}
+    end
 
     if not ok or not rawItems then
         print('[cortex-admin] Failed to fetch items from ox_inventory')
@@ -100,6 +107,10 @@ function EsAdminBridge.getAllItems()
     table.sort(items, function(a, b)
         return (a.label or ''):lower() < (b.label or ''):lower()
     end)
+
+    if requestGeneration ~= frameworkGeneration or not Config.HasOxInventory then
+        return {}
+    end
 
     cachedItems = items
     cachedItemsTime = now
@@ -380,6 +391,17 @@ function EsAdminBridge.isQBXAdmin(src)
     local groupConfig = EsAdminBridge.getQBXPermissionGroup(src)
     return groupConfig ~= nil
 end
+
+--- Clear framework-backed caches whenever a dependency transitions. Values from
+--- a previous dependency instance must never survive stop -> start.
+local function clearFrameworkCaches()
+    frameworkGeneration = frameworkGeneration + 1
+    cachedItems = nil
+    cachedItemsTime = 0
+    qbxPermCache = {}
+end
+
+AddEventHandler('cortex-admin:frameworkChanged', clearFrameworkCaches)
 
 -- Clear cache when player drops
 AddEventHandler('playerDropped', function()

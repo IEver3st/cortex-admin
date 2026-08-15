@@ -850,11 +850,18 @@ end)
 -- ============================================================================
 
 RegisterNUICallback('cortex-admin:requestItems', function(_, cb)
-    TriggerServerEvent('cortex-admin:server:getItems')
+    TriggerServerEvent('cortex-admin:server:getItems', {
+        generation = EsAdminBridge.getFrameworkGeneration(),
+    })
     cb({ ok = true })
 end)
 
-RegisterNetEvent('cortex-admin:client:setItems', function(items)
+RegisterNetEvent('cortex-admin:client:setItems', function(items, generation)
+    if not EsAdminBridge.hasInventory()
+        or not EsAdminBridge.isFrameworkGenerationCurrent(generation) then
+        return
+    end
+
     SendNUIMessage({
         action = 'cortex-admin:setState',
         data = { inventoryItems = items or {} }
@@ -883,11 +890,18 @@ end)
 -- ============================================================================
 
 RegisterNUICallback('cortex-admin:requestGarage', function(_, cb)
-    TriggerServerEvent('cortex-admin:server:getPlayerGarage')
+    TriggerServerEvent('cortex-admin:server:getPlayerGarage', {
+        generation = EsAdminBridge.getFrameworkGeneration(),
+    })
     cb({ ok = true })
 end)
 
-RegisterNetEvent('cortex-admin:client:setGarageVehicles', function(vehicles)
+RegisterNetEvent('cortex-admin:client:setGarageVehicles', function(vehicles, generation)
+    if not EsAdminBridge.hasGarage()
+        or not EsAdminBridge.isFrameworkGenerationCurrent(generation) then
+        return
+    end
+
     SendNUIMessage({
         action = 'cortex-admin:setState',
         data = { garageVehicles = vehicles or {} }

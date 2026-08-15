@@ -1442,17 +1442,40 @@ end)
 -- INVENTORY MANAGEMENT (QBX / ox_inventory)
 -- =============================================================================
 
-RegisterNetEvent('cortex-admin:server:getItems', function()
+local frameworkRequestGeneration = 0
+
+AddEventHandler('cortex-admin:frameworkChanged', function()
+    frameworkRequestGeneration = frameworkRequestGeneration + 1
+end)
+
+local function frameworkRequestIsCurrent(generation)
+    return generation == frameworkRequestGeneration
+end
+
+RegisterNetEvent('cortex-admin:server:getItems', function(data)
     local src = source
+    local requestGeneration = frameworkRequestGeneration
     if not allowRequest(src, 'expensive-read', 4, 10000) then return end
+    local clientGeneration = type(data) == 'table' and toInteger(data.generation, 0, 2147483647) or nil
+    if clientGeneration == nil then return end
     if not hasPermission(src, 'inventory.giveItem') then return end
+    if not frameworkRequestIsCurrent(requestGeneration)
+        or not Config.HasQBX
+        or not Config.HasOxInventory then
+        return
+    end
 
     local items = EsAdminBridge.getAllItems()
+    if not frameworkRequestIsCurrent(requestGeneration)
+        or not Config.HasQBX
+        or not Config.HasOxInventory then
+        return
+    end
     if type(items) ~= 'table' then
         items = {}
     end
 
-    TriggerClientEvent('cortex-admin:client:setItems', src, items)
+    TriggerClientEvent('cortex-admin:client:setItems', src, items, clientGeneration)
 end)
 
 RegisterNetEvent('cortex-admin:server:giveItem', function(data)
@@ -1492,23 +1515,41 @@ end)
 -- GARAGE MANAGEMENT (QBX / qbx_vehicles)
 -- =============================================================================
 
-RegisterNetEvent('cortex-admin:server:getPlayerGarage', function()
+RegisterNetEvent('cortex-admin:server:getPlayerGarage', function(data)
     local src = source
+    local requestGeneration = frameworkRequestGeneration
     if not allowRequest(src, 'expensive-read', 4, 10000) then return end
+    local clientGeneration = type(data) == 'table' and toInteger(data.generation, 0, 2147483647) or nil
+    if clientGeneration == nil then return end
     if not hasPermission(src, 'garage.spawnVehicle') then return end
+    if not frameworkRequestIsCurrent(requestGeneration)
+        or not Config.HasQBX
+        or not Config.HasQBXVehicles then
+        return
+    end
 
     local citizenid = EsAdminBridge.getPlayerCitizenId(src)
+    if not frameworkRequestIsCurrent(requestGeneration)
+        or not Config.HasQBX
+        or not Config.HasQBXVehicles then
+        return
+    end
     if not citizenid then
         TriggerClientEvent('cortex-admin:client:notify', src, 'error', 'Could not determine your citizen ID')
         return
     end
 
     local vehicles = EsAdminBridge.getPlayerVehicles(citizenid)
+    if not frameworkRequestIsCurrent(requestGeneration)
+        or not Config.HasQBX
+        or not Config.HasQBXVehicles then
+        return
+    end
     if type(vehicles) ~= 'table' then
         vehicles = {}
     end
 
-    TriggerClientEvent('cortex-admin:client:setGarageVehicles', src, vehicles)
+    TriggerClientEvent('cortex-admin:client:setGarageVehicles', src, vehicles, clientGeneration)
 end)
 
 RegisterNetEvent('cortex-admin:server:spawnGarageVehicle', function(data)
