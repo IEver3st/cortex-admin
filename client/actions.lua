@@ -7045,6 +7045,7 @@ end
 -- ============================================================================
 
 RegisterNetEvent('cortex-admin:client:spawnGarageVehicle', function(data)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     if not data or not data.model then
         notify('error', 'Invalid vehicle data')
         return

@@ -1043,11 +1043,13 @@ end)
 -- ============================================================================
 
 RegisterNetEvent('cortex-admin:client:killPed', function()
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     local ped = PlayerPedId()
     SetEntityHealth(ped, 0)
 end)
 
 RegisterNetEvent('cortex-admin:client:revivePed', function()
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     local ped = PlayerPedId()
     local coords = GetEntityCoords(ped)
 
@@ -1077,6 +1079,7 @@ RegisterNetEvent('cortex-admin:client:revivePed', function()
 end)
 
 RegisterNetEvent('cortex-admin:client:sitInVehicle', function(netId)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     netId = toInteger(netId, 1, 65535)
     if not netId then return end
     local vehicle = NetworkGetEntityFromNetworkId(netId)

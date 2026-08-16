@@ -718,6 +718,7 @@ local function setSpectate(targetServerId)
 end
 
 RegisterNetEvent('cortex-admin:client:setPlayerWaypoint', function(coords)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     if type(coords) ~= 'table' then return end
     local x = finite(coords.x, -20000, 20000)
     local y = finite(coords.y, -20000, 20000)
@@ -727,6 +728,7 @@ RegisterNetEvent('cortex-admin:client:setPlayerWaypoint', function(coords)
 end)
 
 RegisterNetEvent('cortex-admin:client:setSpectateTarget', function(targetServerId)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     local target = integer(targetServerId, 1, 65535)
     setSpectate(target)
 end)
@@ -834,6 +836,7 @@ RegisterNetEvent('cortex-admin:client:vmenuDeath', function(message)
 end)
 
 RegisterNetEvent('cortex-admin:client:applyVmenuWorldState', function(payload)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     if type(payload) ~= 'table' then return end
     if payload.vehicleBlackout ~= nil and SetArtificialLightsStateAffectsVehicles then
         SetArtificialLightsStateAffectsVehicles(payload.vehicleBlackout == true)
@@ -1280,6 +1283,7 @@ executeHandlers['dev.spawnEntity'] = function(data)
 end
 
 RegisterNetEvent('cortex-admin:client:authorizedEntitySpawn', function(requestId, entityType, modelName)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     local pending = nil
     if type(requestId) == 'string' then
         pending = pendingEntitySpawnRequests[requestId]

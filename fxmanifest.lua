@@ -17,6 +17,7 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/security.lua',
     'client/bridge.lua',
     'client/main.lua',
     'client/actions.lua',

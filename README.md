@@ -326,6 +326,7 @@ The UI can be previewed in a normal browser:
 - Requires `cortex-lib` to be installed and started first.
 - QBX-branded tabs and actions (`Inventory`, `Garage`, `Give Money`, `Set Job/Gang`, `Admin Car`, etc.) require `qbx_core`, `ox_inventory`, or `qbx_vehicles` and will not function on a standalone server.
 - Permissions are enforced through FiveM ACE; misconfiguring `permissions.cfg` can grant unintended access.
+- Privileged server-commanded client events accept only FiveM's server net ID (`source == 65535`) after the server-side ACE check. This hardens the same-context event boundary, but it remains a trusted-client boundary: a modified client or Lua executor can invoke equivalent GTA/FiveM natives directly, so this check is defense in depth rather than anti-cheat.
 - The NUI frontend vendors its React, ReactDOM, and Lucide runtime locally and uses system font stacks, so the menu does not require internet access at runtime.
 - Vehicle preview and customizer features rely on live NUI messages and native vehicle spawning; addon vehicles are discovered by scanning other resources’ `vehicles.meta` declarations and stream files.
 - vMenu migration depends on local vMenu KVP data being readable from the server’s `APPDATA`/`HOME` paths.

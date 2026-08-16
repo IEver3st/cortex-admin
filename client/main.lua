@@ -1554,6 +1554,7 @@ RegisterNetEvent('cortex-admin:client:setAddonVehicles', function(vehicles)
 end)
 
 RegisterNetEvent('cortex-admin:client:updateWorldState', function(payload)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     if not payload then return end
 
     local shouldRefreshUi = false
@@ -1600,6 +1601,7 @@ RegisterNetEvent('cortex-admin:client:updateWorldState', function(payload)
 end)
 
 RegisterNetEvent('cortex-admin:client:teleport', function(coords, heading)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     if type(coords) ~= 'table' then return end
     local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
     if not x or not y or not z or x ~= x or y ~= y or z ~= z
@@ -1614,6 +1616,7 @@ RegisterNetEvent('cortex-admin:client:teleport', function(coords, heading)
 end)
 
 RegisterNetEvent('cortex-admin:client:freeze', function(enabled)
+    if not EsAdminClientSecurity.isServerOrigin(source) then return end
     local ped = PlayerPedId()
     FreezeEntityPosition(ped, enabled)
 end)

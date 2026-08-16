@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
+const read = (...parts) => readFileSync(join(root, ...parts), 'utf8').replace(/\r\n?/g, '\n');
 const state = JSON.parse(read('ui', 'preview-state.json'));
 const clientActions = read('client', 'actions.lua');
 const compat = read('client', 'vmenu_compat.lua');
