@@ -3,6 +3,7 @@ local resourceName = GetCurrentResourceName()
 local spectating = {}
 local pendingBanImports = {}
 local pendingModelAuthorizations = {}
+local personalVehicles = {}
 
 local MAX_CONFIG_DOMAIN_BYTES = 2 * 1024 * 1024
 local MAX_CONFIG_STORE_BYTES = 4 * 1024 * 1024
@@ -54,6 +55,22 @@ local function rate(src, bucket, count, window)
     return Server and Server.allowRequest and Server.allowRequest(src, bucket, count, window) == true
 end
 
+local function resolvePersonalVehicle(src)
+    local session = personalVehicles[src]
+    if type(session) ~= 'table' then return nil end
+    local vehicle = NetworkGetEntityFromNetworkId(session.networkId)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then
+        personalVehicles[src] = nil
+        return nil
+    end
+    if GetEntityModel(vehicle) ~= session.model
+        or GetEntityRoutingBucket(vehicle) ~= GetPlayerRoutingBucket(src) then
+        personalVehicles[src] = nil
+        return nil
+    end
+    return vehicle, session
+end
+
 local MODEL_RULES = {
     vehicle = {
         keys = { 'whitelistedvehicle', 'whitelistedvehicles' },
@@ -72,7 +89,6 @@ local MODEL_RULES = {
 local MODEL_ACTIONS = {
     vehicle = {
         ['vehicle.spawn'] = true,
-        ['vehicle.preview'] = true,
         ['vehicle.personal'] = true,
         ['vehicle.load'] = true,
         ['garage.spawnVehicle'] = true,
@@ -83,6 +99,7 @@ local MODEL_ACTIONS = {
         ['player.setModel'] = true,
         ['player.loadPed'] = true,
         ['player.loadMpPed'] = true,
+        ['player.randomizeAppearance'] = true,
         ['dev.spawnEntity'] = true,
     },
     weapon = {
@@ -780,8 +797,54 @@ end)
 
 RegisterNetEvent('cortex-admin:server:requestVmenuWorldState', function()
     local src = source
-    if not rate(src, 'vmenu-world-read', 6, 5000) then return end
+    if not rate(src, 'vmenu-world-read', 6, 5000)
+        or not (Server and Server.canOpenMenu and Server.canOpenMenu(src) == true) then return end
     TriggerClientEvent('cortex-admin:client:applyVmenuWorldState', src, extendedWorldState)
+end)
+
+RegisterNetEvent('cortex-admin:server:setPersonalVehicle', function(networkId)
+    local src = source
+    networkId = integer(networkId, 1, 65535)
+    if not networkId or not rate(src, 'personal-vehicle-set', 4, 10000)
+        or not allowed(src, 'vehicle.personalSet') then return end
+    local vehicle = NetworkGetEntityFromNetworkId(networkId)
+    local ped = GetPlayerPed(src)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2
+        or not ped or ped == 0 or not DoesEntityExist(ped)
+        or GetPedInVehicleSeat(vehicle, -1) ~= ped
+        or GetEntityRoutingBucket(vehicle) ~= GetPlayerRoutingBucket(src) then return end
+    personalVehicles[src] = {
+        networkId = networkId,
+        model = GetEntityModel(vehicle),
+    }
+end)
+
+RegisterNetEvent('cortex-admin:server:kickPersonalVehiclePassengers', function()
+    local src = source
+    if not rate(src, 'personal-vehicle-kick', 3, 10000)
+        or not allowed(src, 'vehicle.personalKickPassengers') then return end
+    local vehicle, session = resolvePersonalVehicle(src)
+    if not vehicle then
+        notify(src, 'error', 'Set a valid personal vehicle first.')
+        return
+    end
+    local requesterPed = GetPlayerPed(src)
+    local kicked = {}
+    for seat = -1, 15 do
+        local occupant = GetPedInVehicleSeat(vehicle, seat)
+        if occupant and occupant ~= 0 and occupant ~= requesterPed then
+            local owner = NetworkGetEntityOwner(occupant)
+            if owner and owner > 0 and owner ~= src and GetPlayerName(owner) and not kicked[owner] then
+                kicked[owner] = true
+                TriggerClientEvent('cortex-admin:client:leavePersonalVehicle', owner, session.networkId)
+            end
+        end
+    end
+    local count = 0
+    for _ in pairs(kicked) do count = count + 1 end
+    notify(src, count > 0 and 'success' or 'info', count > 0
+        and ('Asked %d player(s) to leave your personal vehicle.'):format(count)
+        or 'There are no other players in your personal vehicle.')
 end)
 
 RegisterNetEvent('cortex-admin:server:requestEntitySpawn', function(payload)
@@ -824,7 +887,9 @@ end)
 
 RegisterNetEvent('cortex-admin:server:reportDeath', function()
     local src = source
-    if not rate(src, 'death-report', 2, 10000) or not GetPlayerName(src) then return end
+    local ped = GetPlayerPed(src)
+    if not rate(src, 'death-report', 2, 10000) or not GetPlayerName(src)
+        or not ped or ped == 0 or not DoesEntityExist(ped) or GetEntityHealth(ped) > 0 then return end
     TriggerClientEvent('cortex-admin:client:vmenuDeath', -1, ('%s died.'):format(GetPlayerName(src)))
 end)
 
@@ -839,6 +904,7 @@ AddEventHandler('playerDropped', function(reason)
     local name = GetPlayerName(src) or ('Player %d'):format(src)
     pendingBanImports[src] = nil
     pendingModelAuthorizations[src] = nil
+    personalVehicles[src] = nil
     spectating[src] = nil
     for viewer, target in pairs(spectating) do
         if target == src then
@@ -867,5 +933,6 @@ refreshModelWhitelistIndex()
 
 AddEventHandler('onResourceStop', function(stoppedResource)
     if stoppedResource ~= resourceName then return end
+    personalVehicles = {}
     saveConfigStore()
 end)

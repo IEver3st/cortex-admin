@@ -11,6 +11,7 @@ local resourceName = GetCurrentResourceName()
 
 local compat = {
     personalVehicle = 0,
+    personalVehicleIdentity = nil,
     personalBlip = 0,
     spawnedEntities = {},
     locationBlips = {},
@@ -175,6 +176,8 @@ preferences.clothingGlowStyle = integer(preferences.clothingGlowStyle, 0, 3) or 
 preferences.dimensionRadius = finite(preferences.dimensionRadius, 10.0, 200.0) or 50.0
 preferences.torqueMultiplier = finite(preferences.torqueMultiplier, 1.0, 1024.0) or 1.0
 preferences.powerMultiplier = finite(preferences.powerMultiplier, 1.0, 1024.0) or 1.0
+preferences.voiceProximity = finite(preferences.voiceProximity, 0.5, 10000.0) or 8.0
+preferences.voiceChannel = integer(preferences.voiceChannel, 0, 65535) or 0
 
 for actionId, enabled in pairs(preferences.toggles) do
     if persistentToggleIds[actionId] and type(enabled) == 'boolean' then
@@ -187,6 +190,32 @@ local function savePreferences()
     preferences.drivingSpeed = compat.autopilotSpeed
     saveJsonKvp(Config.KvpKeys.vmenuPreferences, preferences)
 end
+
+local function getVoiceState()
+    return {
+        proximity = preferences.voiceProximity,
+        channel = preferences.voiceChannel,
+    }
+end
+
+local function sendVoiceState()
+    SendNUIMessage({ action = 'cortex-admin:setVoiceState', data = getVoiceState() })
+end
+
+local function applyVoicePreferences()
+    if NetworkSetTalkerProximity then
+        NetworkSetTalkerProximity(preferences.voiceProximity)
+    end
+    if preferences.voiceChannel == 0 then
+        if NetworkClearVoiceChannel then NetworkClearVoiceChannel() end
+    elseif NetworkSetVoiceChannel then
+        NetworkSetVoiceChannel(preferences.voiceChannel)
+    end
+end
+
+Admin.getVoiceState = getVoiceState
+Admin.sendVoiceState = sendVoiceState
+applyVoicePreferences()
 
 local function setCompatToggle(actionId, enabled)
     enabled = enabled == true
@@ -219,8 +248,18 @@ end
 
 local function personalVehicle()
     local vehicle = compat.personalVehicle
-    if vehicle == 0 or not DoesEntityExist(vehicle) then
+    local identity = compat.personalVehicleIdentity
+    local valid = vehicle ~= 0 and DoesEntityExist(vehicle) and GetEntityType(vehicle) == 2
+        and type(identity) == 'table' and GetEntityModel(vehicle) == identity.model
+    if valid and identity.networkId then
+        valid = NetworkGetEntityIsNetworked(vehicle)
+            and NetworkGetNetworkIdFromEntity(vehicle) == identity.networkId
+    end
+    if not valid then
+        if compat.personalBlip ~= 0 and DoesBlipExist(compat.personalBlip) then RemoveBlip(compat.personalBlip) end
+        compat.personalBlip = 0
         compat.personalVehicle = 0
+        compat.personalVehicleIdentity = nil
         notify('error', 'Set a personal vehicle first.')
         return nil
     end
@@ -236,6 +275,23 @@ local function requestControl(entity, timeoutMs)
         Wait(0)
     until NetworkHasControlOfEntity(entity) or GetGameTimer() >= deadline
     return NetworkHasControlOfEntity(entity)
+end
+
+local function personalVehicleForMutation()
+    local vehicle = personalVehicle()
+    if not vehicle then return nil end
+    if not requestControl(vehicle) then
+        notify('error', 'This vehicle is controlled by another player. Try again when it is no longer occupied.')
+        return nil
+    end
+    return vehicle
+end
+
+local function setExclusiveDriver(vehicle, enabled)
+    if SetVehicleExclusiveDriver then SetVehicleExclusiveDriver(vehicle, enabled == true) end
+    if SetVehicleExclusiveDriver_2 then
+        SetVehicleExclusiveDriver_2(vehicle, enabled == true and playerPed() or 0, 1)
+    end
 end
 
 local function tableIsEmpty(value)
@@ -331,7 +387,7 @@ local function restoreVehicleFeatureRecord(record, feature)
     elseif feature == 'fullbeam' then
         SetVehicleFullbeam(vehicle, false)
     elseif feature == 'exclusiveDriver' then
-        if SetVehicleExclusiveDriver_2 then SetVehicleExclusiveDriver_2(vehicle, 0, 1) end
+        setExclusiveDriver(vehicle, false)
     end
 
     if tableIsEmpty(record.features) then compat.vehicleBaselines[vehicle] = nil end
@@ -1096,8 +1152,8 @@ executeHandlers['vehicle.extras'] = function(data)
 end
 
 executeHandlers['vehicle.personalSet'] = function()
-    local vehicle = currentVehicle(false)
-    if not vehicle then return end
+    local vehicle = currentVehicle(true)
+    if not vehicle then return false end
     if compat.personalVehicle ~= 0 and compat.personalVehicle ~= vehicle then
         local previous = compat.vehicleBaselines[compat.personalVehicle]
         if previous then restoreVehicleFeatureRecord(previous, 'exclusiveDriver') end
@@ -1105,43 +1161,74 @@ executeHandlers['vehicle.personalSet'] = function()
         compat.personalBlip = 0
     end
     compat.personalVehicle = vehicle
-    SetEntityAsMissionEntity(vehicle, true, true)
+    local networkId = NetworkGetEntityIsNetworked(vehicle) and NetworkGetNetworkIdFromEntity(vehicle) or nil
+    compat.personalVehicleIdentity = {
+        model = GetEntityModel(vehicle),
+        networkId = networkId and networkId > 0 and networkId or nil,
+    }
+    if compat.personalVehicleIdentity.networkId then
+        TriggerServerEvent('cortex-admin:server:setPersonalVehicle', compat.personalVehicleIdentity.networkId)
+    end
     if state.toggles['vehicle.personalBlip'] == true and toggleHandlers['vehicle.personalBlip'] then
         toggleHandlers['vehicle.personalBlip'](true)
     end
+    if state.toggles['vehicle.personalExclusive'] == true and toggleHandlers['vehicle.personalExclusive'] then
+        toggleHandlers['vehicle.personalExclusive'](true)
+    end
     notify('success', 'Personal vehicle controls are now linked to this vehicle.')
+    return true
 end
 
 executeHandlers['vehicle.personalKickPassengers'] = function()
     local vehicle = personalVehicle()
-    if not vehicle or not requestControl(vehicle) then return end
-    local maxPassengers = GetVehicleMaxNumberOfPassengers(vehicle)
-    for seat = 0, maxPassengers - 1 do
-        local ped = GetPedInVehicleSeat(vehicle, seat)
-        if ped ~= 0 then TaskLeaveVehicle(ped, vehicle, 0) end
+    if not vehicle then return false end
+    local identity = compat.personalVehicleIdentity
+    if type(identity) ~= 'table' or not identity.networkId then
+        notify('info', 'There are no other network players linked to this vehicle.')
+        return false
     end
+    TriggerServerEvent('cortex-admin:server:kickPersonalVehiclePassengers')
+    return true
 end
 
 executeHandlers['vehicle.personalLock'] = function()
-    local vehicle = personalVehicle(); if not vehicle or not requestControl(vehicle) then return end
-    SetVehicleDoorsLocked(vehicle, 2)
+    local vehicle = personalVehicleForMutation(); if not vehicle then return false end
+    SetVehicleDoorsLockedForAllPlayers(vehicle, true)
+    notify('success', 'Personal vehicle doors locked.')
+    return true
 end
 
 executeHandlers['vehicle.personalUnlock'] = function()
-    local vehicle = personalVehicle(); if not vehicle or not requestControl(vehicle) then return end
-    SetVehicleDoorsLocked(vehicle, 1)
+    local vehicle = personalVehicleForMutation(); if not vehicle then return false end
+    SetVehicleDoorsLockedForAllPlayers(vehicle, false)
+    notify('success', 'Personal vehicle doors unlocked.')
+    return true
 end
 
 executeHandlers['vehicle.personalHorn'] = function()
-    local vehicle = personalVehicle(); if not vehicle or not requestControl(vehicle) then return end
+    local vehicle = personalVehicleForMutation(); if not vehicle then return false end
     StartVehicleHorn(vehicle, 1000, joaat('NORMAL'), false)
+    return true
 end
 
 executeHandlers['vehicle.personalAlarm'] = function()
-    local vehicle = personalVehicle(); if not vehicle or not requestControl(vehicle) then return end
+    local vehicle = personalVehicleForMutation(); if not vehicle then return false end
     local running = IsVehicleAlarmActivated(vehicle)
-    SetVehicleAlarm(vehicle, not running)
-    if not running then StartVehicleAlarm(vehicle) end
+    if running then
+        SetVehicleAlarmTimeLeft(vehicle, 0)
+        SetVehicleAlarm(vehicle, false)
+    else
+        SetVehicleAlarm(vehicle, true)
+        SetVehicleAlarmTimeLeft(vehicle, math.random(8000, 45000))
+        StartVehicleAlarm(vehicle)
+    end
+    return true
+end
+
+executeHandlers['vehicle.personalEngine'] = function()
+    local vehicle = personalVehicleForMutation(); if not vehicle then return false end
+    SetVehicleEngineOn(vehicle, not GetIsVehicleEngineRunning(vehicle), true, true)
+    return true
 end
 
 executeHandlers['world.exactTime'] = function(data)
@@ -1392,6 +1479,7 @@ executeHandlers['voice.channel'] = function(data)
     preferences.voiceChannel = channel
     savePreferences()
     if channel == 0 then NetworkClearVoiceChannel() else NetworkSetVoiceChannel(channel) end
+    sendVoiceState()
 end
 
 toggleHandlers['player.stayInVehicle'] = function(enabled)
@@ -1519,10 +1607,6 @@ toggleHandlers['dev.driftMode'] = function(enabled)
     if not enabled then restoreTrackedVehicleFeature('drift') end
 end
 
-toggleHandlers['vehicle.personalEngine'] = function(enabled)
-    local vehicle = personalVehicle(); if vehicle and requestControl(vehicle) then SetVehicleEngineOn(vehicle, enabled, true, true) end
-end
-
 toggleHandlers['vehicle.personalBlip'] = function(enabled)
     local vehicle = personalVehicle(); if not vehicle then return end
     if enabled then
@@ -1539,9 +1623,12 @@ end
 
 toggleHandlers['vehicle.personalExclusive'] = function(enabled)
     if not enabled then restoreTrackedVehicleFeature('exclusiveDriver'); return end
-    local vehicle = personalVehicle()
-    if not vehicle or not requestControl(vehicle) or not SetVehicleExclusiveDriver_2 then return end
-    if markVehicleFeature(vehicle, 'exclusiveDriver') then SetVehicleExclusiveDriver_2(vehicle, playerPed(), 1) end
+    local vehicle = personalVehicleForMutation()
+    if not vehicle then
+        setCompatToggle('vehicle.personalExclusive', false)
+        return
+    end
+    if markVehicleFeature(vehicle, 'exclusiveDriver') then setExclusiveDriver(vehicle, true) end
 end
 
 toggleHandlers['dev.locationBlips'] = function()
@@ -1556,16 +1643,41 @@ toggleHandlers['dev.showTime'] = function(enabled)
     if not enabled then SendNUIMessage({ action = 'cortex-admin:setTimeHud', data = { visible = false } }) end
 end
 
-toggleHandlers['voice.showSpeaker'] = function(enabled)
-    if not enabled and state.toggles['voice.showStatus'] ~= true then
-        SendNUIMessage({ action = 'cortex-admin:setVoiceHud', data = { visible = false } })
+local function buildVoiceHudPayload()
+    local speakers = {}
+    local showSpeakers = state.toggles['voice.showSpeaker'] == true
+    local showStatus = state.toggles['voice.showStatus'] == true
+    local talking = NetworkIsPlayerTalking(PlayerId())
+
+    if showSpeakers then
+        for _, player in ipairs(GetActivePlayers()) do
+            if NetworkIsPlayerTalking(player) then
+                speakers[#speakers + 1] = GetPlayerName(player) or ('Player ' .. player)
+            end
+            if #speakers >= 6 then break end
+        end
     end
+
+    return {
+        -- Voice activity is transient. Enabling an indicator must never leave
+        -- an idle panel on screen when nobody is talking.
+        visible = (showStatus and talking) or #speakers > 0,
+        showStatus = showStatus,
+        talking = talking,
+        speakers = speakers,
+    }
 end
 
-toggleHandlers['voice.showStatus'] = function(enabled)
-    if not enabled and state.toggles['voice.showSpeaker'] ~= true then
-        SendNUIMessage({ action = 'cortex-admin:setVoiceHud', data = { visible = false } })
-    end
+local function refreshVoiceHud()
+    SendNUIMessage({ action = 'cortex-admin:setVoiceHud', data = buildVoiceHudPayload() })
+end
+
+toggleHandlers['voice.showSpeaker'] = function()
+    refreshVoiceHud()
+end
+
+toggleHandlers['voice.showStatus'] = function()
+    refreshVoiceHud()
 end
 
 toggleHandlers['world.dynamicWeather'] = function(enabled)
@@ -1749,15 +1861,15 @@ selectHandlers['vehicle.enveffScale'] = function(value)
 end
 
 selectHandlers['vehicle.personalLights'] = function(value)
-    local vehicle = personalVehicle(); if vehicle and requestControl(vehicle) then setVehicleLights(vehicle, value) end
+    local vehicle = personalVehicleForMutation(); if vehicle then setVehicleLights(vehicle, value) end
 end
 
 selectHandlers['vehicle.personalStance'] = function(value)
-    local vehicle = personalVehicle(); if vehicle and requestControl(vehicle) then SetReduceDriftVehicleSuspension(vehicle, value == true) end
+    local vehicle = personalVehicleForMutation(); if vehicle then SetReduceDriftVehicleSuspension(vehicle, value == true) end
 end
 
 selectHandlers['vehicle.personalDoors'] = function(value)
-    local vehicle = personalVehicle(); if vehicle and requestControl(vehicle) then applyDoors(vehicle, value) end
+    local vehicle = personalVehicleForMutation(); if vehicle then applyDoors(vehicle, value) end
 end
 
 selectHandlers['weapons.reserveChuteStyle'] = function(value)
@@ -1801,38 +1913,66 @@ end
 
 selectHandlers['voice.proximity'] = function(value)
     local proximity = finite(value, 0.5, 10000.0)
-    if proximity then preferences.voiceProximity = proximity; savePreferences(); NetworkSetTalkerProximity(proximity) end
+    if proximity then
+        preferences.voiceProximity = proximity
+        savePreferences()
+        NetworkSetTalkerProximity(proximity)
+        sendVoiceState()
+    end
+end
+
+Admin.dispatchVmenuAction = function(kind, actionId, value)
+    if type(actionId) ~= 'string' then return false end
+    if kind == 'execute' then
+        local handler = executeHandlers[actionId]
+        if handler then return true, handler(type(value) == 'table' and value or {}) end
+    elseif kind == 'toggle' then
+        local handler = toggleHandlers[actionId]
+        if handler or persistentToggleIds[actionId] or actionId:sub(1, 6) == 'voice.' then
+            setCompatToggle(actionId, value == true)
+            if handler then handler(value == true) end
+            return true
+        end
+    elseif kind == 'select' then
+        local handler = selectHandlers[actionId]
+        if handler then return true, handler(value) end
+    end
+    return false
 end
 
 local baseExecute = Admin.executeAction
 Admin.executeAction = function(actionId, data)
-    local handler = executeHandlers[actionId]
-    if handler then return handler(type(data) == 'table' and data or {}) end
+    local handled, result = Admin.dispatchVmenuAction('execute', actionId, data)
+    if handled then return result end
     return baseExecute(actionId, data)
 end
 
 local baseToggle = Admin.toggleAction
 Admin.toggleAction = function(actionId, enabled)
-    local handler = toggleHandlers[actionId]
-    if handler or persistentToggleIds[actionId] or actionId:sub(1, 6) == 'voice.' then
-        setCompatToggle(actionId, enabled)
-        if handler then handler(enabled == true) end
-        return
-    end
+    local handled, result = Admin.dispatchVmenuAction('toggle', actionId, enabled)
+    if handled then return result end
     return baseToggle(actionId, enabled)
 end
 
 local baseSelect = Admin.selectAction
 Admin.selectAction = function(actionId, value)
-    local handler = selectHandlers[actionId]
-    if handler then return handler(value) end
+    local handled, result = Admin.dispatchVmenuAction('select', actionId, value)
+    if handled then return result end
     return baseSelect(actionId, value)
 end
+
+local compatHandlerCounts = { execute = 0, toggle = 0, select = 0 }
+for _ in pairs(executeHandlers) do compatHandlerCounts.execute = compatHandlerCounts.execute + 1 end
+for _ in pairs(toggleHandlers) do compatHandlerCounts.toggle = compatHandlerCounts.toggle + 1 end
+for _ in pairs(selectHandlers) do compatHandlerCounts.select = compatHandlerCounts.select + 1 end
+print(('[cortex-admin] vMenu action dispatch ready (execute=%d toggle=%d select=%d)'):format(
+    compatHandlerCounts.execute, compatHandlerCounts.toggle, compatHandlerCounts.select
+))
 
 local compatCommand = Config.VmenuCompatibility and Config.VmenuCompatibility.commandAlias or 'vmenu'
 if compatCommand ~= Config.Command then
     RegisterCommand(compatCommand, function()
-        Admin.setOpen(not state.open)
+        Admin.toggleMenu()
     end, false)
     RegisterKeyMapping(compatCommand, 'Open Cortex Admin (vMenu compatible)', 'keyboard', Config.VmenuCompatibility.keybind or 'M')
 end
@@ -1997,9 +2137,9 @@ CreateThread(function()
                         end
                     end
                 end
-                if toggles['vehicle.personalExclusive'] and compat.personalVehicle ~= 0 and DoesEntityExist(compat.personalVehicle) and SetVehicleExclusiveDriver_2 then
+                if toggles['vehicle.personalExclusive'] and compat.personalVehicle ~= 0 and DoesEntityExist(compat.personalVehicle) then
                     if markVehicleFeature(compat.personalVehicle, 'exclusiveDriver') then
-                        SetVehicleExclusiveDriver_2(compat.personalVehicle, ped, 1)
+                        setExclusiveDriver(compat.personalVehicle, true)
                     end
                 end
                 nextSlow = now + 350
@@ -2091,18 +2231,7 @@ CreateThread(function()
                     }
                 end
 
-                local speakers = {}
-                if toggles['voice.showSpeaker'] then
-                    for _, player in ipairs(GetActivePlayers()) do
-                        if NetworkIsPlayerTalking(player) then speakers[#speakers + 1] = GetPlayerName(player) or ('Player ' .. player) end
-                        if #speakers >= 6 then break end
-                    end
-                end
-                local voicePayload = {
-                    visible = toggles['voice.showSpeaker'] == true or toggles['voice.showStatus'] == true,
-                    talking = NetworkIsPlayerTalking(PlayerId()),
-                    speakers = speakers,
-                }
+                local voicePayload = buildVoiceHudPayload()
                 local encodedHealth = json.encode(healthPayload)
                 local encodedVoice = json.encode(voicePayload)
                 if encodedHealth ~= lastHealthPayload then SendNUIMessage({ action = 'cortex-admin:setVehicleHealthHud', data = healthPayload }); lastHealthPayload = encodedHealth end
@@ -2203,10 +2332,22 @@ CreateThread(function()
     end
 end)
 
+RegisterNetEvent('cortex-admin:client:leavePersonalVehicle', function(networkId)
+    networkId = integer(networkId, 1, 65535)
+    if not networkId then return end
+    local ped = playerPed()
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 or not NetworkGetEntityIsNetworked(vehicle)
+        or NetworkGetNetworkIdFromEntity(vehicle) ~= networkId then return end
+    TaskLeaveVehicle(ped, vehicle, 0)
+end)
+
 AddEventHandler('onResourceStop', function(stoppedResource)
     if stoppedResource ~= resourceName then return end
     if compat.spectatingServerId then NetworkSetInSpectatorMode(false, compat.spectatingPed) end
     if compat.personalBlip ~= 0 and DoesBlipExist(compat.personalBlip) then RemoveBlip(compat.personalBlip) end
+    compat.personalVehicle = 0
+    compat.personalVehicleIdentity = nil
     clearLocationBlips()
     cleanupTransientCompatibilityState(playerPed())
     for index = 1, #compat.spawnedEntities do

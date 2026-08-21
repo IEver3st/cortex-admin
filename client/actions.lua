@@ -14,6 +14,14 @@ function notify(type, message)
     Admin.notify(type, message)
 end
 
+local function currentUnixTime()
+    local timestamp = GetCloudTimeAsInt()
+    if type(timestamp) ~= 'number' or timestamp ~= timestamp or timestamp < 0 then
+        return 0
+    end
+    return math.floor(timestamp)
+end
+
 local function modelAuthorizationError(reason)
     if reason == 'model_forbidden' then return 'Your ACE permissions do not allow that whitelisted model.' end
     if reason == 'forbidden' then return 'You do not have permission to use that model action.' end
@@ -87,10 +95,7 @@ function normalizeWeatherCommandArg(value)
 end
 
 function copyToClipboard(text)
-    SendNUIMessage({
-        action = 'cortex-admin:copyText',
-        data = { text = text }
-    })
+    Admin.copyToClipboard(text)
 end
 
 function buildCoordClipboardText(format)
@@ -347,6 +352,12 @@ function normalizeSavedPedKey(keyOrName)
 
     if keyOrName:sub(1, #C.MP_PED_KEY_PREFIX) == C.MP_PED_KEY_PREFIX then
         return keyOrName, keyOrName:sub(#C.MP_PED_KEY_PREFIX + 1)
+    end
+
+    if keyOrName:sub(1, #'mp_character_category_') == 'mp_character_category_' then
+        local name = keyOrName:sub(#'mp_character_category_' + 1)
+        if name == '' then return nil, nil end
+        return kvpKey(C.MP_PED_KEY_PREFIX, name), name
     end
 
     return kvpKey(C.MP_PED_KEY_PREFIX, keyOrName), keyOrName
@@ -2282,7 +2293,7 @@ function buildSharedWardrobeData(ped)
     }
 end
 
-function applyMpPedData(ped, data)
+function applyMpPedData(ped, data, options)
     if not data then return false end
     if data.ModelHash and data.ModelHash ~= 0
         and not authorizeModel('ped', data.ModelHash, 'player.loadMpPed') then return false end
@@ -2374,35 +2385,37 @@ function applyMpPedData(ped, data)
         print('[cortex-admin] Applied head overlays (legacy format)')
     end
 
-    ClearPedDecorations(ped)
-    
-    if data.Tattoos and type(data.Tattoos) == 'table' and #data.Tattoos > 0 then
-        for i, tattoo in ipairs(data.Tattoos) do
-            if tattoo.collection and tattoo.overlay then
-                AddPedDecorationFromHashes(ped, tattoo.collection, tattoo.overlay)
-            end
-        end
-        print(('[cortex-admin] Applied %d tattoos'):format(#data.Tattoos))
-    else
-        local legacyPedTattoos = data.PedTattoos or data.PedTatttoos
-        if type(legacyPedTattoos) == 'table' then
-        local count = 0
-            for category, tattooList in pairs(legacyPedTattoos) do
-            if type(tattooList) == 'table' then
-                for _, tattoo in ipairs(tattooList) do
-                    if tattoo.collection and tattoo.overlay then
-                        AddPedDecorationFromHashes(ped, tattoo.collection, tattoo.overlay)
-                        count = count + 1
-                    elseif tattoo[1] and tattoo[2] then
-                        AddPedDecorationFromHashes(ped, tattoo[1], tattoo[2])
-                        count = count + 1
-                    end
+    if not (options and options.preserveDecorations == true) then
+        ClearPedDecorations(ped)
+
+        if data.Tattoos and type(data.Tattoos) == 'table' and #data.Tattoos > 0 then
+            for i, tattoo in ipairs(data.Tattoos) do
+                if tattoo.collection and tattoo.overlay then
+                    AddPedDecorationFromHashes(ped, tattoo.collection, tattoo.overlay)
                 end
             end
-        end
-        if count > 0 then
-            print(('[cortex-admin] Applied %d tattoos (legacy format)'):format(count))
-        end
+            print(('[cortex-admin] Applied %d tattoos'):format(#data.Tattoos))
+        else
+            local legacyPedTattoos = data.PedTattoos or data.PedTatttoos
+            if type(legacyPedTattoos) == 'table' then
+                local count = 0
+                for _, tattooList in pairs(legacyPedTattoos) do
+                    if type(tattooList) == 'table' then
+                        for _, tattoo in ipairs(tattooList) do
+                            if tattoo.collection and tattoo.overlay then
+                                AddPedDecorationFromHashes(ped, tattoo.collection, tattoo.overlay)
+                                count = count + 1
+                            elseif tattoo[1] and tattoo[2] then
+                                AddPedDecorationFromHashes(ped, tattoo[1], tattoo[2])
+                                count = count + 1
+                            end
+                        end
+                    end
+                end
+                if count > 0 then
+                    print(('[cortex-admin] Applied %d tattoos (legacy format)'):format(count))
+                end
+            end
         end
     end
     
@@ -3179,7 +3192,7 @@ local function convertVmenuLoadout(raw)
         if weapon then weapons[#weapons + 1] = weapon end
     end
     if #weapons == 0 and #raw > 0 then return nil end
-    return { weapons = weapons, savedAt = os.time(), importedFrom = 'vmenu' }
+    return { weapons = weapons, savedAt = currentUnixTime(), importedFrom = 'vmenu' }
 end
 
 local function importVmenuWeaponLoadouts(snapshot)
@@ -3374,7 +3387,7 @@ Admin.getVmenuMigrationSnapshot = function()
 
     return {
         vmenuRunning = GetResourceState('vMenu') == 'started',
-        generatedAt = os.time(),
+        generatedAt = currentUnixTime(),
         peds = {
             available = type(pedPayload) == 'table',
             count = type(pedPayload) == 'table' and #pedPayload or 0,
@@ -3547,7 +3560,7 @@ Admin.importVmenuMigrationData = function()
         },
         bans = type(serverState) == 'table' and serverState.bans or { reason = 'unavailable' },
         permissions = getPermissionMigrationSummary(),
-        completedAt = os.time(),
+        completedAt = currentUnixTime(),
     }
 
     local domains = { summary.peds, summary.nonMpPeds, summary.vehicles, summary.weaponLoadouts, summary.settings, summary.locations }
@@ -4136,7 +4149,7 @@ Admin.saveWeaponLoadout = function(name)
 
     loadouts[name] = {
         weapons = weapons,
-        savedAt = GetCloudTimeAsInt and GetCloudTimeAsInt() or os.time(),
+        savedAt = currentUnixTime(),
     }
     saveKvpJson(C.WEAPON_LOADOUTS_KEY, loadouts)
     notify('success', ('Weapon loadout saved: %s'):format(name))
@@ -4246,6 +4259,9 @@ end
 local freecam = {
     enabled = false,
     cam = nil,
+    ped = nil,
+    controlledEntity = nil,
+    entities = {},
     speed = 2.5,
     pitch = 0.0,
     yaw = 0.0,
@@ -4256,12 +4272,81 @@ local noclip = {
     speed = 2.5,
 }
 
+local function restoreFreecamEntities()
+    for index = 1, #freecam.entities do
+        local record = freecam.entities[index]
+        local entity = record.entity
+        if entity and entity ~= 0 and DoesEntityExist(entity) then
+            if record.freezeChanged and IsEntityPositionFrozen(entity) then
+                FreezeEntityPosition(entity, record.wasFrozen)
+            end
+            if record.visibilityChanged and not IsEntityVisible(entity) then
+                SetEntityVisible(entity, record.wasVisible, false)
+            end
+        end
+    end
+
+    freecam.entities = {}
+    freecam.ped = nil
+    freecam.controlledEntity = nil
+end
+
+local function captureFreecamEntity(entity, shouldFreeze, shouldHide)
+    local record = {
+        entity = entity,
+        wasFrozen = IsEntityPositionFrozen(entity),
+        wasVisible = IsEntityVisible(entity),
+        freezeChanged = false,
+        visibilityChanged = false,
+        shouldFreeze = shouldFreeze == true,
+        shouldHide = shouldHide == true,
+    }
+
+    if record.shouldFreeze then
+        record.freezeChanged = record.wasFrozen ~= true
+        FreezeEntityPosition(entity, true)
+    end
+    if record.shouldHide then
+        record.visibilityChanged = record.wasVisible ~= false
+        SetEntityVisible(entity, false, false)
+    end
+
+    freecam.entities[#freecam.entities + 1] = record
+end
+
+local function captureFreecamState(ped)
+    freecam.ped = ped
+    freecam.controlledEntity = GetVehiclePedIsIn(ped, false)
+    if not freecam.controlledEntity or freecam.controlledEntity == 0 then
+        freecam.controlledEntity = ped
+    end
+
+    captureFreecamEntity(ped, true, true)
+    if freecam.controlledEntity ~= ped then
+        captureFreecamEntity(freecam.controlledEntity, true, false)
+    end
+end
+
+local function reassertFreecamEntities()
+    for index = 1, #freecam.entities do
+        local record = freecam.entities[index]
+        if record.entity and record.entity ~= 0 and DoesEntityExist(record.entity) then
+            if record.shouldFreeze then
+                FreezeEntityPosition(record.entity, true)
+            end
+            if record.shouldHide then
+                SetEntityVisible(record.entity, false, false)
+            end
+        end
+    end
+end
+
 function destroyFreecamCam()
     if freecam.cam and DoesCamExist(freecam.cam) then
         SetCamActive(freecam.cam, false)
-        RenderScriptCams(false, true, 250, true, false)
         DestroyCam(freecam.cam, false)
     end
+    RenderScriptCams(false, true, 250, true, false)
     freecam.cam = nil
 end
 
@@ -4275,19 +4360,14 @@ function setFreecam(enabled, silent)
     end
 
     if not enabled then
-        if not freecam.enabled and not freecam.cam then
+        if not freecam.enabled and not freecam.cam and #freecam.entities == 0 then
             return
         end
         freecam.enabled = false
         destroyFreecamCam()
-        local ped = getPed()
-        FreezeEntityPosition(ped, false)
-        SetEntityVisible(ped, true, false)
-        ResetEntityAlpha(ped)
+        restoreFreecamEntities()
         ClearFocus()
-        if exports['cortex-lib'] and exports['cortex-lib'].hideHelp then
-            exports['cortex-lib']:hideHelp()
-        end
+        exports['cortex-lib']:hideHelp()
         if not silent then
             notify('info', 'Freecam off.')
         end
@@ -4298,9 +4378,14 @@ function setFreecam(enabled, silent)
         return
     end
 
-    freecam.enabled = true
     local ped = getPed()
-    FreezeEntityPosition(ped, true)
+    if not ped or ped == 0 or not DoesEntityExist(ped) or IsEntityDead(ped) then
+        setToggle('dev.freecam', false)
+        return
+    end
+
+    freecam.enabled = true
+    captureFreecamState(ped)
 
     local c = GetGameplayCamCoord()
     local rot = GetGameplayCamRot(2)
@@ -4310,27 +4395,44 @@ function setFreecam(enabled, silent)
 
     destroyFreecamCam()
     freecam.cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', c.x, c.y, c.z, freecam.pitch, 0.0, freecam.yaw, fov, false, 2)
+    if not freecam.cam or not DoesCamExist(freecam.cam) then
+        setFreecam(false, true)
+        return
+    end
     SetCamActive(freecam.cam, true)
     RenderScriptCams(true, true, 400, true, false)
 
-    if exports['cortex-lib'] and exports['cortex-lib'].showHelp then
-        exports['cortex-lib']:showHelp({
-            { label = 'Move', value = 'W S A D' },
-            { label = 'Up / Down', value = 'Space Q' },
-            { label = 'Look', value = 'Mouse' },
-            { label = 'Faster', value = 'Shift' },
-            { label = 'Slower', value = 'Ctrl' },
-            { label = 'Exit', value = 'Esc · Backspace' },
-            { label = 'Off', value = 'Recording tab' },
-        })
-    end
+    exports['cortex-lib']:showHelp({
+        { label = 'Move', value = 'W S A D' },
+        { label = 'Up / Down', value = 'Space Q' },
+        { label = 'Look', value = 'Mouse' },
+        { label = 'Faster', value = 'Shift' },
+        { label = 'Slower', value = 'Ctrl' },
+        { label = 'Exit', value = 'Esc · Backspace' },
+        { label = 'Off', value = 'Recording tab' },
+    })
 
     CreateThread(function()
         while freecam.enabled do
             local cam = freecam.cam
-            if not cam or not DoesCamExist(cam) then
+            local currentPed = getPed()
+            local currentEntity = currentPed
+            if currentPed and currentPed ~= 0 and DoesEntityExist(currentPed) then
+                local vehicle = GetVehiclePedIsIn(currentPed, false)
+                if vehicle and vehicle ~= 0 then
+                    currentEntity = vehicle
+                end
+            end
+            if not cam or not DoesCamExist(cam) or not currentPed or currentPed == 0
+                or not DoesEntityExist(currentPed) or currentPed ~= freecam.ped
+                or currentEntity ~= freecam.controlledEntity or not DoesEntityExist(currentEntity)
+                or IsEntityDead(currentPed) then
+                setToggle('dev.freecam', false)
+                setFreecam(false, true)
                 break
             end
+
+            reassertFreecamEntities()
 
             DisableControlAction(0, 30, true)
             DisableControlAction(0, 31, true)
@@ -4738,6 +4840,346 @@ function actionSetFaceFeature(data)
     SetPedFaceFeature(ped, featureId, v)
 end
 
+local lastAppearanceRandomization = nil
+local lastGeneratedOutfitId = nil
+
+local NATURAL_EYE_COLORS = { 0, 1, 2, 3, 4, 5, 6, 7 }
+local GENERATED_PROP_IDS = { 0, 1, 2, 6, 7 }
+local GENERATED_CLEAR_COMPONENT_IDS = { 1, 5, 7, 9, 10 }
+
+local function randomChoice(values)
+    if type(values) ~= 'table' or #values == 0 then return nil end
+    return values[math.random(1, #values)]
+end
+
+local function randomUnit(minimum, maximum)
+    return minimum + ((maximum - minimum) * (math.random(0, 1000) / 1000))
+end
+
+local function randomReviewedFaceFeature(gender, profileName, featureId)
+    local minimum, maximum = -0.12, 0.12
+    if AppearanceRandomizer and AppearanceRandomizer.getFaceFeatureRange then
+        minimum, maximum = AppearanceRandomizer.getFaceFeatureRange(gender, profileName, featureId)
+    end
+    -- Two rolls keep the result near the center while respecting the reviewed
+    -- per-feature band for jaw, chin, eyes, lips and neck.
+    return (randomUnit(minimum, maximum) + randomUnit(minimum, maximum)) / 2
+end
+
+local function collectNaturalHairColors(tone)
+    local colors = {}
+    local count = type(GetNumHairColors) == 'function' and tonumber(GetNumHairColors()) or 0
+    count = math.min(256, math.max(0, math.floor(count or 0)))
+
+    if type(GetPedHairRgbColor) == 'function' then
+        for index = 0, count - 1 do
+            local ok, red, green, blue = pcall(GetPedHairRgbColor, index)
+            if ok then
+                colors[#colors + 1] = {
+                    index = index,
+                    r = tonumber(red),
+                    g = tonumber(green),
+                    b = tonumber(blue),
+                }
+            end
+        end
+    end
+
+    if AppearanceRandomizer and AppearanceRandomizer.filterNaturalHairColors then
+        return AppearanceRandomizer.filterNaturalHairColors(colors, tone)
+    end
+    return { { index = 0, r = 0, g = 0, b = 0 } }
+end
+
+local function generatedComponentIsValid(ped, component)
+    if type(component) ~= 'table' then return false end
+    local drawable = component.globalDrawable or component.drawable
+    if type(drawable) ~= 'number' then return false end
+    if component.globalDrawable == nil and component.collection ~= '' then return false end
+    -- Official DLC entries are stored by their catalog global index, then
+    -- resolved to their collection-local index immediately before applying.
+    -- Runtime global counts let older game builds discard unavailable pieces.
+    local drawableCount = tonumber(GetNumberOfPedDrawableVariations(ped, component.component)) or 0
+    if drawable < 0 or drawable >= drawableCount then return false end
+    local textureCount = tonumber(GetNumberOfPedTextureVariations(ped, component.component, drawable)) or 0
+    if textureCount <= 0 then return component.texture == 0 end
+    return component.texture >= 0 and component.texture < textureCount
+end
+
+local function generatedAccessoryIsValid(ped, accessory)
+    if type(accessory) ~= 'table' or accessory.collection ~= '' then return false end
+    local drawableCount = tonumber(GetNumberOfPedPropDrawableVariations(ped, accessory.prop)) or 0
+    if accessory.drawable < 0 or accessory.drawable >= drawableCount then return false end
+    local textureCount = tonumber(GetNumberOfPedPropTextureVariations(ped, accessory.prop, accessory.drawable)) or 0
+    if textureCount <= 0 then return accessory.texture == 0 end
+    return accessory.texture >= 0 and accessory.texture < textureCount
+end
+
+local function generatedClothingPieceIsValid(ped, piece)
+    if type(piece) ~= 'table' or type(piece.components) ~= 'table' or #piece.components == 0 then return false end
+    for _, component in ipairs(piece.components) do
+        if not generatedComponentIsValid(ped, component) then return false end
+    end
+    return true
+end
+
+local function selectGeneratedOutfit(ped, options)
+    local gender = GetEntityModel(ped) == joaat('mp_f_freemode_01') and 'female' or 'male'
+    local pools = AppearanceRandomizer and AppearanceRandomizer.getPiecePools
+        and AppearanceRandomizer.getPiecePools(gender, options.style, options.palette) or nil
+    if not pools or not AppearanceRandomizer.filterPiecePools or not AppearanceRandomizer.assembleOutfit then return nil end
+
+    pools = AppearanceRandomizer.filterPiecePools(
+        pools,
+        function(piece) return generatedClothingPieceIsValid(ped, piece) end,
+        function(accessory) return generatedAccessoryIsValid(ped, accessory) end
+    )
+
+    if #pools.tops == 0 or #pools.bottoms == 0 or #pools.shoes == 0 then
+        print(('[cortex-admin] No compatible generated pieces model=%s gender=%s style=%s tops=%d bottoms=%d shoes=%d'):format(
+            tostring(GetEntityModel(ped)), gender, options.style, #pools.tops, #pools.bottoms, #pools.shoes
+        ))
+        return nil
+    end
+
+    local fallback = nil
+    for _ = 1, 12 do
+        local outfit = AppearanceRandomizer.assembleOutfit(pools, options.accessories, function(count)
+            return math.random(1, count)
+        end)
+        if outfit then
+            fallback = outfit
+            if outfit.id ~= lastGeneratedOutfitId then return outfit end
+        end
+    end
+    return fallback
+end
+
+local function applyGeneratedCollectionComponent(ped, component)
+    if component.globalDrawable ~= nil then
+        local getCollectionName = type(GetPedCollectionNameFromDrawable) == 'function'
+            and GetPedCollectionNameFromDrawable or GetPedDrawableCollectionName
+        local getLocalIndex = type(GetPedCollectionLocalIndexFromDrawable) == 'function'
+            and GetPedCollectionLocalIndexFromDrawable or GetPedDrawableCollectionLocalIndex
+        if type(getCollectionName) == 'function' and type(getLocalIndex) == 'function'
+            and type(SetPedCollectionComponentVariation) == 'function' then
+            local nameOk, collection = pcall(getCollectionName, ped, component.component, component.globalDrawable)
+            local indexOk, localIndex = pcall(getLocalIndex, ped, component.component, component.globalDrawable)
+            if nameOk and indexOk and type(collection) == 'string' and type(localIndex) == 'number' and localIndex >= 0 then
+                SetPedCollectionComponentVariation(
+                    ped, component.component, collection,
+                    localIndex, component.texture, 0
+                )
+                return
+            end
+        end
+        setPedComponent(ped, component.component, component.globalDrawable, component.texture)
+        return
+    end
+    if type(SetPedCollectionComponentVariation) == 'function' then
+        SetPedCollectionComponentVariation(
+            ped, component.component, component.collection,
+            component.drawable, component.texture, 0
+        )
+        return
+    end
+    setPedComponent(ped, component.component, component.drawable, component.texture)
+end
+
+local function applyGeneratedCollectionProp(ped, accessory)
+    if type(SetPedCollectionPropIndex) == 'function' then
+        SetPedCollectionPropIndex(
+            ped, accessory.prop, accessory.collection,
+            accessory.drawable, accessory.texture, true
+        )
+        return
+    end
+    setPedProp(ped, accessory.prop, accessory.drawable, accessory.texture)
+end
+
+local function applyGeneratedOutfit(ped, preset, includeAccessories)
+    for _, componentId in ipairs(GENERATED_CLEAR_COMPONENT_IDS) do
+        setPedComponent(ped, componentId, 0, 0)
+    end
+    for _, propId in ipairs(GENERATED_PROP_IDS) do ClearPedProp(ped, propId) end
+    for _, component in ipairs(preset.components) do
+        applyGeneratedCollectionComponent(ped, component)
+    end
+    if includeAccessories then
+        for _, accessory in ipairs(preset.accessories) do
+            applyGeneratedCollectionProp(ped, accessory)
+        end
+    end
+    lastGeneratedOutfitId = preset.id
+end
+
+local function setGeneratedOverlay(ped, overlayId, chance, minimumOpacity, maximumOpacity, colorType, firstColor, secondColor)
+    local maxStyles = type(GetNumHeadOverlayValues) == 'function'
+        and tonumber(GetNumHeadOverlayValues(overlayId)) or 0
+    if maxStyles <= 0 or math.random(1, 100) > chance then
+        SetPedHeadOverlay(ped, overlayId, 0, 0.0)
+        return
+    end
+
+    local style = math.random(0, math.max(0, maxStyles - 1))
+    SetPedHeadOverlay(ped, overlayId, style, randomUnit(minimumOpacity, maximumOpacity))
+    if colorType then
+        SetPedHeadOverlayColor(ped, overlayId, colorType, firstColor or 0, secondColor or firstColor or 0)
+    end
+end
+
+local function applyGeneratedCharacter(ped, options)
+    local isMale = GetEntityModel(ped) == joaat('mp_m_freemode_01')
+    local gender = isMale and 'male' or 'female'
+    local identity = AppearanceRandomizer.assembleIdentity(gender, options, function(count)
+        return math.random(1, count)
+    end)
+    SetPedHeadBlendData(
+        ped,
+        identity.shapeFirst,
+        identity.shapeSecond,
+        0,
+        identity.skinFirst,
+        identity.skinSecond,
+        0,
+        randomUnit(identity.shapeMixMin, identity.shapeMixMax),
+        randomUnit(identity.skinMixMin, identity.skinMixMax),
+        0.0,
+        false
+    )
+
+    for featureId = 0, 19 do
+        SetPedFaceFeature(ped, featureId, randomReviewedFaceFeature(gender, identity.profile, featureId))
+    end
+
+    local hairComponent = {
+        component = 2,
+        collection = identity.hair.collection,
+        drawable = identity.hair.drawable,
+        texture = identity.hair.texture,
+    }
+    if generatedComponentIsValid(ped, hairComponent) then
+        applyGeneratedCollectionComponent(ped, hairComponent)
+    else
+        setPedComponent(ped, 2, 0, 0)
+    end
+
+    local naturalColors = collectNaturalHairColors(options.hairTone)
+    local primary = randomChoice(naturalColors) or { index = 0 }
+    local highlight = math.random(1, 100) <= 68 and primary or (randomChoice(naturalColors) or primary)
+    SetPedHairColor(ped, primary.index, highlight.index)
+    SetPedEyeColor(ped, randomChoice(NATURAL_EYE_COLORS) or 0)
+
+    local overlayPlan = AppearanceRandomizer.getOverlayPlan(gender, options)
+    for overlayId = 0, 11 do
+        local rule = overlayPlan[overlayId]
+        local colorType, firstColor, secondColor = nil, nil, nil
+        if rule.color == 'hair' then
+            colorType, firstColor, secondColor = 1, primary.index, highlight.index
+        elseif rule.color == 'cosmetic' then
+            colorType, firstColor, secondColor = 2, 0, 0
+        end
+        setGeneratedOverlay(
+            ped,
+            overlayId,
+            rule.chance,
+            rule.minimumOpacity,
+            rule.maximumOpacity,
+            colorType,
+            firstColor,
+            secondColor
+        )
+    end
+end
+
+local function resolveGeneratedModel(options, currentModel)
+    if options.mode ~= 'character' or options.gender == 'keep' then return currentModel end
+    if options.gender == 'random' then
+        return math.random(0, 1) == 0 and joaat('mp_m_freemode_01') or joaat('mp_f_freemode_01')
+    end
+    return options.gender == 'female' and joaat('mp_f_freemode_01') or joaat('mp_m_freemode_01')
+end
+
+Admin.randomizeAppearance = function(rawOptions)
+    local options = AppearanceRandomizer and AppearanceRandomizer.sanitizeOptions
+        and AppearanceRandomizer.sanitizeOptions(rawOptions) or { mode = 'outfit', style = 'polished', gender = 'keep', hairTone = 'any', palette = 'neutral', accessories = false }
+    local ped = getPed()
+    if ped == 0 or not DoesEntityExist(ped) then
+        notify('error', 'Player ped is unavailable.')
+        return { ok = false, error = 'ped_unavailable', canUndo = lastAppearanceRandomization ~= nil }
+    end
+
+    local currentModel = GetEntityModel(ped)
+    local targetModel = resolveGeneratedModel(options, currentModel)
+    if options.mode == 'outfit' and not isFreemodePed(ped) then
+        notify('error', 'Outfit generation requires an MP freemode ped.')
+        return { ok = false, error = 'freemode_required', canUndo = lastAppearanceRandomization ~= nil }
+    end
+    if options.mode == 'character' and options.gender == 'keep' and not isFreemodePed(ped) then
+        targetModel = math.random(0, 1) == 0 and joaat('mp_m_freemode_01') or joaat('mp_f_freemode_01')
+    end
+
+    local undoSnapshot = isFreemodePed(ped) and captureMpPedData(ped, 'Before generated appearance') or nil
+
+    if targetModel ~= currentModel then
+        local modelName = targetModel == joaat('mp_f_freemode_01') and 'mp_f_freemode_01' or 'mp_m_freemode_01'
+        if not authorizeModel('ped', modelName, 'player.randomizeAppearance') then
+            return { ok = false, error = 'model_forbidden', canUndo = lastAppearanceRandomization ~= nil }
+        end
+        if not exports['cortex-lib']:requestModel(targetModel, 5000) then
+            notify('error', 'Failed to load the selected freemode model.')
+            return { ok = false, error = 'model_load_failed', canUndo = lastAppearanceRandomization ~= nil }
+        end
+
+        SetPlayerModel(PlayerId(), targetModel)
+        SetModelAsNoLongerNeeded(targetModel)
+        Wait(100)
+        ped = getPed()
+        SetPedDefaultComponentVariation(ped)
+    end
+
+    local outfit = selectGeneratedOutfit(ped, options)
+    if not outfit then
+        notify('error', 'No compatible clothing pieces were available for this freemode model.')
+        return { ok = false, error = 'no_compatible_outfit', canUndo = lastAppearanceRandomization ~= nil }
+    end
+
+    lastAppearanceRandomization = undoSnapshot
+    applyGeneratedOutfit(ped, outfit, options.accessories)
+    if options.mode == 'character' then applyGeneratedCharacter(ped, options) end
+
+    local label = options.mode == 'character' and 'character' or 'outfit'
+    notify('success', ('Applied %s (%s %s).'):format(outfit.name, options.style, label))
+    return {
+        ok = true,
+        mode = options.mode,
+        style = options.style,
+        outfitId = outfit.id,
+        outfitName = outfit.name,
+        canUndo = lastAppearanceRandomization ~= nil,
+        modelChanged = targetModel ~= currentModel,
+    }
+end
+
+Admin.undoRandomizedAppearance = function()
+    if not lastAppearanceRandomization then
+        notify('error', 'There is no generated appearance to undo.')
+        return { ok = false, error = 'nothing_to_undo', canUndo = false }
+    end
+
+    local snapshot = lastAppearanceRandomization
+    lastAppearanceRandomization = nil
+    local restored = applyMpPedData(getPed(), snapshot, { preserveDecorations = true })
+    if not restored then
+        lastAppearanceRandomization = snapshot
+        notify('error', 'Could not restore the previous appearance.')
+        return { ok = false, error = 'restore_failed', canUndo = true }
+    end
+
+    notify('success', 'Restored the appearance from before the last roll.')
+    return { ok = true, canUndo = false }
+end
+
 function actionRandomizeMpPedFace()
     local ped = getPed()
     local pedModel = GetEntityModel(ped)
@@ -4747,48 +5189,8 @@ function actionRandomizeMpPedFace()
         return
     end
 
-    SetPedHeadBlendData(
-        ped,
-        math.random(0, 45),
-        math.random(0, 45),
-        0,
-        math.random(0, 45),
-        math.random(0, 45),
-        0,
-        math.random(0, 100) / 100,
-        math.random(0, 100) / 100,
-        0.0,
-        false
-    )
-
-    for featureId = 0, 19 do
-        SetPedFaceFeature(ped, featureId, math.random(-100, 100) / 100)
-    end
-
-    for overlayId = 0, 11 do
-        local style = 0
-        if GetNumHeadOverlayValues then
-            local maxStyles = GetNumHeadOverlayValues(overlayId) or 0
-            if maxStyles > 0 then
-                style = math.random(0, math.max(0, maxStyles - 1))
-            end
-        end
-
-        SetPedHeadOverlay(ped, overlayId, style, math.random(15, 100) / 100)
-
-        if overlayId == 1 or overlayId == 2 or overlayId == 10 then
-            SetPedHeadOverlayColor(ped, overlayId, 1, math.random(0, 63), math.random(0, 63))
-        elseif overlayId == 4 or overlayId == 5 or overlayId == 8 then
-            SetPedHeadOverlayColor(ped, overlayId, 2, math.random(0, 63), math.random(0, 63))
-        end
-    end
-
-    SetPedEyeColor(ped, math.random(0, 31))
-    if GetPedHairColors then
-        SetPedHairColor(ped, math.random(0, 63), math.random(0, 63))
-    end
-
-    notify('success', 'Randomized MP face and overlays.')
+    applyGeneratedCharacter(ped, { hairTone = 'any' })
+    notify('success', 'Randomized MP face, hair and overlays.')
 end
 
 function actionClearPedTattoos()
@@ -5053,7 +5455,7 @@ function startVehiclePreview(model)
         return false
     end
 
-    if not authorizeModel('vehicle', model, 'vehicle.preview') then return false end
+    if not authorizeModel('vehicle', model, 'vehicle.spawn') then return false end
     clearVehiclePreview()
     if not spawnPreviewVehicleEntity(model, false, nil) then
         return false
@@ -5905,6 +6307,10 @@ function toggleHud(enabled)
 end
 
 Admin.executeAction = function(actionId, data)
+    if type(Admin.dispatchVmenuAction) == 'function' then
+        local handled, result = Admin.dispatchVmenuAction('execute', actionId, data)
+        if handled then return result end
+    end
     if actionId == 'player.heal' then
         return actionPlayerHeal()
     elseif actionId == 'player.armor' then
@@ -5939,6 +6345,10 @@ Admin.executeAction = function(actionId, data)
         return actionSetFaceFeature(data)
     elseif actionId == 'player.randomizeMpFace' then
         return actionRandomizeMpPedFace()
+    elseif actionId == 'player.randomizeAppearance' then
+        return Admin.randomizeAppearance(data)
+    elseif actionId == 'player.undoRandomizedAppearance' then
+        return Admin.undoRandomizedAppearance()
     elseif actionId == 'player.clearPedTattoos' then
         return actionClearPedTattoos()
     elseif actionId == 'player.setDefaultSavedPed' then
@@ -6173,7 +6583,8 @@ Admin.executeAction = function(actionId, data)
         return
     end
 
-    notify('error', 'Action not implemented.')
+    notify('error', ('Action not implemented: %s'):format(tostring(actionId)))
+    return false
 end
 
 -- Blip map on state.devPlayerBlips. These are Admin.* (not `local function`) so they do not use main-chunk local slots (Lua limit 200).
@@ -6227,6 +6638,10 @@ function Admin.clearPlayerBlips()
 end
 
 Admin.toggleAction = function(actionId, enabled)
+    if type(Admin.dispatchVmenuAction) == 'function' then
+        local handled, result = Admin.dispatchVmenuAction('toggle', actionId, enabled)
+        if handled then return result end
+    end
     setToggle(actionId, enabled)
 
     if actionId == 'player.godmode' then
@@ -6349,6 +6764,10 @@ Admin.toggleAction = function(actionId, enabled)
 end
 
 Admin.selectAction = function(actionId, value)
+    if type(Admin.dispatchVmenuAction) == 'function' then
+        local handled, result = Admin.dispatchVmenuAction('select', actionId, value)
+        if handled then return result end
+    end
     if actionId == 'player.setWantedLevel' then
         local level = tonumber(value) or 0
         if level < 0 then level = 0 end
@@ -6500,6 +6919,9 @@ end
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     setFreecam(false, true)
+    if noclip.enabled then
+        setNoclip(false)
+    end
     clearVehiclePreview()
     Admin.restoreVehicleTuningSessions()
     setAmbientSuppressionState(false)

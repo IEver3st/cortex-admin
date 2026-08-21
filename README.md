@@ -11,7 +11,7 @@
 
 ## Features
 
-The menu is organized into tabs. The full declarative action catalog lives in `shared/actions.lua` and currently ships **130 actions and workspaces**.
+The menu is organized into tabs. The full declarative action catalog lives in `shared/actions.lua` and currently ships **260 actions and workspaces**.
 
 - **Player** – god mode, invisibility, noclip, super jump, fast run/swim, infinite stamina, no ragdoll, heal, armor, revive, wanted level, freeze, clean/dry/wet player, ped model swap, save/load MP peds.
 - **Vehicle** – spawn, preview, save personal vehicles, repair, clean, delete, flip, engine toggle, vehicle godmode, speed limiter, torque/power multipliers, plate text, bike seatbelt, max performance mods.
@@ -19,7 +19,7 @@ The menu is organized into tabs. The full declarative action catalog lives in `s
 - **World** – set weather (with zone editor), set time, freeze time, blackout, disable NPCs/traffic, clear area/vehicles/peds/objects.
 - **Weapons** – give weapon, give all, remove all, save/load/delete loadouts, infinite ammo, set ammo, attachments, tints, parachute.
 - **Teleport** – waypoint, marker, coordinates, back, save/load/delete custom locations.
-- **Appearance** – randomize MP face, clear ped tattoos, set default outfit.
+- **Appearance** – generate a cleaned-up outfit or complete freemode character, choose a style and palette, restrict hair to natural tones, undo the last roll, randomize MP face, clear ped tattoos, and set a default outfit.
 - **Vehicle Customizer** – dedicated UI tab for tuning/styling the current vehicle.
 - **Inventory** *(QBX + ox_inventory)* – give items to players from the full item list.
 - **Garage** *(QBX + qbx_vehicles)* – spawn personal vehicles from the QBX garage.
@@ -34,6 +34,8 @@ The menu is organized into tabs. The full declarative action catalog lives in `s
 
 ### appearance
 - Set Default Outfit
+- Generate Appearance
+- Undo Generated Appearance
 - Randomize MP Face
 - Clear Ped Tattoos
 
@@ -290,7 +292,7 @@ Teleports the local player to the given `x`/`y` coordinates, optionally displayi
 - `fxmanifest.lua` – resource manifest; declares scripts, files, `cortex-lib` dependency, the `teleportToCoords` export and the `ui_page`.
 - `shared/bridge.lua` – runtime detection for `qbx_core`, `ox_inventory`, and `qbx_vehicles`.
 - `shared/config.lua` – central configuration, permission strings, and QBX permission mapping.
-- `shared/actions.lua` – declarative catalog of 130 menu actions used by both client and server.
+- `shared/actions.lua` – declarative catalog of 260 menu actions used by both client and server.
 - `shared/weapon_component_hashes.lua` – weapon/tint/attachment data.
 - `client/main.lua` – menu state, command registration, key mapping, world sync, NUI focus.
 - `client/nui.lua` – NUI callbacks, vehicle preview logic, wardrobe sharing.
@@ -320,6 +322,22 @@ The UI can be previewed in a normal browser:
    ```
 
 > The preview server requires [Bun](https://bun.sh). If you do not have Bun, you can serve `ui/` with any static file server and append `?preview=1&debug=1` to `index.html`.
+
+### Appearance generator
+
+Open **Appearance > Appearance generator** to apply either a curated outfit or a complete MP freemode character. Outfit-only rolls preserve the current face, heritage, and hair. Complete-character rolls add a body-model choice, centered facial variation, understated overlays, natural eye colors, and hair colors selected from the live GTA palette after excluding saturated dye colors.
+
+Outfits are assembled from reviewed, interchangeable piece pools for each gender, style, and palette. Upper-body modules keep arms, undershirts, and tops together, then the generator independently chooses compatible pants and shoes. This provides real random variety without mixing unrelated component numbers. The mixed palette varies the focal top while keeping pants and shoes neutral, so independent color rolls cannot clash. Invalid runtime pieces are removed individually, and an invalid optional watch or pair of glasses never rejects the clothing outfit. The library uses FiveM's stable base-game collection indexes instead of GTA's global random clothing native. The most recent roll can be undone once, and generated looks remain temporary until they are saved to the outfit library. Changing the body model recreates the player ped, so model-bound tattoos or state owned by another appearance resource may need to be reapplied.
+
+Use these references when reviewing or expanding the preset library:
+
+- [RAGE Multiplayer clothing previews](https://wiki.rage.mp/wiki/Clothes) for visual component and prop inspection.
+- [FiveM-ClothingData](https://github.com/Colbss/FiveM-ClothingData) for collection-local drawable, texture, label, and render metadata.
+- [Cfx.re collection-based native documentation](https://docs.fivem.net/docs/scripting-manual/using-new-game-features/collection-based-natives/) for stable index application and base-collection behavior.
+
+### New feature markers
+
+New menu features should register a release token in `FEATURE_RELEASES` in `ui/app.js` and show the shared `feature-discovery-dot` marker at their entry point. Mark the release as discovered when the player first opens or uses the feature. Discovery is stored locally per player NUI profile, and changing a release token shows the dot again for a materially updated feature.
 
 ## Limitations
 

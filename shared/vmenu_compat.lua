@@ -66,7 +66,7 @@ local doorValues = values({
     { 'Remove rear left', 'remove_2' }, { 'Remove rear right', 'remove_3' },
     { 'Remove hood', 'remove_4' }, { 'Remove trunk', 'remove_5' },
     { 'Remove extra door 1', 'remove_6' }, { 'Remove extra door 2', 'remove_7' },
-    { 'Restore removed doors', 'restore' },
+    { 'Repair vehicle / restore doors', 'restore' },
 })
 
 local windowValues = values({
@@ -151,7 +151,7 @@ local actions = {
     { id = 'vehicle.tyres', label = 'Fix / Destroy Tyres', description = 'Repair or burst one tyre or all tyres', tab = 'vehicle', type = 'select', values = values({ { 'Fix all', 'fix_all' }, { 'Burst all', 'burst_all' }, { 'Fix front left', 'fix_0' }, { 'Fix front right', 'fix_1' }, { 'Burst front left', 'burst_0' }, { 'Burst front right', 'burst_1' }, { 'Fix rear left', 'fix_4' }, { 'Fix rear right', 'fix_5' }, { 'Burst rear left', 'burst_4' }, { 'Burst rear right', 'burst_5' } }) },
     { id = 'vehicle.dirtLevel', label = 'Set Dirt Level', description = 'Set current vehicle dirt from clean to filthy', tab = 'vehicle', type = 'slider', min = 0, max = 15, step = 0.5 },
     { id = 'vehicle.personalSet', label = 'Set Personal Vehicle', description = 'Use the current vehicle for remote personal controls', tab = 'vehicle', type = 'action' },
-    { id = 'vehicle.personalEngine', label = 'Personal Vehicle Engine', description = 'Toggle the personal vehicle engine remotely', tab = 'vehicle', type = 'toggle' },
+    { id = 'vehicle.personalEngine', label = 'Toggle Personal Vehicle Engine', description = 'Start or stop the personal vehicle engine remotely', tab = 'vehicle', type = 'action' },
     { id = 'vehicle.personalLights', label = 'Personal Vehicle Lights', description = 'Control personal vehicle lights remotely', tab = 'vehicle', type = 'select', values = lightValues },
     { id = 'vehicle.personalStance', label = 'Personal Vehicle Stance', description = 'Use the normal or reduced-drift suspension stance', tab = 'vehicle', type = 'select', values = values({ { 'Normal', false }, { 'Lowered', true } }) },
     { id = 'vehicle.personalKickPassengers', label = 'Kick Personal Vehicle Passengers', description = 'Ask every passenger to leave the personal vehicle', tab = 'vehicle', type = 'action' },
@@ -431,11 +431,12 @@ for actionId, permission in pairs(personalVehiclePermissions) do
     end
 end
 
-for _, actionId in ipairs({ 'vehicle.spawn', 'vehicle.preview' }) do
+for _, actionId in ipairs({ 'vehicle.spawn' }) do
     Config.VmenuAcePermissions[actionId] = vehicleSpawnerMenu
 end
 ace('vehicle.personal', 'vMenu.SavedVehicles.Spawn', 'vMenu.SavedVehicles.All', 'vMenu.SavedVehicles.Menu', 'vMenu.Everything')
 ace('vehicle.savePersonal', 'vMenu.SavedVehicles.Menu', 'vMenu.SavedVehicles.All', 'vMenu.Everything')
+ace('vehicle.removePersonal', 'vMenu.SavedVehicles.Menu', 'vMenu.SavedVehicles.All', 'vMenu.Everything')
 ace('vehicle.customMods', 'vMenu.VehicleOptions.Mod', 'vMenu.VehicleOptions.All', 'vMenu.Everything')
 ace('vehicle.customColors', 'vMenu.VehicleOptions.Colors', 'vMenu.VehicleOptions.All', 'vMenu.Everything')
 ace('vehicle.customLiveries', 'vMenu.VehicleOptions.Liveries', 'vMenu.VehicleOptions.All', 'vMenu.Everything')

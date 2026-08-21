@@ -5,6 +5,32 @@ const h = React.createElement;
 const UI_VERSION_LABEL = 'v1.1.0';
 const MODEL_HASH_MP_M = 0x705e61f2 >>> 0;
 const MODEL_HASH_MP_F = 0x9c9effd8 >>> 0;
+const FEATURE_DISCOVERY_STORAGE_KEY = 'cortex-admin.discovered-features.v1';
+const FEATURE_RELEASES = Object.freeze({
+    appearanceGenerator: 'custom-character-generator-2026-08-19'
+});
+
+function readDiscoveredFeatureReleases() {
+    try {
+        const raw = window.localStorage.getItem(FEATURE_DISCOVERY_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+        return Object.fromEntries(Object.entries(parsed)
+            .filter(([key, value]) => typeof key === 'string' && typeof value === 'string')
+            .slice(-100));
+    } catch (_) {
+        return {};
+    }
+}
+
+function writeDiscoveredFeatureReleases(releases) {
+    try {
+        window.localStorage.setItem(FEATURE_DISCOVERY_STORAGE_KEY, JSON.stringify(releases));
+    } catch (_) {
+        // Discovery hints are optional; a blocked storage API must not break NUI.
+    }
+}
 
 function modelHashU32(model) {
     const n = Number(model);
@@ -208,6 +234,29 @@ function normalizeAppearancePayload(raw) {
     };
 }
 
+function normalizeSavedOutfitEntry(raw, index) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const cleanName = (value) => String(value == null ? '' : value)
+        .trim()
+        .replace(/^mp_(?:ped_|character_category_)/i, '')
+        .trim()
+        .slice(0, 64);
+    const sourceKey = String(raw.sourceKey == null ? '' : raw.sourceKey).slice(0, 160);
+    const name = cleanName(raw.name)
+        || cleanName(raw.SaveName)
+        || cleanName(raw.saveName)
+        || cleanName(sourceKey)
+        || `Saved outfit ${index + 1}`;
+    const source = String(raw.source == null ? 'cortex-admin' : raw.source).slice(0, 32);
+    const id = String(raw.id == null || raw.id === '' ? `${source}:${sourceKey || index}` : raw.id).slice(0, 192);
+    return { ...raw, id, name, source, sourceKey };
+}
+
+function normalizeSavedOutfitList(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeSavedOutfitEntry).filter(Boolean);
+}
+
 class AppearanceErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -397,7 +446,7 @@ function mixTowardWhite(r, g, b, t) {
 
 function applyMenuAccentCss(hexInput) {
     const root = document.documentElement;
-    const fallback = '#7170ff';
+    const fallback = '#e8a23f';
     const hex = normalizeHex6(hexInput) || fallback;
     const rgb = hexToRgb(hex);
     if (!rgb) {
@@ -447,17 +496,19 @@ function getUiScale() {
     return clamp(blendedScale - shortViewportPenalty, 0.9, 2);
 }
 
-function getViewportProfile() {
+function getViewportProfile(shellRect) {
     const width = window.innerWidth || 1920;
     const height = window.innerHeight || 1080;
+    const s = shellRect || {};
+    const shellW = s.width || width;
+    const shellH = s.height || height;
 
     return {
         width,
         height,
         isNarrow: width <= 1220 || (width <= 1360 && height <= 780),
         isShort: height <= 760,
-        isCramped: width <= 980 || height <= 700,
-        shouldCompact: width <= 1240 || height <= 760 || (width <= 1480 && height <= 820)
+        isCramped: (width <= 980 || height <= 700) || shellW <= 680 || shellH <= 560
     };
 }
 
@@ -477,8 +528,27 @@ function normalizeValues(values) {
         if (typeof entry === 'string' || typeof entry === 'number') {
             return { label: String(entry), value: entry };
         }
-        return { label: entry.label, value: entry.value };
+        if (Array.isArray(entry)) {
+            return { label: entry[0], value: entry[1] };
+        }
+        if (isPlainObject(entry)) {
+            return { label: entry.label, value: entry.value };
+        }
+        return { label: String(entry ?? ''), value: entry };
     });
+}
+
+function normalizeVoiceState(value) {
+    const source = isPlainObject(value) ? value : {};
+    const rawProximity = source.proximity;
+    const rawChannel = source.channel;
+    const proximity = rawProximity === null || rawProximity === undefined ? NaN : Number(rawProximity);
+    const channel = rawChannel === null || rawChannel === undefined ? NaN : Number(rawChannel);
+
+    return {
+        proximity: Number.isFinite(proximity) && proximity >= 0.5 && proximity <= 10000 ? proximity : null,
+        channel: Number.isInteger(channel) && channel >= 0 && channel <= 65535 ? channel : null,
+    };
 }
 
 function isPercentValues(values) {
@@ -489,6 +559,7 @@ function isPercentValues(values) {
 function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
     const [open, setOpen] = useState(false);
     const wrapperRef = React.useRef(null);
+    const triggerRef = React.useRef(null);
     const listboxId = React.useId();
     const [menuStyle, setMenuStyle] = useState(null);
     const selected = options.find((option) => String(option.value) === String(value)) || options[0];
@@ -506,6 +577,12 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
             const gap = 4 * scale;
             const pad = 8;
             const desiredMax = 220 * scale;
+            const availableWidth = Math.max(0, window.innerWidth - (pad * 2));
+            const menuWidth = Math.min(r.width, availableWidth);
+            const menuLeft = Math.min(
+                Math.max(pad, r.left),
+                Math.max(pad, window.innerWidth - pad - menuWidth)
+            );
             const spaceBelow = window.innerHeight - r.bottom - gap - pad;
             const spaceAbove = r.top - gap - pad;
             const openBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove;
@@ -514,8 +591,10 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
                     position: 'fixed',
                     top: r.bottom + gap,
                     bottom: 'auto',
-                    left: r.left,
-                    minWidth: r.width,
+                    left: menuLeft,
+                    width: menuWidth,
+                    minWidth: menuWidth,
+                    maxWidth: menuWidth,
                     maxHeight: Math.min(desiredMax, Math.max(80, spaceBelow)),
                     overflowY: 'auto',
                     zIndex: 10020
@@ -525,8 +604,10 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
                     position: 'fixed',
                     top: 'auto',
                     bottom: window.innerHeight - r.top + gap,
-                    left: r.left,
-                    minWidth: r.width,
+                    left: menuLeft,
+                    width: menuWidth,
+                    minWidth: menuWidth,
+                    maxWidth: menuWidth,
                     maxHeight: Math.min(desiredMax, Math.max(80, spaceAbove)),
                     overflowY: 'auto',
                     zIndex: 10020
@@ -554,6 +635,17 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
         return () => window.removeEventListener('mousedown', handleClick);
     }, [open]);
 
+    useEffect(() => {
+        if (!open) return undefined;
+        const frame = window.requestAnimationFrame(() => {
+            const listbox = document.getElementById(listboxId);
+            const optionButtons = listbox ? Array.from(listbox.querySelectorAll('.admin-select-option')) : [];
+            const selectedIndex = Math.max(0, options.findIndex((option) => String(option.value) === String(value)));
+            if (optionButtons[selectedIndex]) optionButtons[selectedIndex].focus();
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [listboxId, open, options, value]);
+
     const handleToggle = (event) => {
         event.preventDefault();
         if (disabled) return;
@@ -564,6 +656,37 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
         if (disabled) return;
         onChange(option.value);
         setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current && triggerRef.current.focus());
+    };
+
+    const handleTriggerKeyDown = (event) => {
+        if (disabled) return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+        } else if (event.key === 'Escape') {
+            setOpen(false);
+        }
+    };
+
+    const handleOptionKeyDown = (event, index) => {
+        const listbox = document.getElementById(listboxId);
+        const optionButtons = listbox ? Array.from(listbox.querySelectorAll('.admin-select-option')) : [];
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            setOpen(false);
+            window.requestAnimationFrame(() => triggerRef.current && triggerRef.current.focus());
+            return;
+        }
+        let nextIndex = null;
+        if (event.key === 'ArrowDown') nextIndex = Math.min(optionButtons.length - 1, index + 1);
+        if (event.key === 'ArrowUp') nextIndex = Math.max(0, index - 1);
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = optionButtons.length - 1;
+        if (nextIndex !== null && optionButtons[nextIndex]) {
+            event.preventDefault();
+            optionButtons[nextIndex].focus();
+        }
     };
 
     const optionsEl = open && React.createElement('div', {
@@ -572,12 +695,13 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
         role: 'listbox',
         style: menuStyle || { position: 'fixed', top: -9999, left: -9999, minWidth: 0, maxHeight: 0, zIndex: 10020, visibility: 'hidden' }
     },
-        options.map((option) => React.createElement('button', {
+        options.map((option, index) => React.createElement('button', {
             type: 'button',
             key: option.value,
             className: `admin-select-option${String(option.value) === String(value) ? ' active' : ''}`,
             role: 'option',
             'aria-selected': String(option.value) === String(value),
+            onKeyDown: (event) => handleOptionKeyDown(event, index),
             onClick: () => handleSelect(option)
         }, option.label))
     );
@@ -589,7 +713,9 @@ function CustomSelect({ options, value, disabled, onChange, ariaLabel }) {
         React.createElement('button', {
             type: 'button',
             className: 'admin-select-trigger',
+            ref: triggerRef,
             onClick: handleToggle,
+            onKeyDown: handleTriggerKeyDown,
             disabled,
             'aria-label': ariaLabel,
             'aria-haspopup': 'listbox',
@@ -1705,6 +1831,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     }), [vehicleDatabase, addonVehicleList]);
 
     const categories = [
+        { id: 'addons', label: 'Addons' },
         { id: 'super', label: 'Super' },
         { id: 'sports', label: 'Sports' },
         { id: 'sportsclassics', label: 'Classics' },
@@ -1726,8 +1853,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
         { id: 'boats', label: 'Boats' },
         { id: 'emergency', label: 'Emergency' },
         { id: 'military', label: 'Military' },
-        { id: 'openwheel', label: 'Open Wheel' },
-        { id: 'addons', label: 'Addons' }
+        { id: 'openwheel', label: 'Open Wheel' }
     ];
 
     const filteredVehicles = useMemo(() => {
@@ -1879,6 +2005,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                 className: 'admin-inline-spawner-input',
                 value: customModel,
                 placeholder: 'Model name (e.g., adder)',
+                'aria-label': 'Vehicle model',
                 autoFocus: true,
                 onKeyDown: handleKeyDown,
                 onChange: (e) => setCustomModel(e.target.value)
@@ -1895,6 +2022,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                 className: 'admin-inline-spawner-search',
                 value: search,
                 placeholder: 'Filter...',
+                'aria-label': 'Filter vehicles',
                 onKeyDown: (e) => e.stopPropagation(),
                 onChange: (e) => setSearch(e.target.value)
             }),
@@ -1904,11 +2032,15 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                     value: c.id 
                 })),
                 value: activeCategory,
+                ariaLabel: 'Vehicle category',
                 onChange: setActiveCategory
             }),
-            React.createElement('div', {
+            React.createElement('button', {
+                type: 'button',
                 className: 'admin-inline-spawner-toggle',
                 onClick: () => onToggleSetting('replacePersonalVehicle', !isAutoReplace),
+                role: 'switch',
+                'aria-checked': isAutoReplace,
                 title: 'Replace previous spawned vehicle: delete occupied vehicle before spawn (list, preview, personal, garage)'
             },
                 React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }),
@@ -1919,7 +2051,8 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
         React.createElement('div', { className: 'admin-inline-spawner-list' },
             filteredVehicles.length === 0 
                 ? React.createElement('div', { className: 'admin-inline-spawner-empty' }, 'No vehicles match your filter.')
-                : filteredVehicles.map(v => React.createElement('div', {
+                : filteredVehicles.map(v => React.createElement('button', {
+                    type: 'button',
                     key: v.model,
                     className: `admin-inline-spawner-item${hovered === v.model ? ' hovered' : ''}`,
                     onMouseEnter: () => setHovered(v.model),
@@ -1933,8 +2066,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                             v.sourceType === 'stream_fallback' && React.createElement('span', { className: 'admin-inline-spawner-badge fallback' }, 'Fallback')
                         ),
                         React.createElement('span', { className: 'admin-inline-spawner-model' }, v.model)
-                    ),
-                    React.createElement('span', { className: 'admin-inline-spawner-spawn' }, '→')
+                    )
                 ))
         ),
         extrasEnabled && previewModel && React.createElement('div', { className: 'admin-inline-spawner-extras' },
@@ -1956,7 +2088,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
         // Footer
         React.createElement('div', { className: 'admin-inline-spawner-footer' },
             previewModel
-                ? React.createElement('div', { className: 'admin-inline-spawner-status' },
+                ? React.createElement('div', { className: 'admin-inline-spawner-status', 'aria-live': 'polite' },
                     React.createElement('div', { className: 'admin-inline-spawner-status-line' },
                         React.createElement('span', { className: 'admin-inline-spawner-status-k' }, extrasEnabled ? 'Preview' : 'Selected'),
                         React.createElement('span', { className: 'admin-inline-spawner-status-name', title: previewName }, previewName)
@@ -1966,7 +2098,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                         extrasEnabled && React.createElement('span', { className: 'admin-inline-spawner-status-hint' }, ' · extras kept on spawn')
                     )
                 )
-                : React.createElement('div', { className: 'admin-inline-spawner-status' },
+                : React.createElement('div', { className: 'admin-inline-spawner-status', 'aria-live': 'polite' },
                     React.createElement('div', { className: 'admin-inline-spawner-status-sub' }, `${filteredVehicles.length} vehicles in category`)
                 ),
             React.createElement('div', { className: 'admin-inline-spawner-footer-actions' },
@@ -2035,10 +2167,6 @@ function InlineInventory({ items, players, onClose }) {
     }, [players]);
 
     return React.createElement('div', { className: 'admin-inline-inventory' },
-        React.createElement('div', { className: 'admin-inline-inventory-header' },
-            React.createElement('span', { className: 'admin-inline-inventory-title' }, 'Inventory - Give Item'),
-            React.createElement('button', { className: 'admin-button small', onClick: onClose }, 'Close')
-        ),
         // Target player selector
         React.createElement('div', { className: 'admin-inline-inventory-row' },
             React.createElement('label', { className: 'admin-inline-inventory-label' }, 'Target Player'),
@@ -2086,15 +2214,15 @@ function InlineInventory({ items, players, onClose }) {
         ),
         // Selected item + amount + give
         selectedItem && React.createElement('div', { className: 'admin-inline-inventory-give' },
-            React.createElement('div', { className: 'admin-inline-inventory-selected' },
-                React.createElement('span', null, 'Selected: '),
-                React.createElement('strong', null, selectedItem.label || selectedItem.name)
+            React.createElement('div', { className: 'admin-inline-inventory-selected', title: selectedItem.name },
+                React.createElement('span', { className: 'admin-inline-inventory-selected-label' }, selectedItem.label || selectedItem.name),
+                React.createElement('code', { className: 'admin-inline-inventory-selected-code' }, selectedItem.name)
             ),
             React.createElement('div', { className: 'admin-inline-inventory-give-row' },
-                React.createElement('label', null, 'Amount'),
                 React.createElement('input', {
                     type: 'number',
                     className: 'admin-inline-inventory-amount',
+                    'aria-label': 'Amount',
                     min: 1,
                     max: 9999,
                     value: amount,
@@ -2109,7 +2237,8 @@ function InlineInventory({ items, players, onClose }) {
         ),
         // Footer
         React.createElement('div', { className: 'admin-inline-inventory-footer' },
-            React.createElement('span', null, `${filteredItems.length} of ${(items || []).length} items`)
+            React.createElement('span', null, `${filteredItems.length} of ${(items || []).length} items`),
+            React.createElement('button', { className: 'admin-button small', onClick: onClose }, 'Close')
         )
     );
 }
@@ -2164,10 +2293,26 @@ function InlineGarage({ vehicles, onClose }) {
     };
 
     return React.createElement('div', { className: 'admin-inline-garage' },
-        React.createElement('div', { className: 'admin-inline-garage-header' },
-            React.createElement('span', { className: 'admin-inline-garage-title' }, 'My Garage'),
-            React.createElement('button', { className: 'admin-button small', onClick: () => { fetchNui('cortex-admin:requestGarage'); } }, 'Refresh'),
-            React.createElement('button', { className: 'admin-button small', onClick: onClose }, 'Close')
+        // Search + refresh
+        React.createElement('div', { className: 'admin-inline-garage-toolbar' },
+            React.createElement('div', { className: 'admin-inline-garage-search' },
+                React.createElement(Icon, { name: 'search', size: 14, className: 'admin-inline-garage-search-icon' }),
+                React.createElement('input', {
+                    type: 'text',
+                    className: 'admin-inline-garage-search-input',
+                    placeholder: 'Search vehicles...',
+                    value: search,
+                    onChange: (e) => setSearch(e.target.value)
+                }),
+                search && React.createElement('button', {
+                    className: 'admin-inline-garage-search-clear',
+                    onClick: () => setSearch('')
+                }, React.createElement(Icon, { name: 'x', size: 12 }))
+            ),
+            React.createElement('button', {
+                className: 'admin-button small admin-inline-garage-refresh',
+                onClick: () => { fetchNui('cortex-admin:requestGarage'); }
+            }, 'Refresh')
         ),
         // Garage filter tabs
         garageNames.length > 2 && React.createElement('div', { className: 'admin-inline-garage-tabs' },
@@ -2178,21 +2323,6 @@ function InlineGarage({ vehicles, onClose }) {
                     onClick: () => setActiveGarage(name)
                 }, name === 'all' ? 'All Garages' : name)
             )
-        ),
-        // Search
-        React.createElement('div', { className: 'admin-inline-garage-search' },
-            React.createElement(Icon, { name: 'search', size: 14, className: 'admin-inline-garage-search-icon' }),
-            React.createElement('input', {
-                type: 'text',
-                className: 'admin-inline-garage-search-input',
-                placeholder: 'Search vehicles...',
-                value: search,
-                onChange: (e) => setSearch(e.target.value)
-            }),
-            search && React.createElement('button', {
-                className: 'admin-inline-garage-search-clear',
-                onClick: () => setSearch('')
-            }, React.createElement(Icon, { name: 'x', size: 12 }))
         ),
         // Vehicle list
         React.createElement('div', { className: 'admin-inline-garage-list' },
@@ -2226,7 +2356,8 @@ function InlineGarage({ vehicles, onClose }) {
         ),
         // Footer
         React.createElement('div', { className: 'admin-inline-garage-footer' },
-            React.createElement('span', null, `${filteredVehicles.length} of ${(vehicles || []).length} vehicles`)
+            React.createElement('span', null, `${filteredVehicles.length} of ${(vehicles || []).length} vehicles`),
+            React.createElement('button', { className: 'admin-button small', onClick: onClose }, 'Close')
         )
     );
 }
@@ -2414,7 +2545,6 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     const isPrompt = action.type === 'prompt';
     const isPersonalVehicles = action.id === 'vehicle.personal';
     const isVehicleSpawner = action.id === 'vehicle.spawn';
-    const isVehiclePreview = action.id === 'vehicle.preview';
     const isWeaponAttachments = action.id === 'weapons.attachments';
     const isQBXAction = !!qbxActionConfigs[action.id];
     const isWorkspace = action.type === 'workspace';
@@ -2426,9 +2556,9 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     const isAllowed = allowed[action.id] !== false;
 
     useEffect(() => {
-        if (!isVehiclePreview || !vehiclePreviewLaunch || !vehiclePreviewLaunch.token) return;
+        if (!isVehicleSpawner || !vehiclePreviewLaunch || !vehiclePreviewLaunch.token) return;
         setExpanded(true);
-    }, [isVehiclePreview, vehiclePreviewLaunch && vehiclePreviewLaunch.token]);
+    }, [isVehicleSpawner, vehiclePreviewLaunch && vehiclePreviewLaunch.token]);
 
     useEffect(() => {
         const closePanel = () => setExpanded(false);
@@ -2463,8 +2593,8 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     }
 
     if (action.type === 'color') {
-        const raw = typeof action.selected === 'string' ? action.selected : '#7170ff';
-        const v = normalizeHex6(raw) || '#7170ff';
+        const raw = typeof action.selected === 'string' ? action.selected : '#e8a23f';
+        const v = normalizeHex6(raw) || '#e8a23f';
         controls.push(React.createElement('input', {
             key: 'color',
             type: 'color',
@@ -2561,25 +2691,24 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     }
 
     if (isAction) {
-        // For prompts, personal vehicles, vehicle spawner, and QBX actions, toggle inline expansion
-        const handleButtonClick = (e) => {
-            if (e) e.stopPropagation();
-            if (isPrompt || isPersonalVehicles || isVehicleSpawner || isVehiclePreview || isQBXAction || isWeaponAttachments) {
+        // Only expandable rows get a chevron; plain action rows are activated by clicking the row itself.
+        const isExpandable = isPrompt || isPersonalVehicles || isVehicleSpawner || isQBXAction || isWeaponAttachments;
+        if (isExpandable) {
+            const handleButtonClick = (e) => {
+                if (e) e.stopPropagation();
                 setExpanded(!expanded);
-            } else {
-                onAction(action);
-            }
-        };
+            };
 
-        controls.push(React.createElement('button', {
-            key: 'chevron',
-            className: `admin-action-chevron${expanded ? ' expanded' : ''}${!isAllowed ? ' disabled' : ''}`,
-            type: 'button',
-            title: `${expanded ? 'Collapse' : 'Expand'} ${action.label}`,
-            'aria-label': `${expanded ? 'Collapse' : 'Expand'} ${action.label}`,
-            disabled: !isAllowed,
-            onClick: handleButtonClick
-        }, React.createElement(Icon, { name: 'chevron-right', size: 15 })));
+            controls.push(React.createElement('button', {
+                key: 'chevron',
+                className: `admin-action-chevron${expanded ? ' expanded' : ''}${!isAllowed ? ' disabled' : ''}`,
+                type: 'button',
+                title: `${expanded ? 'Collapse' : 'Expand'} ${action.label}`,
+                'aria-label': `${expanded ? 'Collapse' : 'Expand'} ${action.label}`,
+                disabled: !isAllowed,
+                onClick: handleButtonClick
+            }, React.createElement(Icon, { name: 'chevron-right', size: 15 })));
+        }
     }
 
     // Build class name with selected state
@@ -2589,12 +2718,12 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     if (isSelected) className += ' selected';
     if (isActive) className += ' active';
     if (expanded) className += ' expanded';
-    if (expanded && (isVehicleSpawner || isVehiclePreview)) className += ' admin-action--vehicle-spawner-inline';
+    if (expanded && isVehicleSpawner) className += ' admin-action--vehicle-spawner-inline';
 
     const activateRow = () => {
         if (!isAllowed) return;
         if (isSelect || isDock || action.type === 'slider' || action.type === 'color') return;
-        if (isPrompt || isPersonalVehicles || isVehicleSpawner || isVehiclePreview || isQBXAction || isWeaponAttachments) {
+        if (isPrompt || isPersonalVehicles || isVehicleSpawner || isQBXAction || isWeaponAttachments) {
             setExpanded(!expanded);
         } else if (isAction) {
             onAction(action);
@@ -2654,6 +2783,16 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     },
         React.createElement('div', { className: 'admin-action-row' },
             React.createElement('div', { className: 'admin-action-left' },
+                React.createElement('div', {
+                    className: `admin-action-enabled-dot${isToggle && isEnabled ? ' visible' : ''}`,
+                    'aria-hidden': true
+                }),
+                React.createElement('div', { className: 'admin-action-info' },
+                    React.createElement('div', { className: 'admin-action-label' }, action.label),
+                    React.createElement('div', { className: 'admin-action-description' }, action.description || '')
+                )
+            ),
+            React.createElement('div', { className: 'admin-action-controls' },
                 React.createElement('button', {
                     className: `admin-action-star${isFavorite ? ' active' : ''}`,
                     type: 'button',
@@ -2665,16 +2804,8 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
                         onFavorite(action.id);
                     }
                 }, React.createElement(Icon, { name: 'star', size: 14 })),
-                React.createElement('div', {
-                    className: `admin-action-enabled-dot${isToggle && isEnabled ? ' visible' : ''}`,
-                    'aria-hidden': true
-                }),
-                React.createElement('div', { className: 'admin-action-info' },
-                    React.createElement('div', { className: 'admin-action-label' }, action.label),
-                    React.createElement('div', { className: 'admin-action-description' }, action.description || '')
-                )
-            ),
-            React.createElement('div', { className: 'admin-action-controls' }, controls)
+                controls
+            )
         ),
         // Inline prompt expansion
         expanded && isPrompt && action.prompt && React.createElement(InlinePrompt, {
@@ -2693,7 +2824,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
             onClose: () => setExpanded(false)
         }),
         // Inline vehicle spawner expansion
-        expanded && (isVehicleSpawner || isVehiclePreview) && React.createElement(InlineVehicleSpawner, {
+        expanded && isVehicleSpawner && React.createElement(InlineVehicleSpawner, {
             settings: settings,
             addonVehicles: addonVehicles || [],
             onSpawn: onSpawnAnyVehicle,
@@ -2701,11 +2832,11 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
             onClearPreview: onClearVehiclePreview,
             onToggleSetting: onToggleSetting,
             onClose: () => setExpanded(false),
-            extrasEnabled: isVehiclePreview,
-            launchKey: isVehiclePreview && vehiclePreviewLaunch ? vehiclePreviewLaunch.token : 0,
-            launchModel: isVehiclePreview && vehiclePreviewLaunch ? vehiclePreviewLaunch.model : null,
-            launchResumeOnly: isVehiclePreview && vehiclePreviewLaunch ? vehiclePreviewLaunch.resumeOnly === true : false,
-            previewSharedProp: isVehiclePreview && vehiclePreviewLaunch ? vehiclePreviewLaunch.shared === true : false
+            extrasEnabled: true,
+            launchKey: vehiclePreviewLaunch ? vehiclePreviewLaunch.token : 0,
+            launchModel: vehiclePreviewLaunch ? vehiclePreviewLaunch.model : null,
+            launchResumeOnly: vehiclePreviewLaunch ? vehiclePreviewLaunch.resumeOnly === true : false,
+            previewSharedProp: vehiclePreviewLaunch ? vehiclePreviewLaunch.shared === true : false
         }),
         // QBX inline action expansion
         expanded && isQBXAction && React.createElement(InlineQBXAction, {
@@ -2802,7 +2933,6 @@ function ConfirmModal({ title, message, onCancel, onConfirm }) {
 const CONTEXT_RUN_EXCLUSIONS = new Set([
     'vehicle.personal',
     'vehicle.spawn',
-    'vehicle.preview',
     'weapons.attachments'
 ]);
 
@@ -3464,24 +3594,32 @@ function WardrobeDualStepper({
     maxTexture,
     onDrawable,
     onTexture,
-    disabled
+    disabled,
+    drawableLabel = 'Drawable',
+    textureLabel = 'Texture'
 }) {
     return React.createElement('div', { className: 'appearance-stepper-row appearance-stepper-row--wardrobe' },
-        React.createElement(WardrobeValueStepper, {
-            value: drawable,
-            min: minDrawable,
-            max: maxDrawable,
-            onCommit: onDrawable,
-            disabled
-        }),
+        React.createElement('div', { className: 'appearance-stepper-unit' },
+            React.createElement('span', { className: 'appearance-stepper-unit-label' }, drawableLabel),
+            React.createElement(WardrobeValueStepper, {
+                value: drawable,
+                min: minDrawable,
+                max: maxDrawable,
+                onCommit: onDrawable,
+                disabled
+            })
+        ),
         React.createElement('div', { className: 'appearance-stepper-sep' }),
-        React.createElement(WardrobeValueStepper, {
-            value: texture,
-            min: 0,
-            max: maxTexture,
-            onCommit: onTexture,
-            disabled
-        })
+        React.createElement('div', { className: 'appearance-stepper-unit' },
+            React.createElement('span', { className: 'appearance-stepper-unit-label' }, textureLabel),
+            React.createElement(WardrobeValueStepper, {
+                value: texture,
+                min: 0,
+                max: maxTexture,
+                onCommit: onTexture,
+                disabled
+            })
+        )
     );
 }
 
@@ -3706,7 +3844,7 @@ function LegacyAppearanceView({ onPrompt }) {
 
     const refreshData = useCallback(() => {
         fetchNui('cortex-admin:getAppearance').then(res => res.json()).then((payload) => setData(normalizeAppearancePayload(payload)));
-        fetchNui('cortex-admin:getSavedPeds').then(res => res.json()).then((payload) => setSavedPeds(Array.isArray(payload) ? payload : []));
+        fetchNui('cortex-admin:getSavedPeds').then(res => res.json()).then((payload) => setSavedPeds(normalizeSavedOutfitList(payload)));
     }, []);
 
     useEffect(() => {
@@ -4018,7 +4156,7 @@ function LegacyAppearanceView({ onPrompt }) {
     );
 }
 
-function AppearanceCollapsible({ title, meta, expanded, onToggle, children, className }) {
+function AppearanceCollapsible({ title, meta, isNew = false, expanded, onToggle, children, className }) {
     const sectionClass = [className, 'appearance-collapsible'].filter(Boolean).join(' ');
     return React.createElement('section', { className: sectionClass },
         React.createElement('button', {
@@ -4031,6 +4169,12 @@ function AppearanceCollapsible({ title, meta, expanded, onToggle, children, clas
                 React.createElement(Icon, { name: expanded ? 'chevron-down' : 'chevron-right', size: 16 })
             ),
             React.createElement('span', { className: 'appearance-collapsible-title' }, title),
+            isNew && React.createElement('span', {
+                className: 'feature-discovery-dot',
+                role: 'status',
+                'aria-label': 'New feature',
+                title: 'New feature'
+            }),
             meta != null && meta !== '' && React.createElement('span', { className: 'appearance-collapsible-meta' }, meta)
         ),
         expanded && React.createElement('div', { className: 'appearance-collapsible-panel' }, children)
@@ -4045,23 +4189,52 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     const [selectedShareTarget, setSelectedShareTarget] = useState('');
     const [saveName, setSaveName] = useState('');
     const [savedPedSearch, setSavedPedSearch] = useState('');
+    const [discoveredFeatureReleases, setDiscoveredFeatureReleases] = useState(readDiscoveredFeatureReleases);
+    const [generatorOptions, setGeneratorOptions] = useState({
+        mode: 'outfit',
+        style: 'polished',
+        gender: 'keep',
+        hairTone: 'any',
+        palette: 'neutral',
+        faceProfile: 'everyday',
+        ageProfile: 'young',
+        complexion: 'clean',
+        hairStyle: 'any',
+        makeup: 'subtle',
+        accessories: false
+    });
+    const [generatorBusy, setGeneratorBusy] = useState('');
+    const [generatorCanUndo, setGeneratorCanUndo] = useState(false);
+    const [generatorStatus, setGeneratorStatus] = useState(null);
     const [catOpen, setCatOpen] = useState({
+        generator: false,
         workspace: true,
-        library: true,
+        library: false,
         wardrobeClothing: true,
         wardrobeProps: false,
         wardrobeColors: false,
-        face: true,
-        heritage: true
+        face: false,
+        heritage: false
     });
 
     const toggleCat = useCallback((key) => {
         setCatOpen((prev) => ({ ...prev, [key]: !prev[key] }));
     }, []);
 
+    const markFeatureDiscovered = useCallback((featureKey) => {
+        const release = FEATURE_RELEASES[featureKey];
+        if (!release) return;
+        setDiscoveredFeatureReleases((previous) => {
+            if (previous[featureKey] === release) return previous;
+            const next = { ...previous, [featureKey]: release };
+            writeDiscoveredFeatureReleases(next);
+            return next;
+        });
+    }, []);
+
     const refreshData = useCallback(() => {
         fetchNui('cortex-admin:getAppearance').then((res) => res.json()).then((payload) => setData(normalizeAppearancePayload(payload)));
-        fetchNui('cortex-admin:getSavedPeds').then((res) => res.json()).then((payload) => setSavedPeds(Array.isArray(payload) ? payload : []));
+        fetchNui('cortex-admin:getSavedPeds').then((res) => res.json()).then((payload) => setSavedPeds(normalizeSavedOutfitList(payload)));
         fetchNui('cortex-admin:getVmenuMigrationSnapshot').then((res) => res.json()).then((payload) => setMigrationInfo(payload && typeof payload === 'object' ? payload : null));
         fetchNui('cortex-admin:getWardrobeShareTargets').then((res) => res.json()).then((payload) => {
             const targets = Array.isArray(payload)
@@ -4286,6 +4459,61 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
         setTimeout(refreshData, 400);
     };
 
+    const setGeneratorOption = (key, value) => {
+        setGeneratorOptions((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const handleGenerateAppearance = () => {
+        if (generatorBusy) return;
+        setGeneratorBusy('generate');
+        setGeneratorStatus({ type: 'progress', message: 'Building a new look…' });
+        fetchNui('cortex-admin:randomizeAppearance', generatorOptions)
+            .then((res) => res.json())
+            .then((result) => {
+                if (!result || result.ok !== true) {
+                    const messages = {
+                        freemode_required: 'Switch to a freemode character before generating an outfit.',
+                        model_forbidden: 'The server did not authorize that freemode model.',
+                        model_load_failed: 'The selected freemode model could not be loaded.',
+                        ped_unavailable: 'Your player character is not available yet.',
+                        no_compatible_outfit: 'This freemode model did not expose a usable top, pants, and shoe combination.'
+                    };
+                    setGeneratorStatus({ type: 'error', message: messages[result && result.error] || 'The appearance could not be generated.' });
+                    setGeneratorCanUndo(Boolean(result && result.canUndo));
+                    return;
+                }
+
+                setGeneratorCanUndo(result.canUndo === true);
+                setGeneratorStatus({
+                    type: 'success',
+                    message: `${result.outfitName || 'Curated outfit'} applied${result.mode === 'character' ? ' with a new character' : ' without changing your face or hair'}.`
+                });
+                setTimeout(refreshData, 250);
+            })
+            .catch(() => setGeneratorStatus({ type: 'error', message: 'The appearance generator did not respond.' }))
+            .finally(() => setGeneratorBusy(''));
+    };
+
+    const handleUndoGeneratedAppearance = () => {
+        if (generatorBusy || !generatorCanUndo) return;
+        setGeneratorBusy('undo');
+        setGeneratorStatus({ type: 'progress', message: 'Restoring the previous look…' });
+        fetchNui('cortex-admin:undoRandomizedAppearance')
+            .then((res) => res.json())
+            .then((result) => {
+                if (!result || result.ok !== true) {
+                    setGeneratorCanUndo(Boolean(result && result.canUndo));
+                    setGeneratorStatus({ type: 'error', message: 'The previous appearance could not be restored.' });
+                    return;
+                }
+                setGeneratorCanUndo(false);
+                setGeneratorStatus({ type: 'success', message: 'Previous appearance restored.' });
+                setTimeout(refreshData, 250);
+            })
+            .catch(() => setGeneratorStatus({ type: 'error', message: 'The appearance undo did not respond.' }))
+            .finally(() => setGeneratorBusy(''));
+    };
+
     const ClickableValue = ({ value, max, min, onConfirm, disabled = false }) => {
         const [editing, setEditing] = useState(false);
         const [inputValue, setInputValue] = useState(value.toString());
@@ -4344,6 +4572,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 maxDrawable: maxDrawables,
                 maxTexture: maxTextures,
                 disabled: !data.isFreemode,
+                drawableLabel: isComponent ? 'Drawable' : 'Index',
                 onDrawable: (v) => handleUpdate(type, item.id, v, 0),
                 onTexture: (v) => handleUpdate(type, item.id, current.drawable, v)
             })
@@ -4474,8 +4703,8 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     const sourceLabel = String(ped.source || 'cortex-admin');
                     const showVmenu = sourceLabel === 'vmenu';
                     const showMeta = showVmenu || ped.isDefault;
-                    return React.createElement('div', { className: 'appearance-preset-card', key: ped.id },
-                        React.createElement('div', { className: 'appearance-preset-card-head' },
+                    return React.createElement('div', { className: 'appearance-preset-row appearance-saved-outfit-row', key: ped.id },
+                        React.createElement('div', { className: 'appearance-preset-main' },
                             React.createElement('div', { className: 'appearance-preset-name', title: ped.name }, ped.name),
                             showMeta && React.createElement('div', { className: 'appearance-preset-meta' },
                                 showVmenu && React.createElement('span', { className: 'appearance-preset-source' }, 'vMenu'),
@@ -4483,12 +4712,48 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                             )
                         ),
                         React.createElement('div', { className: 'appearance-preset-toolbar' },
-                            React.createElement('button', { type: 'button', className: 'admin-button success appearance-tool-btn', onClick: () => handleLoad(ped) }, 'Load'),
-                            React.createElement('button', { type: 'button', className: 'admin-button appearance-tool-btn', onClick: () => handleSetDefault(ped) }, 'Set default'),
-                            React.createElement('button', { type: 'button', className: 'admin-button appearance-tool-btn', onClick: () => handleOverwrite(ped) }, 'Overwrite'),
-                            React.createElement('button', { type: 'button', className: 'admin-button appearance-tool-btn', onClick: () => handleClone(ped) }, 'Clone'),
-                            React.createElement('button', { type: 'button', className: 'admin-button appearance-tool-btn', onClick: () => handleRename(ped) }, 'Rename'),
-                            React.createElement('button', { type: 'button', className: 'admin-button danger appearance-tool-btn', onClick: () => handleDelete(ped) }, 'Delete')
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'admin-button success appearance-tool-btn appearance-icon-btn',
+                                onClick: () => handleLoad(ped),
+                                title: 'Load outfit',
+                                'aria-label': `Load ${ped.name}`
+                            }, React.createElement(Icon, { name: 'log-in', size: 14 }), React.createElement('span', null, 'Load')),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'admin-button appearance-tool-btn appearance-icon-btn',
+                                onClick: () => handleSetDefault(ped),
+                                title: 'Set default',
+                                'aria-label': `Set ${ped.name} as default`
+                            }, React.createElement(Icon, { name: 'star', size: 14 })),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'admin-button appearance-tool-btn appearance-icon-btn',
+                                onClick: () => handleOverwrite(ped),
+                                title: 'Overwrite with current look',
+                                'aria-label': `Overwrite ${ped.name}`
+                            }, React.createElement(Icon, { name: 'save', size: 14 })),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'admin-button appearance-tool-btn appearance-icon-btn',
+                                onClick: () => handleClone(ped),
+                                title: 'Clone outfit',
+                                'aria-label': `Clone ${ped.name}`
+                            }, React.createElement(Icon, { name: 'copy', size: 14 })),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'admin-button appearance-tool-btn appearance-icon-btn',
+                                onClick: () => handleRename(ped),
+                                title: 'Rename outfit',
+                                'aria-label': `Rename ${ped.name}`
+                            }, React.createElement(Icon, { name: 'pencil', size: 14 })),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'admin-button danger appearance-tool-btn appearance-icon-btn',
+                                onClick: () => handleDelete(ped),
+                                title: 'Delete outfit',
+                                'aria-label': `Delete ${ped.name}`
+                            }, React.createElement(Icon, { name: 'trash-2', size: 14 }))
                         )
                     );
                 })
@@ -4505,6 +4770,143 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             )
         );
     };
+
+    const generatorChoice = (key, value, label, description) => React.createElement('button', {
+        type: 'button',
+        className: `appearance-generator-choice${generatorOptions[key] === value ? ' is-selected' : ''}`,
+        'aria-pressed': generatorOptions[key] === value,
+        disabled: Boolean(generatorBusy),
+        onClick: () => setGeneratorOption(key, value)
+    },
+        React.createElement('strong', null, label),
+        description && React.createElement('span', null, description)
+    );
+
+    const generatorSelect = (key, label, options) => React.createElement('div', {
+        className: 'appearance-generator-select',
+        key
+    },
+        React.createElement('span', null, label),
+        React.createElement(CustomSelect, {
+            options,
+            value: generatorOptions[key],
+            disabled: Boolean(generatorBusy),
+            onChange: (value) => setGeneratorOption(key, value),
+            ariaLabel: label
+        })
+    );
+
+    const renderGenerator = () => React.createElement('div', { className: 'appearance-generator' },
+        React.createElement('fieldset', { className: 'appearance-generator-fieldset' },
+            React.createElement('legend', null, 'Generate'),
+            React.createElement('div', { className: 'appearance-generator-choices appearance-generator-choices--mode' },
+                generatorChoice('mode', 'outfit', 'Outfit only', 'Keep face, hair, heritage'),
+                generatorChoice('mode', 'character', 'Full character', 'New identity and wardrobe')
+            )
+        ),
+        React.createElement('fieldset', { className: 'appearance-generator-fieldset' },
+            React.createElement('legend', null, 'Style direction'),
+            React.createElement('div', { className: 'appearance-generator-choices appearance-generator-choices--style' },
+                generatorChoice('style', 'polished', 'Polished', 'Shirts, polos, clean shoes'),
+                generatorChoice('style', 'casual', 'Casual', 'T-shirts, denim, canvas'),
+                generatorChoice('style', 'street', 'Street', 'Cargos, boots, high tops')
+            )
+        ),
+        React.createElement('div', { className: 'appearance-generator-grid' },
+            generatorSelect('palette', 'Clothing palette', [
+                { value: 'neutral', label: 'Restrained' },
+                { value: 'tonal', label: 'Tonal' },
+                { value: 'varied', label: 'Mixed' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('gender', 'Body model', [
+                { value: 'keep', label: 'Keep current' },
+                { value: 'random', label: 'Surprise me' },
+                { value: 'male', label: 'Freemode male' },
+                { value: 'female', label: 'Freemode female' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('faceProfile', 'Face profile', [
+                { value: 'everyday', label: 'Everyday' },
+                { value: 'east_asian', label: 'East Asian' },
+                { value: 'soft', label: 'Soft features' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('ageProfile', 'Age', [
+                { value: 'young', label: 'Young adult' },
+                { value: 'adult', label: 'Adult' },
+                { value: 'mature', label: 'Mature' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('complexion', 'Complexion', [
+                { value: 'clean', label: 'Clean' },
+                { value: 'natural', label: 'Natural detail' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('hairStyle', 'Hair shape', [
+                { value: 'any', label: 'Any reviewed style' },
+                { value: 'short', label: 'Short' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'long', label: 'Long / tied' },
+                { value: 'updo', label: 'Updo' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('hairTone', 'Natural hair tone', [
+                { value: 'any', label: 'Any natural tone' },
+                { value: 'dark', label: 'Dark' },
+                { value: 'warm', label: 'Warm brown / auburn' },
+                { value: 'light', label: 'Blonde / light' }
+            ]),
+            generatorOptions.mode === 'character' && generatorSelect('makeup', 'Makeup', [
+                { value: 'none', label: 'None' },
+                { value: 'subtle', label: 'Subtle' },
+                { value: 'polished', label: 'Polished' }
+            ]),
+            React.createElement('button', {
+                type: 'button',
+                role: 'switch',
+                className: `appearance-generator-switch${generatorOptions.accessories ? ' is-on' : ''}`,
+                'aria-checked': generatorOptions.accessories,
+                disabled: Boolean(generatorBusy),
+                onClick: () => setGeneratorOption('accessories', !generatorOptions.accessories)
+            },
+                React.createElement('span', null,
+                    React.createElement('strong', null, 'Accessories'),
+                    React.createElement('small', null, generatorOptions.accessories ? 'Preset watch or glasses' : 'No added props')
+                ),
+                React.createElement('span', { className: 'appearance-generator-switch-track', 'aria-hidden': true },
+                    React.createElement('span', { className: 'appearance-generator-switch-thumb' })
+                )
+            )
+        ),
+        React.createElement('div', { className: 'appearance-generator-actions' },
+            React.createElement('button', {
+                type: 'button',
+                className: 'admin-button success appearance-generator-primary',
+                disabled: Boolean(generatorBusy),
+                onClick: handleGenerateAppearance
+            },
+                React.createElement(Icon, { name: generatorBusy === 'generate' ? 'loader-circle' : 'dices', size: 16, className: generatorBusy === 'generate' ? 'is-spinning' : '' }),
+                React.createElement('span', null, generatorBusy === 'generate'
+                    ? 'Generating…'
+                    : generatorOptions.mode === 'character' ? 'Generate character' : 'Generate outfit')
+            ),
+            React.createElement('button', {
+                type: 'button',
+                className: 'admin-button appearance-generator-undo appearance-icon-btn',
+                disabled: Boolean(generatorBusy) || !generatorCanUndo,
+                title: generatorCanUndo ? 'Restore the look from before the last roll' : 'Generate a look first',
+                'aria-label': generatorBusy === 'undo' ? 'Restoring previous look' : 'Undo last roll',
+                onClick: handleUndoGeneratedAppearance
+            },
+                React.createElement(Icon, { name: generatorBusy === 'undo' ? 'loader-circle' : 'undo-2', size: 16, className: generatorBusy === 'undo' ? 'is-spinning' : '' })
+            )
+        ),
+        React.createElement('div', {
+            className: `appearance-generator-status${generatorStatus ? ` is-${generatorStatus.type}` : ''}`,
+            role: 'status',
+            'aria-live': 'polite'
+        }, generatorStatus ? generatorStatus.message : '')
+    );
+
+    const migrationAvailable = Boolean(migrationInfo && (
+        (migrationInfo.peds && migrationInfo.peds.available)
+        || (migrationInfo.vehicles && migrationInfo.vehicles.available)
+    ));
 
     const renderWorkspaceStack = () => React.createElement('div', { className: 'appearance-workspace-stack' },
         React.createElement('div', { className: 'appearance-workspace-block' },
@@ -4532,45 +4934,63 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 }, React.createElement(Icon, { name: 'save', size: 14 }), React.createElement('span', null, 'Save'))
             )
         ),
-        React.createElement('div', { className: 'appearance-workspace-block' },
-            React.createElement('div', { className: 'appearance-block-label' }, 'Share nearby'),
-            React.createElement('div', { className: 'appearance-share-toolbar' },
-                React.createElement('div', { className: 'appearance-share-select-wrap' },
-                    shareTargets.length > 0
-                        ? React.createElement(CustomSelect, {
+        shareTargets.length > 0
+            ? React.createElement('div', { className: 'appearance-workspace-block' },
+                React.createElement('div', { className: 'appearance-block-label' }, 'Share nearby'),
+                React.createElement('div', { className: 'appearance-share-toolbar' },
+                    React.createElement('div', { className: 'appearance-share-select-wrap' },
+                        React.createElement(CustomSelect, {
                             options: shareTargets.map((target) => ({
                                 label: `${target.name} · ${Number(target.distance || 0).toFixed(1)}m`,
                                 value: String(target.id)
                             })),
                             value: selectedShareTarget,
-                            onChange: (value) => setSelectedShareTarget(String(value))
+                            onChange: (value) => setSelectedShareTarget(String(value)),
+                            ariaLabel: 'Nearby player'
                         })
-                        : React.createElement('div', { className: 'appearance-inline-note appearance-inline-note--tight' }, 'No eligible players nearby')
+                    ),
+                    React.createElement('div', { className: 'appearance-share-actions' },
+                        React.createElement('button', {
+                            type: 'button',
+                            className: 'admin-button small appearance-tool-btn',
+                            onClick: refreshData,
+                            title: 'Refresh nearby players',
+                            'aria-label': 'Refresh nearby players'
+                        }, React.createElement(Icon, { name: 'refresh-cw', size: 14 })),
+                        React.createElement('button', {
+                            type: 'button',
+                            className: 'admin-button success appearance-tool-btn',
+                            onClick: handleShareCurrent,
+                            disabled: !selectedShareTarget
+                        }, React.createElement(Icon, { name: 'send', size: 14 }), React.createElement('span', null, 'Send'))
+                    )
+                )
+            )
+            : React.createElement('div', { className: 'appearance-workspace-utility appearance-workspace-utility--empty-share' },
+                React.createElement('div', { className: 'appearance-workspace-utility-copy' },
+                    React.createElement(Icon, { name: 'users', size: 14 }),
+                    React.createElement('span', null, 'No nearby players')
                 ),
                 React.createElement('div', { className: 'appearance-share-actions' },
                     React.createElement('button', {
                         type: 'button',
-                        className: 'admin-button small appearance-tool-btn',
+                        className: 'admin-button small appearance-tool-btn appearance-icon-btn',
                         onClick: refreshData,
-                        title: 'Refresh nearby players'
-                    }, React.createElement(Icon, { name: 'refresh-cw', size: 14 })),
-                    React.createElement('button', {
-                        type: 'button',
-                        className: 'admin-button success appearance-tool-btn',
-                        onClick: handleShareCurrent,
-                        disabled: shareTargets.length === 0 || !selectedShareTarget
-                    }, React.createElement(Icon, { name: 'send', size: 14 }), React.createElement('span', null, 'Send'))
+                        title: 'Refresh nearby players',
+                        'aria-label': 'Refresh nearby players'
+                    }, React.createElement(Icon, { name: 'refresh-cw', size: 14 }))
                 )
-            )
-        ),
-        React.createElement('div', { className: 'appearance-workspace-block' },
-            React.createElement('div', { className: 'appearance-block-label' }, 'vMenu import'),
-            React.createElement('div', { className: 'appearance-migrate-strip' },
+            ),
+        migrationAvailable && React.createElement('div', { className: 'appearance-workspace-utility appearance-workspace-utility--import' },
+            React.createElement('div', { className: 'appearance-workspace-utility-copy' },
+                React.createElement(Icon, { name: 'archive-restore', size: 14 }),
+                React.createElement('span', null, 'vMenu data available')
+            ),
+            React.createElement('div', { className: 'appearance-workspace-utility-actions' },
                 React.createElement('button', {
                     type: 'button',
-                    className: 'admin-button success appearance-tool-btn',
-                    onClick: handleImportAll,
-                    disabled: !(migrationInfo && ((migrationInfo.peds && migrationInfo.peds.available) || (migrationInfo.vehicles && migrationInfo.vehicles.available)))
+                    className: 'admin-button small appearance-tool-btn',
+                    onClick: handleImportAll
                 }, React.createElement(Icon, { name: 'download', size: 14 }), React.createElement('span', null, 'Import'))
             )
         )
@@ -4783,6 +5203,15 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
         ),
         React.createElement('div', { className: 'appearance-content-area appearance-content-area--scroll' },
             React.createElement(AppearanceCollapsible, {
+                title: 'Appearance generator',
+                isNew: discoveredFeatureReleases.appearanceGenerator !== FEATURE_RELEASES.appearanceGenerator,
+                expanded: catOpen.generator,
+                onToggle: () => {
+                    if (!catOpen.generator) markFeatureDiscovered('appearanceGenerator');
+                    toggleCat('generator');
+                }
+            }, renderGenerator()),
+            React.createElement(AppearanceCollapsible, {
                 title: 'Outfit workspace',
                 expanded: catOpen.workspace,
                 onToggle: () => toggleCat('workspace')
@@ -4836,6 +5265,254 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 expanded: catOpen.heritage,
                 onToggle: () => toggleCat('heritage')
             }, renderHeritageBody())
+        )
+    );
+}
+
+function VoiceChatWorkspace({ actions, toggles, allowed, voiceState, onToggle, onSelect, onPromptSubmit }) {
+    const [channelInput, setChannelInput] = useState('');
+    const [proximityOverride, setProximityOverride] = useState(null);
+
+    const voiceActions = useMemo(() => {
+        const map = {};
+        (Array.isArray(actions) ? actions : []).forEach((action) => {
+            if (action && action.tab === 'voice') map[action.id] = action;
+        });
+        return map;
+    }, [actions]);
+
+    const enabledAction = voiceActions['voice.enabled'] || null;
+    const speakerAction = voiceActions['voice.showSpeaker'] || null;
+    const statusAction = voiceActions['voice.showStatus'] || null;
+    const proximityAction = voiceActions['voice.proximity'] || null;
+    const channelAction = voiceActions['voice.channel'] || null;
+    const actionAllowed = (action) => !!action && (!allowed || allowed[action.id] !== false);
+
+    const safeToggles = isPlainObject(toggles) ? toggles : {};
+    const enabled = safeToggles['voice.enabled'] === true;
+    const showSpeaker = safeToggles['voice.showSpeaker'] === true;
+    const showStatus = safeToggles['voice.showStatus'] === true;
+    const proximityOptions = normalizeValues(proximityAction && proximityAction.values);
+    const normalizedVoiceState = normalizeVoiceState(voiceState);
+    const reportedProximity = normalizedVoiceState.proximity;
+    const currentChannel = normalizedVoiceState.channel;
+    const proximityValue = proximityOverride !== null
+        ? proximityOverride
+        : reportedProximity;
+    const activeProximity = proximityOptions.find((option) => String(option.value) === String(proximityValue)) || null;
+    const proximityAvailable = actionAllowed(proximityAction) && typeof onSelect === 'function';
+    const channelAvailable = actionAllowed(channelAction) && typeof onPromptSubmit === 'function';
+    const isGlobalProximity = activeProximity && Number(activeProximity.value) >= 9999;
+    const proximityMetric = activeProximity
+        ? (isGlobalProximity ? 'GLOBAL' : `${Number(activeProximity.value)} M`)
+        : (reportedProximity !== null
+            ? (reportedProximity >= 9999 ? 'GLOBAL' : `${reportedProximity} M`)
+            : '--');
+    const currentChannelLabel = currentChannel === null ? '--' : (currentChannel > 0 ? `#${currentChannel}` : 'NONE');
+    const rawChannel = channelInput.trim();
+    const parsedChannel = rawChannel === '' ? NaN : Number(rawChannel);
+    const channelInputValid = Number.isInteger(parsedChannel) && parsedChannel >= 0 && parsedChannel <= 65535;
+    const channelField = channelAction && channelAction.prompt && Array.isArray(channelAction.prompt.fields)
+        ? channelAction.prompt.fields[0]
+        : null;
+
+    useEffect(() => {
+        setProximityOverride(null);
+    }, [reportedProximity]);
+
+    const handleProximity = (option) => {
+        if (!proximityAction || !proximityAvailable) return;
+        setProximityOverride(option.value);
+        onSelect(proximityAction, option.value);
+    };
+
+    const submitChannel = (nextChannel) => {
+        if (!channelAction || !channelAvailable) return;
+        const numericChannel = Number(nextChannel);
+        if (!Number.isInteger(numericChannel) || numericChannel < 0 || numericChannel > 65535) return;
+        onPromptSubmit(channelAction, { channel: numericChannel });
+        setChannelInput('');
+    };
+
+    const renderSwitch = (action, isOn) => {
+        if (!action) return h('span', { className: 'voice-control-unavailable' }, 'Unavailable');
+        const canUse = actionAllowed(action);
+        return h('button', {
+            type: 'button',
+            role: 'switch',
+            className: `voice-switch${isOn ? ' is-on' : ''}`,
+            title: canUse ? `${isOn ? 'Disable' : 'Enable'} ${action.label}` : `Permission required for ${action.label}`,
+            'aria-label': `${action.label}: ${isOn ? 'on' : 'off'}`,
+            'aria-checked': isOn,
+            disabled: !canUse,
+            onClick: () => typeof onToggle === 'function' && onToggle(action, !isOn)
+        },
+            h('span', { className: 'voice-switch-track', 'aria-hidden': true },
+                h('span', { className: 'voice-switch-thumb' })
+            )
+        );
+    };
+
+    const renderIndicator = (action, isOn, iconName) => action && h('div', {
+        className: `voice-indicator-row${isOn ? ' is-on' : ''}`,
+        key: action.id
+    },
+        h(Icon, { name: iconName, size: 15, className: 'voice-indicator-icon' }),
+        h('div', { className: 'voice-control-copy' },
+            h('h4', null, action.label),
+            h('p', null, action.description)
+        ),
+        renderSwitch(action, isOn)
+    );
+
+    const optionParts = (option) => {
+        const label = String(option.label || option.value || '');
+        const match = label.match(/^(.+?)\s*\(([^)]+)\)$/);
+        return match
+            ? { label: match[1], metric: match[2] }
+            : { label, metric: Number(option.value) >= 9999 ? 'Unbounded' : `${option.value}m` };
+    };
+
+    if (Object.keys(voiceActions).length === 0) {
+        return h('div', { className: 'admin-workspace voice-workspace' },
+            h('div', { className: 'admin-state-panel', role: 'status' },
+                h(Icon, { name: 'audio-lines', size: 22 }),
+                h('strong', null, 'Voice controls unavailable'),
+                h('span', null, 'The vMenu compatibility action catalog did not load.')
+            )
+        );
+    }
+
+    return h('div', { className: 'voice-workspace' },
+        h('main', { className: 'voice-control-surface' },
+                h('section', {
+                    className: `voice-control-section voice-master-control${enabled ? ' is-on' : ''}`,
+                    'aria-labelledby': 'voice-master-title'
+                },
+                    h('div', { className: 'voice-control-heading' },
+                        h(Icon, { name: 'power', size: 16 }),
+                        h('div', { className: 'voice-control-copy' },
+                            h('h3', { id: 'voice-master-title' }, enabledAction ? enabledAction.label : 'Enable Voice Chat'),
+                            h('p', null, enabledAction ? enabledAction.description : 'Enable or disable the native FiveM voice channel')
+                        )
+                    ),
+                    renderSwitch(enabledAction, enabled)
+                ),
+
+                h('section', { className: 'voice-control-section', 'aria-labelledby': 'voice-proximity-title' },
+                    h('div', { className: 'voice-section-header' },
+                        h('div', { className: 'voice-control-heading' },
+                            h(Icon, { name: 'radio-tower', size: 16 }),
+                            h('div', { className: 'voice-control-copy' },
+                                h('h3', { id: 'voice-proximity-title' }, proximityAction ? proximityAction.label : 'Voice Chat Proximity'),
+                                h('p', null, proximityAction ? proximityAction.description : 'Set the native talker proximity')
+                            )
+                        ),
+                        h('output', { className: 'voice-section-readout', 'aria-live': 'polite' }, proximityMetric)
+                    ),
+                    h('div', { className: 'voice-proximity-grid', role: 'group', 'aria-label': 'Talker proximity' },
+                        proximityOptions.map((option) => {
+                            const selected = proximityValue !== null && String(proximityValue) === String(option.value);
+                            const parts = optionParts(option);
+                            return h('button', {
+                                key: String(option.value),
+                                type: 'button',
+                                className: `voice-proximity-option${selected ? ' is-active' : ''}`,
+                                disabled: !proximityAvailable,
+                                'aria-pressed': selected,
+                                onClick: () => handleProximity(option)
+                            },
+                                h('span', { className: 'voice-proximity-label' }, parts.label),
+                                h('span', { className: 'voice-proximity-metric' }, parts.metric)
+                            );
+                        })
+                    ),
+                    proximityAction && !actionAllowed(proximityAction) && h('span', { className: 'voice-permission-note' },
+                        h(Icon, { name: 'lock-keyhole', size: 11 }), 'Permission required'
+                    )
+                ),
+
+                h('section', { className: 'voice-control-section', 'aria-labelledby': 'voice-channel-title' },
+                    h('div', { className: 'voice-section-header' },
+                        h('div', { className: 'voice-control-heading' },
+                            h(Icon, { name: 'hash', size: 16 }),
+                            h('div', { className: 'voice-control-copy' },
+                                h('h3', { id: 'voice-channel-title' }, channelAction ? channelAction.label : 'Voice Chat Channel'),
+                                h('p', null, channelAction ? channelAction.description : 'Join a numbered native voice channel, or 0 to leave')
+                            )
+                        ),
+                        h('div', { className: 'voice-channel-current', 'aria-live': 'polite' },
+                            h('span', null, 'CURRENT'),
+                            h('strong', null, currentChannelLabel)
+                        )
+                    ),
+                    h('form', {
+                        className: 'voice-channel-form',
+                        onSubmit: (event) => {
+                            event.preventDefault();
+                            if (channelInputValid) submitChannel(parsedChannel);
+                        }
+                    },
+                        h('label', { className: 'voice-channel-field' },
+                            h('span', { className: 'voice-channel-label' }, channelField && channelField.label ? channelField.label : 'Channel (0-65535)'),
+                            h('span', { className: 'voice-channel-input-wrap' },
+                                h('span', { className: 'voice-channel-prefix', 'aria-hidden': true }, '#'),
+                                h('input', {
+                                    type: 'text',
+                                    inputMode: 'numeric',
+                                    pattern: '[0-9]*',
+                                    maxLength: 5,
+                                    className: 'voice-channel-input',
+                                    placeholder: channelField && channelField.placeholder ? channelField.placeholder : '0',
+                                    value: channelInput,
+                                    disabled: !actionAllowed(channelAction),
+                                    'aria-invalid': rawChannel !== '' && !channelInputValid,
+                                    'aria-describedby': 'voice-channel-hint',
+                                    onChange: (event) => setChannelInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 5)),
+                                    onKeyDown: (event) => {
+                                        event.stopPropagation();
+                                        if (event.key === 'Escape') setChannelInput('');
+                                    }
+                                })
+                            )
+                        ),
+                        h('div', { className: 'voice-channel-actions' },
+                            h('button', {
+                                type: 'submit',
+                                className: 'admin-button voice-channel-submit',
+                                disabled: !channelInputValid || !channelAvailable
+                            }, h(Icon, { name: 'log-in', size: 13 }), 'Join'),
+                            h('button', {
+                                type: 'button',
+                                className: 'admin-button voice-channel-leave',
+                                disabled: currentChannel === null || currentChannel === 0 || !channelAvailable,
+                                onClick: () => submitChannel(0)
+                            }, 'Leave')
+                        )
+                    ),
+                    h('p', {
+                        id: 'voice-channel-hint',
+                        className: `voice-channel-hint${rawChannel !== '' && !channelInputValid ? ' is-error' : ''}`
+                    }, rawChannel !== '' && !channelInputValid
+                        ? 'Enter a whole number from 0 to 65535.'
+                        : 'Channel 0 returns you to proximity voice.')
+                ),
+
+                (speakerAction || statusAction) && h('section', { className: 'voice-control-section voice-indicators', 'aria-labelledby': 'voice-indicators-title' },
+                    h('div', { className: 'voice-section-header' },
+                        h('div', { className: 'voice-control-heading' },
+                            h(Icon, { name: 'monitor-up', size: 16 }),
+                            h('div', { className: 'voice-control-copy' },
+                                h('h3', { id: 'voice-indicators-title' }, 'On-screen indicators'),
+                                h('p', null, 'Choose which voice details remain visible during play.')
+                            )
+                        )
+                    ),
+                    h('div', { className: 'voice-indicator-list' },
+                        renderIndicator(speakerAction, showSpeaker, 'users-round'),
+                        renderIndicator(statusAction, showStatus, 'mic')
+                    )
+                )
         )
     );
 }
@@ -5766,10 +6443,6 @@ function VehicleTuningView() {
                 )
             ),
             React.createElement('div', { className: 'admin-tuning-hero-actions' },
-                React.createElement('div', { className: `admin-tuning-live-pill ${status.tone}`, role: 'status', 'aria-live': 'polite' },
-                    React.createElement('span', { 'aria-hidden': true }),
-                    status.tone === 'error' ? 'Target unavailable' : 'Connected'
-                ),
                 React.createElement('button', { type: 'button', className: 'admin-button small', onClick: loadSnapshot },
                     React.createElement(Icon, { name: 'refresh-cw', size: 13 }), 'Refresh target'
                 )
@@ -5779,12 +6452,13 @@ function VehicleTuningView() {
         React.createElement('div', { className: 'admin-tuning-status-line', 'aria-live': 'polite' },
             React.createElement('span', { className: `admin-tuning-status-dot ${status.tone}` }),
             React.createElement('span', null, status.text),
-            React.createElement('strong', null, `${modifiedCount} changed`)
+            React.createElement('strong', null, `${modifiedCount} changed`),
+            status.tone === 'error' && React.createElement('span', { className: 'admin-tuning-status-tag' }, 'Target unavailable')
         ),
 
         React.createElement('section', { className: 'admin-tuning-audio', 'aria-labelledby': 'tuning-audio-title' },
             React.createElement('div', { className: 'admin-tuning-section-copy' },
-                React.createElement('div', { className: 'admin-tuning-section-icon' }, React.createElement(Icon, { name: 'audio-waveform', size: 17 })),
+                React.createElement(Icon, { name: 'audio-waveform', size: 14, className: 'admin-tuning-section-icon' }),
                 React.createElement('div', null,
                     React.createElement('h3', { id: 'tuning-audio-title' }, 'Engine audio'),
                     React.createElement('p', null, 'Choose a preset or apply an installed audioNameHash.'),
@@ -5830,7 +6504,7 @@ function VehicleTuningView() {
         React.createElement('section', { className: 'admin-tuning-handling', 'aria-labelledby': 'tuning-handling-title' },
             React.createElement('div', { className: 'admin-tuning-handling-header' },
                 React.createElement('div', { className: 'admin-tuning-section-copy' },
-                    React.createElement('div', { className: 'admin-tuning-section-icon' }, React.createElement(Icon, { name: 'sliders-horizontal', size: 17 })),
+                    React.createElement(Icon, { name: 'sliders-horizontal', size: 14, className: 'admin-tuning-section-icon' }),
                     React.createElement('div', null,
                         React.createElement('h3', { id: 'tuning-handling-title' }, 'Handling channels'),
                         React.createElement('p', null, 'Every adjustment is written to CHandlingData while you move it.')
@@ -5981,11 +6655,13 @@ function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo, allowed }
                     className: `admin-sidebar-item ${item.id}${isActive ? ' active' : ''}`,
                     onClick: () => onViewChange(item.id, item.tab),
                     'data-tooltip': item.label,
+                    title: item.label,
                     'aria-label': item.label
                 },
                     React.createElement('div', { className: 'admin-sidebar-icon' },
                         React.createElement(Icon, { name: item.lucide, size: 17 })
-                    )
+                    ),
+                    React.createElement('span', { className: 'admin-sidebar-label' }, item.label)
                 );
             })
         ),
@@ -5998,11 +6674,13 @@ function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo, allowed }
                     className: `admin-sidebar-item ${item.id}${isActive ? ' active' : ''}`,
                     onClick: () => onViewChange(item.id, item.tab),
                     'data-tooltip': item.label,
+                    title: item.label,
                     'aria-label': item.label
                 },
                     React.createElement('div', { className: 'admin-sidebar-icon' },
                         React.createElement(Icon, { name: item.lucide, size: 17 })
-                    )
+                    ),
+                    React.createElement('span', { className: 'admin-sidebar-label' }, item.label)
                 );
             }),
             React.createElement('button', {
@@ -6010,24 +6688,18 @@ function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo, allowed }
                 type: 'button',
                 onClick: () => fetchNui('cortex-admin:close'),
                 'data-tooltip': 'Close Menu',
+                title: 'Close Menu',
                 'aria-label': 'Close Menu'
             },
                 React.createElement('div', { className: 'admin-sidebar-icon' },
                     React.createElement(Icon, { name: 'power', size: 15 })
-                )
+                ),
+                React.createElement('span', { className: 'admin-sidebar-label' }, 'Close')
             )
         )
     );
 }
 
-
-// Helper to get time-based greeting
-function getGreeting(hour) {
-    if (hour >= 5 && hour < 12) return 'Good Morning';
-    if (hour >= 12 && hour < 17) return 'Good Afternoon';
-    if (hour >= 17 && hour < 21) return 'Good Evening';
-    return 'Good Night';
-}
 
 // Coordinate HUD Component - displays live coordinates on middle-left of screen
 function CoordHud({ visible, data }) {
@@ -6248,29 +6920,55 @@ function VehicleHealthHudPanel() {
 }
 
 function VoiceHudPanel() {
-    const [state, setState] = useState({ visible: false, talking: false, speakers: [] });
+    const [state, setState] = useState({ visible: false, showStatus: false, talking: false, speakers: [] });
 
     useEffect(() => {
         const handleMessage = (event) => {
             const payload = asObject(event.data);
-            if (payload.action !== 'cortex-admin:setVoiceHud') return;
-            const data = asObject(payload.data);
-            setState({
-                visible: data.visible === true,
-                talking: data.talking === true,
-                speakers: asArray(data.speakers).slice(0, 6).map((entry) => asString(entry)).filter(Boolean)
-            });
+            if (payload.action === 'cortex-admin:setVoiceHud') {
+                const data = asObject(payload.data);
+                const talking = data.talking === true;
+                const speakers = asArray(data.speakers).slice(0, 6).map((entry) => asString(entry)).filter(Boolean);
+                setState({
+                    visible: data.visible === true && (talking || speakers.length > 0),
+                    showStatus: data.showStatus === true,
+                    talking,
+                    speakers
+                });
+                return;
+            }
+
+            // Toggle state is authoritative. This closes a stale HUD even if a
+            // separate overlay message was delayed or missed by CEF.
+            if (payload.action === 'cortex-admin:setState') {
+                const toggles = asObject(asObject(payload.data).toggles);
+                if (Object.keys(toggles).length === 0) return;
+                const showSpeakers = toggles['voice.showSpeaker'] === true;
+                const showStatus = toggles['voice.showStatus'] === true;
+                setState((prev) => ({
+                    ...prev,
+                    showStatus,
+                    visible: (showStatus && prev.talking) || (showSpeakers && prev.speakers.length > 0)
+                }));
+            }
         };
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
     }, []);
 
-    if (!state.visible) return null;
-    return h('section', { className: `admin-vmenu-hud admin-voice-hud${state.talking ? ' talking' : ''}`, 'aria-label': 'Voice activity' },
-        h('header', null, h(Icon, { name: state.talking ? 'mic' : 'mic-off', size: 13 }), h('span', null, state.talking ? 'TRANSMITTING' : 'VOICE IDLE')),
+    if (!state.visible || (!state.talking && state.speakers.length === 0)) return null;
+    const localTalking = state.showStatus && state.talking;
+    return h('section', {
+        className: `admin-vmenu-hud admin-voice-hud${localTalking ? ' talking' : ''}${state.speakers.length > 0 ? ' has-speakers' : ''}`,
+        'aria-label': 'Voice activity'
+    },
+        h('header', null,
+            h(Icon, { name: localTalking ? 'mic' : 'users-round', size: 13 }),
+            h('span', null, localTalking ? 'TRANSMITTING' : 'ACTIVE SPEAKERS')
+        ),
         state.speakers.length > 0
             ? h('div', { className: 'admin-voice-speakers' }, state.speakers.map((name, index) => h('span', { key: `${name}-${index}` }, name)))
-            : h('div', { className: 'admin-vmenu-hud-empty' }, 'No nearby speakers')
+            : null
     );
 }
 
@@ -6280,13 +6978,23 @@ function TimeHudPanel() {
     useEffect(() => {
         const handleMessage = (event) => {
             const payload = asObject(event.data);
-            if (payload.action !== 'cortex-admin:setTimeHud') return;
-            const data = asObject(payload.data);
-            setState({
-                visible: data.visible === true,
-                hour: clamp(Math.trunc(asFiniteNumber(data.hour, 0)), 0, 23),
-                minute: clamp(Math.trunc(asFiniteNumber(data.minute, 0)), 0, 59)
-            });
+            if (payload.action === 'cortex-admin:setTimeHud') {
+                const data = asObject(payload.data);
+                setState({
+                    visible: data.visible === true,
+                    hour: clamp(Math.trunc(asFiniteNumber(data.hour, 0)), 0, 23),
+                    minute: clamp(Math.trunc(asFiniteNumber(data.minute, 0)), 0, 59)
+                });
+                return;
+            }
+
+            // The full toggle map is the source of truth for overlay lifetime.
+            if (payload.action === 'cortex-admin:setState') {
+                const toggles = asObject(asObject(payload.data).toggles);
+                if (Object.keys(toggles).length > 0 && toggles['dev.showTime'] !== true) {
+                    setState((prev) => ({ ...prev, visible: false }));
+                }
+            }
         };
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
@@ -6372,11 +7080,12 @@ function WardrobeShareInbox({ open }) {
     );
 }
 
-const DEDICATED_VMENU_WORKSPACES = new Set(['migration', 'bans', 'imported']);
+const DEDICATED_VMENU_WORKSPACES = new Set(['migration', 'bans', 'imported', 'voice']);
 
 function App() {
     const [open, setOpen] = useState(false);
     const [actions, setActions] = useState([]);
+    const [actionSelections, setActionSelections] = useState({});
     const [tabs, setTabs] = useState([]);
     const [favorites, setFavorites] = useState([]);
     const [settings, setSettings] = useState({});
@@ -6390,6 +7099,7 @@ function App() {
     const [inventoryItems, setInventoryItems] = useState([]);
     const [garageVehicles, setGarageVehicles] = useState([]);
     const [frameworkInfo, setFrameworkInfo] = useState({ framework: 'standalone', hasInventory: false, hasGarage: false, hasQBX: false });
+    const [voiceState, setVoiceState] = useState({ proximity: null, channel: null });
     const [activeTab, setActiveTab] = useState('all');
     const [vehiclePreviewLaunch, setVehiclePreviewLaunch] = useState({ token: 0, model: null, shared: false, resumeOnly: false });
 
@@ -6416,6 +7126,7 @@ function App() {
     
     // Ref for search input (used by / key shortcut)
     const searchRef = React.useRef(null);
+    const shellRef = React.useRef(null);
     const typingStateRef = React.useRef(false);
 
     useLayoutEffect(() => {
@@ -6425,8 +7136,6 @@ function App() {
 
     // Layout - permanent sidebar
     const showSidebar = true;
-    const showTopbar = false;
-    const useCompactLayout = viewportProfile.isCramped;
 
     const decoratedActions = useMemo(() => {
         if (!open) return [];
@@ -6437,7 +7146,7 @@ function App() {
             if (action.tab === 'inventory' && (!frameworkInfo || !frameworkInfo.hasInventory)) return null;
             if (action.tab === 'garage' && (!frameworkInfo || !frameworkInfo.hasGarage)) return null;
             if (action.id === 'options.menuAccentColor') {
-                return { ...action, selected: normalizeHex6(settings.menuAccentColor) || '#7170ff' };
+                return { ...action, selected: normalizeHex6(settings.menuAccentColor) || '#e8a23f' };
             }
             if (action.id === 'options.uiScale') return { ...action, selected: settings.uiScale };
             if (action.id === 'options.uiOpacity') {
@@ -6450,9 +7159,12 @@ function App() {
             if (action.id === 'world.weather') return { ...action, selected: currentWeather };
             if (action.id === 'world.time') return { ...action, selected: gameHour };
             if (action.id === 'vehicle.personal') return action;
+            if (Object.prototype.hasOwnProperty.call(actionSelections, action.id)) {
+                return { ...action, selected: actionSelections[action.id] };
+            }
             return action;
         }).filter(Boolean);
-    }, [open, actions, settings, dockPosition, currentWeather, gameHour, frameworkInfo]);
+    }, [open, actions, actionSelections, settings, dockPosition, currentWeather, gameHour, frameworkInfo]);
 
     const filteredActions = useMemo(() => {
         if (!open) return [];
@@ -6531,7 +7243,7 @@ function App() {
         document.documentElement.style.setProperty('--es-admin-scale', uiScale);
         document.documentElement.style.setProperty('--es-ui-scale', baseScale * uiScale);
         document.documentElement.style.setProperty('--es-admin-opacity', String(uiOpacity));
-        applyMenuAccentCss(nextSettings.menuAccentColor || '#7170ff');
+        applyMenuAccentCss(nextSettings.menuAccentColor || '#e8a23f');
     }, []);
 
     const setTypingState = useCallback((isTyping) => {
@@ -6574,6 +7286,9 @@ function App() {
             }
             if (Array.isArray(data.inventoryItems)) setInventoryItems(data.inventoryItems);
             if (Array.isArray(data.garageVehicles)) setGarageVehicles(data.garageVehicles);
+            if (isPlainObject(data.voiceState)) {
+                setVoiceState(normalizeVoiceState(data.voiceState));
+            }
             if (isPlainObject(data.frameworkInfo)) {
                 const frameworkInfo = data.frameworkInfo;
                 setFrameworkInfo({
@@ -6669,6 +7384,11 @@ function App() {
             setVmenuBanImportResult(asObject(payload.data));
         }
 
+        if (payload.action === 'cortex-admin:setVoiceState') {
+            const data = asObject(payload.data);
+            setVoiceState(normalizeVoiceState(data));
+        }
+
         if (payload.action === 'cortex-admin:reload') {
             window.location.reload();
         }
@@ -6693,6 +7413,20 @@ function App() {
         window.addEventListener('resize', handleViewportResize);
         return () => window.removeEventListener('resize', handleViewportResize);
     }, []);
+
+    // Track shell resize (drag handle) so cramped layout engages when the shell itself shrinks
+    useEffect(() => {
+        if (!open) return undefined;
+        const shell = shellRef.current;
+        if (!shell || typeof ResizeObserver === 'undefined') return undefined;
+        const measure = () => {
+            const r = shell.getBoundingClientRect();
+            setViewportProfile(getViewportProfile({ width: r.width, height: r.height }));
+        };
+        const observer = new ResizeObserver(measure);
+        observer.observe(shell);
+        return () => observer.disconnect();
+    }, [open]);
 
     useEffect(() => {
         applySettings(settings);
@@ -6766,6 +7500,7 @@ function App() {
             const isTyping = tag === 'input' || tag === 'textarea' || (target && target.isContentEditable);
 
             if (isTyping) return;
+            if (isDedicatedVmenuWorkspace) return;
 
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
@@ -6824,7 +7559,7 @@ function App() {
         return () => {
             window.removeEventListener('keydown', keyHandler);
         };
-    }, [open, tabs, actionContext, prompt, playerPrompt, confirmAction]);
+    }, [open, tabs, actionContext, prompt, playerPrompt, confirmAction, activeTab]);
 
     // Reset selected index only when tab changes
     useEffect(() => {
@@ -6911,7 +7646,9 @@ function App() {
             const isEnabled = toggles[action.id] === true;
             setToggles(prev => ({ ...prev, [action.id]: !isEnabled }));
             fetchNui('cortex-admin:toggle', { id: action.id, enabled: !isEnabled });
-        } else if (action.type === 'dock' || action.type === 'slider' || action.type === 'color') {
+        } else if (action.type === 'workspace') {
+            if (action.workspaceTab) setActiveTab(action.workspaceTab);
+        } else if (action.type === 'select' || action.type === 'dock' || action.type === 'slider' || action.type === 'color') {
             return;
         } else {
             queueAction(action);
@@ -6943,6 +7680,7 @@ function App() {
     }, []);
 
     const handleSelect = useCallback((action, value) => {
+        setActionSelections((previous) => ({ ...previous, [action.id]: value }));
         if (action.id === 'options.menuPosition') {
             const next = normalizeMenuDock(value);
             setDockPosition(next);
@@ -7021,7 +7759,6 @@ function App() {
 
     const appClass = `admin-app${open ? ' open' : ''}`;
     const shellClasses = ['admin-shell'];
-    if (useCompactLayout) shellClasses.push('compact');
     shellClasses.push(`docked-${dockPosition}`);
     if (viewportProfile.isNarrow) shellClasses.push('is-narrow');
     if (viewportProfile.isShort) shellClasses.push('is-short');
@@ -7029,6 +7766,12 @@ function App() {
     const shellClass = shellClasses.join(' ');
     const showTargetInfo = settings.showTargetInfo !== false;
     const isDedicatedVmenuWorkspace = DEDICATED_VMENU_WORKSPACES.has(activeTab);
+    const activeTabLabel = useMemo(() => {
+        const navItems = baseSidebarItems.concat(sidebarFooterNavItems).filter((item) => item && !item.type);
+        const match = navItems.find((item) => item.tab === activeTab);
+        if (match) return match.label;
+        return activeTab.charAt(0).toUpperCase() + activeTab.slice(1).replace(/_/g, ' ');
+    }, [activeTab]);
 
     // Handle sidebar view switching - now directly sets tab
     const handleViewChange = useCallback((viewId, tab) => {
@@ -7100,7 +7843,7 @@ function App() {
         React.createElement('div', {
             className: appClass
         },
-        open && React.createElement('div', { className: shellClass },
+        open && React.createElement('div', { ref: shellRef, className: shellClass },
             // Left Sidebar
             showSidebar && React.createElement(Sidebar, {
                 activeView,
@@ -7112,20 +7855,67 @@ function App() {
 
             // Main Content Area
             React.createElement('div', { className: 'admin-main' },
+                React.createElement('header', { className: 'admin-topbar' },
+                    React.createElement('div', { className: 'admin-topbar-left' },
+                        React.createElement('div', { className: 'admin-brand' },
+                            React.createElement('span', { className: 'admin-brand-mark', 'aria-hidden': true }),
+                            React.createElement('span', { className: 'admin-brand-name' }, 'CORTEX'),
+                        ),
+                        React.createElement('div', { className: 'admin-topbar-context' },
+                            React.createElement('strong', null, activeTabLabel)
+                        )
+                    ),
+                    React.createElement('div', { className: 'admin-topbar-right' },
+                        React.createElement('div', { className: 'admin-topbar-player' },
+                            React.createElement(Icon, { name: 'user', size: 12 }),
+                            React.createElement('span', null, playerName)
+                        ),
+                        React.createElement('button', {
+                            type: 'button',
+                            className: 'admin-header-btn close-btn',
+                            onClick: handleClose,
+                            title: 'Close menu (Esc)',
+                            'aria-label': 'Close menu'
+                        }, React.createElement(Icon, { name: 'x', size: 14 }))
+                    )
+                ),
                 // Content Area
                 React.createElement('div', { className: 'admin-content' },
                     React.createElement('div', {
                         className: 'admin-column',
                         onWheel: (e) => {
-                            // When Shift is held (sprinting), browsers often trigger horizontal scroll (deltaX).
-                            // We redirect this to scrollTop so the menu scrolls vertically even while holding Shift.
+                            const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+                            if (delta === 0) return;
+
+                            const canScroll = (element) => element
+                                && element.scrollHeight > element.clientHeight
+                                && (delta < 0
+                                    ? element.scrollTop > 0
+                                    : element.scrollTop + element.clientHeight < element.scrollHeight);
+                            const localOwner = e.target.closest('.appearance-section-stack--wardrobe-scroll, .appearance-overlay-scroll');
+                            const pageOwner = e.currentTarget.querySelector('.appearance-content-area--scroll');
+
+                            // Shift-wheel arrives as deltaX in CEF. Route it to the nearest
+                            // vertical owner instead of the non-scrolling appearance column.
                             if (e.deltaX !== 0 && e.deltaY === 0) {
-                                e.currentTarget.scrollTop += e.deltaX;
+                                const owner = canScroll(localOwner)
+                                    ? localOwner
+                                    : canScroll(pageOwner)
+                                        ? pageOwner
+                                        : e.currentTarget;
+                                owner.scrollTop += delta;
+                                return;
+                            }
+
+                            // Keep the page scrollable while the pointer is over its fixed
+                            // toolbar rather than directly above the nested content owner.
+                            if (pageOwner && !pageOwner.contains(e.target) && canScroll(pageOwner)) {
+                                pageOwner.scrollTop += delta;
                             }
                         }
                     },
                         // Search Bar (always visible, prominent in sidebar mode)
-                        activeTab !== 'vehicle_tuning' && !isDedicatedVmenuWorkspace && React.createElement('div', { className: 'admin-search-bar' },
+                        activeTab !== 'vehicle_tuning' && activeTab !== 'appearance' && !isDedicatedVmenuWorkspace && React.createElement('div', { className: 'admin-search-bar' },
                             React.createElement('div', { className: 'admin-search-wrapper' },
                                 React.createElement(Icon, { name: 'search', size: 18, className: 'admin-search-icon' }),
                                 React.createElement('input', {
@@ -7180,6 +7970,15 @@ function App() {
                         activeTab === 'appearance' && React.createElement(AppearanceErrorBoundary, null,
                             React.createElement(AppearanceWorkspaceView, { onPrompt: setPrompt })
                         ),
+                        activeTab === 'voice' && React.createElement(VoiceChatWorkspace, {
+                            actions: decoratedActions,
+                            toggles,
+                            allowed,
+                            voiceState,
+                            onToggle: handleToggle,
+                            onSelect: handleSelect,
+                            onPromptSubmit: handlePromptSubmit
+                        }),
                         activeTab === 'vehicle_custom' && React.createElement(VehicleView),
                         activeTab === 'vehicle_tuning' && React.createElement(VehicleTuningView),
                         activeTab === 'teleport' && React.createElement(TeleportWorkspaceView, { onPrompt: setPrompt }),

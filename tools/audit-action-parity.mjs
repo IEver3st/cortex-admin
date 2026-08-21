@@ -7,6 +7,7 @@ const read = (...parts) => readFileSync(join(root, ...parts), 'utf8');
 const state = JSON.parse(read('ui', 'preview-state.json'));
 const clientActions = read('client', 'actions.lua');
 const compat = read('client', 'vmenu_compat.lua');
+const config = read('shared', 'config.lua');
 const ui = read('ui', 'app.js');
 
 function between(source, start, end) {
@@ -83,6 +84,30 @@ for (const action of state.actions || []) {
             failures.push(`${action.id}: workspace has no reachable sidebar destination`);
         } else coverage.workspace += 1;
     }
+}
+
+const permissionSource = between(config, 'Config.ActionPermissions = {', 'Config.BanIdentifierTypes');
+const permissionIds = literalIds(permissionSource, [/\[['"]([^'"]+)['"]\]\s*=/g]);
+const uiExecuteIds = literalIds(ui, [
+    /fetchNui\(\s*['"]cortex-admin:action['"]\s*,\s*\{\s*id:\s*['"]([^'"]+)['"]/g,
+]);
+for (const id of uiExecuteIds) {
+    if (!seen.has(id) && !permissionIds.has(id)) failures.push(`${id}: UI emits an action absent from catalog and action permissions`);
+    if (!executeIds.has(id)) failures.push(`${id}: UI-emitted action has no execute handler`);
+}
+
+const activationSource = between(ui, 'const activateAction = React.useCallback', 'const activateSelectedItem = React.useCallback');
+if (!activationSource.includes("action.type === 'select'")) {
+    failures.push('keyboard activation does not exclude select actions from execute dispatch');
+}
+if (!activationSource.includes("action.type === 'workspace'") || !activationSource.includes('setActiveTab(action.workspaceTab)')) {
+    failures.push('keyboard activation does not route workspace actions to their tab');
+}
+if (!compat.includes('Admin.dispatchVmenuAction = function')
+    || !clientActions.includes("Admin.dispatchVmenuAction('execute'")
+    || !clientActions.includes("Admin.dispatchVmenuAction('toggle'")
+    || !clientActions.includes("Admin.dispatchVmenuAction('select'")) {
+    failures.push('compatibility dispatch is not registered with the base action router');
 }
 
 if (failures.length) {

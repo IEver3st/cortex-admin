@@ -211,7 +211,7 @@ local function toggleFavorite(id)
 end
 
 RegisterNUICallback('cortex-admin:ready', function(_, cb)
-    Admin.sendUiState()
+    Admin.markUiReady()
     cb({ ok = true })
 end)
 
@@ -229,9 +229,13 @@ RegisterNUICallback('cortex-admin:action', function(data, cb)
 
     local payload = data and data.data
     CreateThread(function()
-        local ok, err = pcall(Admin.executeAction, actionId, payload)
+        local ok, result = pcall(Admin.executeAction, actionId, payload)
         if not ok then
-            print(('[cortex-admin] action %s failed: %s'):format(actionId, tostring(err)))
+            print(('[cortex-admin] action %s failed: %s'):format(actionId, tostring(result)))
+            replyError(cb, 'action_failed')
+            return
+        end
+        if result == false then
             replyError(cb, 'action_failed')
             return
         end
@@ -271,12 +275,20 @@ RegisterNUICallback('cortex-admin:getPreviewVehicleExtras', function(_, cb)
 end)
 
 RegisterNUICallback('cortex-admin:getVehicleTuning', function(_, cb)
+    if not canInvokeAction('vehicle.liveTuning') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local payload = Admin.buildVehicleTuningSnapshot and Admin.buildVehicleTuningSnapshot()
         or { ok = false, error = 'tuning_unavailable', message = 'Live vehicle tuning is unavailable.' }
     cb(payload)
 end)
 
 RegisterNUICallback('cortex-admin:setVehicleHandling', function(data, cb)
+    if not canInvokeAction('vehicle.liveTuning') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local fieldId = trimString(data and data.field, 64)
     if not fieldId or not data or data.value == nil then
         replyError(cb, 'invalid_handling_value')
@@ -289,6 +301,10 @@ RegisterNUICallback('cortex-admin:setVehicleHandling', function(data, cb)
 end)
 
 RegisterNUICallback('cortex-admin:resetVehicleTuningField', function(data, cb)
+    if not canInvokeAction('vehicle.liveTuning') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local fieldId = trimString(data and data.field, 64)
     if not fieldId then
         replyError(cb, 'invalid_handling_field')
@@ -301,6 +317,10 @@ RegisterNUICallback('cortex-admin:resetVehicleTuningField', function(data, cb)
 end)
 
 RegisterNUICallback('cortex-admin:setVehicleEngineAudio', function(data, cb)
+    if not canInvokeAction('vehicle.liveTuning') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local rawSoundName = data and data.soundName
     if type(rawSoundName) ~= 'string' or #rawSoundName > 64 then
         replyError(cb, 'invalid_audio_name')
@@ -319,6 +339,10 @@ RegisterNUICallback('cortex-admin:setVehicleEngineAudio', function(data, cb)
 end)
 
 RegisterNUICallback('cortex-admin:resetVehicleTuning', function(data, cb)
+    if not canInvokeAction('vehicle.liveTuning') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local scope = trimString(data and data.scope, 16) or 'handling'
     if scope ~= 'handling' and scope ~= 'audio' and scope ~= 'all' then
         replyError(cb, 'invalid_reset_scope')
@@ -331,6 +355,10 @@ RegisterNUICallback('cortex-admin:resetVehicleTuning', function(data, cb)
 end)
 
 RegisterNUICallback('cortex-admin:getWeaponAttachments', function(_, cb)
+    if not canInvokeAction('weapons.attachments') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local payload = Admin.getWeaponAttachmentList and Admin.getWeaponAttachmentList() or { weaponName = '', components = {} }
     cb({
         ok = true,
@@ -340,6 +368,10 @@ RegisterNUICallback('cortex-admin:getWeaponAttachments', function(_, cb)
 end)
 
 RegisterNUICallback('cortex-admin:toggleWeaponAttachment', function(data, cb)
+    if not canInvokeAction('weapons.attachments') then
+        replyError(cb, 'forbidden')
+        return
+    end
     local h = trimString(data and data.componentHash, 192)
     if not h then
         replyError(cb, 'invalid_component')
@@ -552,13 +584,56 @@ RegisterNUICallback('cortex-admin:getAppearance', function(_, cb)
 end)
 
 RegisterNUICallback('cortex-admin:setAppearance', function(data, cb)
-    if type(data) ~= 'table' then
+    if not canInvokeAction('player.setAppearance') or type(data) ~= 'table' then
         replyError(cb, 'invalid_appearance')
         return
     end
 
     Admin.setPedAppearance(data)
     cb({ ok = true })
+end)
+
+RegisterNUICallback('cortex-admin:randomizeAppearance', function(data, cb)
+    if not canInvokeAction('player.randomizeAppearance') or type(data) ~= 'table'
+        or type(Admin.randomizeAppearance) ~= 'function' then
+        replyError(cb, 'invalid_action')
+        return
+    end
+
+    local options = AppearanceRandomizer and AppearanceRandomizer.sanitizeOptions
+        and AppearanceRandomizer.sanitizeOptions(data) or nil
+    if not options then
+        replyError(cb, 'invalid_appearance_options')
+        return
+    end
+
+    CreateThread(function()
+        local ok, result = pcall(Admin.randomizeAppearance, options)
+        if not ok then
+            print(('[cortex-admin] appearance generator failed: %s'):format(tostring(result)))
+            replyError(cb, 'generation_failed')
+            return
+        end
+        cb(type(result) == 'table' and result or { ok = result == true })
+    end)
+end)
+
+RegisterNUICallback('cortex-admin:undoRandomizedAppearance', function(_, cb)
+    if not canInvokeAction('player.undoRandomizedAppearance')
+        or type(Admin.undoRandomizedAppearance) ~= 'function' then
+        replyError(cb, 'invalid_action')
+        return
+    end
+
+    CreateThread(function()
+        local ok, result = pcall(Admin.undoRandomizedAppearance)
+        if not ok then
+            print(('[cortex-admin] appearance undo failed: %s'):format(tostring(result)))
+            replyError(cb, 'undo_failed')
+            return
+        end
+        cb(type(result) == 'table' and result or { ok = result == true })
+    end)
 end)
 
 -- Vehicle Customization

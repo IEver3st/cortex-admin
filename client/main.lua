@@ -30,7 +30,6 @@ local SetOverrideWeather = SetOverrideWeather
 local SetBlackout = SetBlackout
 local PauseClock = PauseClock
 local FreezeEntityPosition = FreezeEntityPosition
-local PlaySoundFrontend = PlaySoundFrontend
 local GetVehiclePedIsIn = GetVehiclePedIsIn
 local TaskLeaveVehicle = TaskLeaveVehicle
 local SetEntityAsMissionEntity = SetEntityAsMissionEntity
@@ -112,9 +111,12 @@ local enabledControlsCount = #enabledControls
 local menuControlThreadActive = false
 local menuFocusApplied = false
 local menuIdleCamTick = 0
-local menuFocusTick = 0
 local menuTypingLock = false
+local menuOpenGeneration = 0
+local menuOpenedAt = 0
+local uiReady = false
 local chatResourceName = 'cortex-chat'
+local MENU_TOGGLE_CLOSE_GUARD_MS = 500
 
 EsAdmin.state = state
 
@@ -123,15 +125,19 @@ EsAdmin.state = state
 -- ============================================================================
 
 local function notify(notifyType, message)
-    local position = 'top-right'
-    if state.settings.menuPosition == 'right' then
-        position = 'top-left'
-    end
-    -- Use exports['cortex-lib']:notify from cortex-lib
-    exports['cortex-lib']:notify({ type = notifyType or 'info', description = message, position = position })
+    -- Position, sound, and sound preset are player-owned cortex-lib settings.
+    -- Omitting those fields lets cortex-lib resolve the current preferences.
+    exports['cortex-lib']:notify({
+        type = notifyType or 'info',
+        description = tostring(message or '')
+    })
 end
 
 EsAdmin.notify = notify
+
+function EsAdmin.copyToClipboard(text)
+    exports['cortex-lib']:copyToClipboard(text or '')
+end
 
 local function getCurrentWeather()
     for i = 1, #trackedWeatherTypes do
@@ -588,7 +594,9 @@ end
 -- UI STATE BUILDING (Optimized)
 -- ============================================================================
 
-local function buildUiState()
+local function buildUiState(includeStatic)
+    includeStatic = includeStatic ~= false
+
     -- Cache player name (rarely changes)
     if not cachedData.playerName then
         cachedData.playerName = GetPlayerName(PlayerId()) or 'Admin'
@@ -609,10 +617,8 @@ local function buildUiState()
     local pvModel = EsAdmin.getPreviewVehicleModel and EsAdmin.getPreviewVehicleModel() or nil
     local pvShared = EsAdmin.getPreviewShared and EsAdmin.getPreviewShared() == true
 
-    return {
+    local data = {
         open = state.open,
-        actions = cachedData.actions,
-        tabs = cachedData.tabs,
         favorites = state.favorites,
         settings = state.settings,
         toggles = state.toggles,
@@ -625,19 +631,27 @@ local function buildUiState()
         currentWeather = getCurrentWeather(),
         personalVehicles = cachedData.personalVehicles,
         addonVehicles = cachedData.addonVehicles or {},
-        frameworkInfo = cachedData.frameworkInfo,
+        voiceState = EsAdmin.getVoiceState and EsAdmin.getVoiceState() or nil,
         vehiclePreview = {
             active = type(pvModel) == 'string' and pvModel ~= '',
             model = pvModel,
             shared = pvShared,
         },
     }
+
+    if includeStatic then
+        data.actions = cachedData.actions
+        data.tabs = cachedData.tabs
+        data.frameworkInfo = cachedData.frameworkInfo
+    end
+
+    return data
 end
 
-local function sendUiState()
+local function sendUiState(includeStatic)
     SendNUIMessage({
         action = 'cortex-admin:setState',
-        data = buildUiState()
+        data = buildUiState(includeStatic)
     })
     if state.toggles['dev.showSpeed'] == true then
         SendNUIMessage({
@@ -696,6 +710,11 @@ local function sendRuntimeUiState(includePlayers, force)
 end
 
 EsAdmin.sendUiState = sendUiState
+
+EsAdmin.markUiReady = function()
+    uiReady = true
+    sendUiState(true)
+end
 
 local function requestMenuPermissions(force)
     local now = GetGameTimer()
@@ -763,18 +782,11 @@ local function startMenuControlThread()
 
             if chatOpen then
                 -- cortex-chat owns NUI focus while its input is open.
-                menuFocusTick = now
             elseif wasChatOpen then
                 -- Chat just released focus; hand it back to the admin menu now.
                 SetNuiFocus(true, true)
                 SetNuiFocusKeepInput(not menuTypingLock)
                 menuFocusApplied = true
-                menuFocusTick = now
-            elseif now - menuFocusTick >= 500 then
-                SetNuiFocus(true, true)
-                SetNuiFocusKeepInput(not menuTypingLock)
-                menuFocusApplied = true
-                menuFocusTick = now
             end
 
             wasChatOpen = chatOpen
@@ -821,29 +833,32 @@ function EsAdmin.setTypingLock(enabled)
     if state.open then
         SetNuiFocus(true, true)
         SetNuiFocusKeepInput(not menuTypingLock)
-        menuFocusTick = GetGameTimer()
     end
 end
 
-local function setOpen(open)
-    if state.open == open then return end
-    state.open = open
-    TriggerServerEvent('cortex-admin:server:setUiPresence', { open = open == true })
+local function startMenuHydration(openGeneration)
+    CreateThread(function()
+        -- Publish open/focus first. This yield keeps player-list/state work out of
+        -- the command callback and gives the NUI an immediate visible transition.
+        Wait(0)
 
-    if open then
-        menuTypingLock = false
-        applyMenuFocus()
-        menuIdleCamTick = 0
-        menuFocusTick = 0
+        if not state.open or menuOpenGeneration ~= openGeneration then
+            return
+        end
+
         refreshPlayerList()
         TriggerServerEvent('cortex-admin:server:requestPlayerDirectory')
-        sendUiState()
-        SendNUIMessage({ action = 'cortex-admin:open' })
-        startMenuControlThread()
+        if uiReady then
+            sendUiState(false)
+        else
+            -- If open raced the NUI ready callback, retain a full-state fallback.
+            sendUiState(true)
+        end
         requestMenuPermissions(false)
         requestAddonVehiclesIfNeeded(false)
+
         local m = EsAdmin.getPreviewVehicleModel and EsAdmin.getPreviewVehicleModel() or nil
-        if type(m) == 'string' and m ~= '' then
+        if type(m) == 'string' and m ~= '' and state.open and menuOpenGeneration == openGeneration then
             SendNUIMessage({
                 action = 'cortex-admin:vehiclePreviewResume',
                 data = {
@@ -853,6 +868,28 @@ local function setOpen(open)
                 }
             })
         end
+
+        if menuOpenGeneration == openGeneration then
+            menuHydrationPending = false
+        end
+    end)
+end
+
+local function setOpen(open)
+    if state.open == open then return end
+    menuOpenGeneration = menuOpenGeneration + 1
+    local openGeneration = menuOpenGeneration
+    state.open = open
+    TriggerServerEvent('cortex-admin:server:setUiPresence', { open = open == true })
+
+    if open then
+        menuOpenedAt = GetGameTimer()
+        menuTypingLock = false
+        applyMenuFocus()
+        menuIdleCamTick = 0
+        SendNUIMessage({ action = 'cortex-admin:open' })
+        startMenuControlThread()
+        startMenuHydration(openGeneration)
     else
         menuTypingLock = false
         SendNUIMessage({ action = 'cortex-admin:close' })
@@ -879,9 +916,18 @@ end
 EsAdmin.openVehiclePreviewPage = openVehiclePreviewPage
 
 local function toggleMenu()
+    if state.open then
+        local elapsedSinceOpen = GetGameTimer() - menuOpenedAt
+        if elapsedSinceOpen >= 0 and elapsedSinceOpen < MENU_TOGGLE_CLOSE_GUARD_MS then
+            return
+        end
+    end
+
     local opening = not state.open
     setOpen(opening)
 end
+
+EsAdmin.toggleMenu = toggleMenu
 
 RegisterCommand(Config.Command, function()
     toggleMenu()
@@ -1216,7 +1262,7 @@ RegisterCommand('clearweapons', function()
 end, false)
 
 RegisterCommand('preview', function(_, args)
-    if not hasCommandPermission('vehicle.preview', 'vehicle preview') then
+    if not hasCommandPermission('vehicle.spawn', 'vehicle preview') then
         return
     end
 
@@ -1619,31 +1665,11 @@ RegisterNetEvent('cortex-admin:client:freeze', function(enabled)
 end)
 
 RegisterNetEvent('cortex-admin:client:notify', function(notifyType, message)
-    local position = 'top-right'
-    if state.settings.menuPosition == 'right' then
-        position = 'top-left'
-    end
-    
-    exports['cortex-lib']:notify({
-        type = notifyType or 'info',
-        description = message or '',
-        position = position
-    })
-    
-    if notifyType == 'success' then
-        PlaySoundFrontend(-1, "Event_Message_Purple", "GTAO_FM_Events_Soundset", true)
-    elseif notifyType == 'error' then
-        PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_SHOP_SOUNDSET", true)
-    elseif notifyType == 'info' then
-        PlaySoundFrontend(-1, "Toggle_On", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-    end
+    notify(notifyType, message)
 end)
 
 RegisterNetEvent('cortex-admin:client:copyText', function(text)
-    SendNUIMessage({
-        action = 'cortex-admin:copyText',
-        data = { text = text }
-    })
+    EsAdmin.copyToClipboard(text)
 end)
 
 -- ============================================================================

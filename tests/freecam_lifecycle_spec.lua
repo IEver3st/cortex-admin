@@ -1,0 +1,30 @@
+local sourcePath = debug.getinfo(1, 'S').source:sub(2):gsub('\\', '/')
+local resourceRoot = assert(sourcePath:match('^(.*)/tests/[^/]+$'), 'could not locate resource root')
+
+local file = assert(io.open(resourceRoot .. '/client/actions.lua', 'rb'))
+local clientSource = file:read('*a')
+file:close()
+
+local freecamStart = assert(clientSource:find('local freecam =', 1, true), 'freecam state must exist')
+local freecamEnd = assert(clientSource:find('function playNoclipFx', freecamStart, true), 'could not isolate freecam lifecycle')
+local freecamSource = clientSource:sub(freecamStart, freecamEnd - 1)
+
+assert(freecamSource:find('controlledEntity = nil', 1, true), 'freecam must track the controlled entity')
+assert(freecamSource:find('entities = {}', 1, true), 'freecam must track all entities it changes')
+assert(freecamSource:find('IsEntityPositionFrozen', 1, true), 'freecam must capture prior freeze state')
+assert(freecamSource:find('IsEntityVisible', 1, true), 'freecam must capture prior visibility state')
+assert(freecamSource:find('GetVehiclePedIsIn(ped, false)', 1, true), 'freecam must handle in-vehicle control')
+assert(freecamSource:find('SetEntityVisible(entity, false, false)', 1, true), 'freecam must hide the player while active')
+assert(freecamSource:find('FreezeEntityPosition(entity, true)', 1, true), 'freecam must freeze controlled entities while active')
+assert(freecamSource:find('reassertFreecamEntities()', 1, true), 'freecam must reassert hidden/frozen state during control')
+assert(freecamSource:find('record.freezeChanged', 1, true), 'freecam must restore only freeze state it changed')
+assert(freecamSource:find('record.visibilityChanged', 1, true), 'freecam must restore only visibility state it changed')
+assert(freecamSource:find('currentPed ~= freecam.ped', 1, true), 'freecam must handle a changed player ped')
+assert(freecamSource:find('currentEntity ~= freecam.controlledEntity', 1, true), 'freecam must handle a changed controlled entity')
+assert(freecamSource:find('IsEntityDead(currentPed)', 1, true), 'freecam must exit safely on death')
+assert(not freecamSource:find('FreezeEntityPosition(ped, false)', 1, true), 'freecam must not blindly unfreeze the player')
+assert(not freecamSource:find('SetEntityVisible(ped, true, false)', 1, true), 'freecam must not blindly make the player visible')
+
+assert(clientSource:find("setFreecam(false, true)", 1, true), 'resource stop must clean up freecam')
+
+print('freecam lifecycle contract tests passed')

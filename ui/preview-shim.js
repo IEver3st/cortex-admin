@@ -16,6 +16,7 @@
     const origFetch = window.fetch.bind(window);
     const previewScenario = params.get('state') || 'ready';
     const requestedTab = params.get('tab') || '';
+    let previewGeneratorCanUndo = false;
     let previewBans = [
         { id: 'cortex-2026-00041', playerName: 'Rowan Cross', reason: 'Repeated combat logging after staff warning', adminName: 'PreviewAdmin', expiresAt: 0, provenance: 'cortex' },
         { id: 'vmenu-import-91a2', playerName: 'Taylor Knox', reason: 'Harassment', adminName: 'Legacy Staff', expiresAt: Math.floor(Date.now() / 1000) + 86400, provenance: 'vmenu' },
@@ -73,6 +74,27 @@
             hairHighlightColor: 0,
             eyeColor: 0
         };
+    }
+
+    function previewAppearance() {
+        const appearance = emptyAppearance();
+        appearance.model = 1885233650;
+        appearance.isFreemode = true;
+        appearance.hairColor = 4;
+        appearance.hairHighlightColor = 5;
+        appearance.eyeColor = 5;
+        for (let componentId = 0; componentId <= 11; componentId += 1) {
+            appearance.components[String(componentId)] = { drawable: componentId === 2 ? 5 : 0, texture: 0 };
+            appearance.maxComponents[String(componentId)] = { drawables: componentId === 2 ? 76 : 180, textures: 12 };
+        }
+        for (let propId = 0; propId <= 7; propId += 1) {
+            appearance.props[String(propId)] = { drawable: -1, texture: 0 };
+            appearance.maxProps[String(propId)] = { drawables: 80, textures: 10 };
+        }
+        for (let featureId = 0; featureId <= 19; featureId += 1) {
+            appearance.features[String(featureId)] = 0;
+        }
+        return appearance;
     }
 
     function emptyVehicleCustomization() {
@@ -229,7 +251,7 @@
         favorites: ['player.heal'],
         settings: {
             menuPosition: 'right',
-            menuAccentColor: '#7170ff',
+            menuAccentColor: '#e8a23f',
             uiScale: 1.05,
             uiOpacity: 0.94,
             speedHudPosition: 'top-left',
@@ -250,6 +272,10 @@
         gameHour: 14,
         gameMinute: 32,
         currentWeather: 'CLEAR',
+        voiceState: {
+            proximity: 20,
+            channel: 42
+        },
         personalVehicles: [],
         addonVehicles: ['adder', 'zentorno'],
         frameworkInfo: {
@@ -330,7 +356,22 @@
             return jsonResponse({ ok: true });
         },
         'cortex-admin:getAppearance': function () {
-            return jsonResponse(emptyAppearance());
+            return jsonResponse(previewScenario === 'empty' ? emptyAppearance() : previewAppearance());
+        },
+        'cortex-admin:randomizeAppearance': function (opts) {
+            const body = requestBody(opts);
+            const outfitNames = {
+                polished: 'Night polo, black chinos, black Oxfords',
+                casual: 'Charcoal T-shirt, black regular-fit jeans, black canvas shoes',
+                street: 'Graphic T-shirt, black cargos, black skate shoes'
+            };
+            previewGeneratorCanUndo = true;
+            return jsonResponse({ ok: true, mode: body.mode === 'character' ? 'character' : 'outfit', style: body.style || 'polished', outfitName: outfitNames[body.style] || outfitNames.polished, canUndo: true, modelChanged: body.mode === 'character' && body.gender !== 'keep' });
+        },
+        'cortex-admin:undoRandomizedAppearance': function () {
+            const canUndo = previewGeneratorCanUndo;
+            previewGeneratorCanUndo = false;
+            return jsonResponse(canUndo ? { ok: true, canUndo: false } : { ok: false, error: 'nothing_to_undo', canUndo: false });
         },
         'cortex-admin:getSavedPeds': function () {
             return jsonResponse([]);

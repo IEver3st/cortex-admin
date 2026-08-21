@@ -340,7 +340,7 @@ const payload = {
     favorites: ['player.heal', 'vehicle.spawn'],
     settings: {
         menuPosition: 'right',
-        menuAccentColor: '#7170ff',
+        menuAccentColor: '#e8a23f',
         uiScale: 1.05,
         uiOpacity: 0.94,
         speedHudPosition: 'top-left',
@@ -362,6 +362,10 @@ const payload = {
     gameHour: 14,
     gameMinute: 32,
     currentWeather: 'CLEAR',
+    voiceState: {
+        proximity: 20,
+        channel: 42,
+    },
     personalVehicles: [],
     addonVehicles: ['adder', 'zentorno', 'sanchez'],
     frameworkInfo: {

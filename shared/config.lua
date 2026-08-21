@@ -14,7 +14,7 @@ Config.VehiclePreviewCloseControl = 194
 Config.DefaultSettings = {
     uiScale = 1,
     uiOpacity = 0.94,
-    menuAccentColor = '#7170ff',
+    menuAccentColor = '#e8a23f',
     showTargetInfo = true,
     menuPosition = 'right',
     doubleClickToRun = true,
@@ -46,32 +46,79 @@ Config.ClearRadiusOptions = {
 }
 
 Config.WeaponList = {
+    -- Melee
     'weapon_knife',
     'weapon_nightstick',
     'weapon_hammer',
     'weapon_bat',
     'weapon_golfclub',
     'weapon_crowbar',
+    'weapon_bottle',
+    'weapon_dagger',
+    'weapon_hatchet',
+    'weapon_knuckle',
+    'weapon_machete',
+    'weapon_flashlight',
+    'weapon_switchblade',
+    'weapon_battleaxe',
+    'weapon_poolcue',
+    'weapon_wrench',
+    'weapon_stone_hatchet',
+    'weapon_candycane',
+
+    -- Handguns
     'weapon_pistol',
     'weapon_pistol_mk2',
     'weapon_combatpistol',
     'weapon_appistol',
     'weapon_pistol50',
     'weapon_snspistol',
+    'weapon_snspistol_mk2',
     'weapon_heavypistol',
     'weapon_vintagepistol',
+    'weapon_marksmanpistol',
+    'weapon_revolver',
+    'weapon_revolver_mk2',
+    'weapon_doubleaction',
+    'weapon_raypistol',
+    'weapon_ceramicpistol',
+    'weapon_navyrevolver',
+    'weapon_gadgetpistol',
+    'weapon_flaregun',
+    'weapon_stungun',
+    'weapon_stungun_mp',
+    'weapon_pistolxm3',
+    'weapon_tecpistol',
+
+    -- Submachine guns and machine guns
     'weapon_microsmg',
     'weapon_smg',
     'weapon_smg_mk2',
     'weapon_assaultsmg',
     'weapon_combatpdw',
+    'weapon_machinepistol',
+    'weapon_minismg',
+    'weapon_mg',
+    'weapon_combatmg',
+    'weapon_combatmg_mk2',
+    'weapon_gusenberg',
+    'weapon_raycarbine',
+
+    -- Shotguns
     'weapon_assaultshotgun',
     'weapon_pumpshotgun',
     'weapon_pumpshotgun_mk2',
     'weapon_sawnoffshotgun',
     'weapon_bullpupshotgun',
     'weapon_heavyshotgun',
+    'weapon_dbshotgun',
+    'weapon_autoshotgun',
+    'weapon_combatshotgun',
+    'weapon_musket',
+
+    -- Rifles
     'weapon_assaultrifle',
+    'weapon_assaultrifle_mk2',
     'weapon_carbinerifle',
     'weapon_carbinerifle_mk2',
     'weapon_advancedrifle',
@@ -80,26 +127,53 @@ Config.WeaponList = {
     'weapon_bullpuprifle',
     'weapon_bullpuprifle_mk2',
     'weapon_compactrifle',
+    'weapon_militaryrifle',
+    'weapon_heavyrifle',
+    'weapon_tacticalrifle',
+    'weapon_battlerifle',
+
+    -- Sniper rifles
     'weapon_sniperrifle',
     'weapon_heavysniper',
     'weapon_heavysniper_mk2',
     'weapon_marksmanrifle',
     'weapon_marksmanrifle_mk2',
+    'weapon_precisionrifle',
+
+    -- Heavy weapons
     'weapon_grenadelauncher',
+    'weapon_grenadelauncher_smoke',
+    'weapon_compactlauncher',
     'weapon_rpg',
     'weapon_minigun',
     'weapon_firework',
     'weapon_hominglauncher',
+    'weapon_railgun',
+    'weapon_rayminigun',
+    'weapon_emplauncher',
+    'weapon_railgunxm3',
+    'weapon_snowlauncher',
+
+    -- Throwables
     'weapon_grenade',
     'weapon_stickybomb',
     'weapon_smokegrenade',
+    'weapon_bzgas',
     'weapon_molotov',
     'weapon_proxmine',
     'weapon_pipebomb',
     'weapon_ball',
     'weapon_flare',
+    'weapon_snowball',
+
+    -- Equipment and mission items exposed as weapon models
     'weapon_petrolcan',
-    'weapon_fireextinguisher'
+    'weapon_fireextinguisher',
+    'weapon_hazardcan',
+    'weapon_fertilizercan',
+    'weapon_acidpackage',
+    'weapon_hackingdevice',
+    'weapon_metaldetector',
 }
 
 Config.KvpKeys = {
@@ -121,6 +195,7 @@ Config.Permissions = {
     server = 'cortex-admin.server',
     inventory = 'cortex-admin.inventory',
     garage = 'cortex-admin.garage',
+    appearance = 'cortex-admin.player',
 }
 
 Config.ActionPermissions = {
@@ -143,9 +218,14 @@ Config.ActionPermissions = {
     ['player.setStress'] = 'cortex-admin.player',
     ['player.openInventory'] = 'cortex-admin.inventory',
     ['player.setRoutingBucket'] = 'cortex-admin.server',
+    ['player.randomizeAppearance'] = 'cortex-admin.player',
+    ['player.undoRandomizedAppearance'] = 'cortex-admin.player',
+    ['player.setFaceFeature'] = 'cortex-admin.player',
+    ['player.setAppearance'] = 'cortex-admin.player',
     ['vehicle.adminCar'] = 'cortex-admin.vehicle',
     ['vehicle.giveKeys'] = 'cortex-admin.vehicle',
     ['vehicle.liveTuning'] = 'cortex-admin.vehicle',
+    ['vehicle.removePersonal'] = 'cortex-admin.vehicle',
     ['world.weather'] = 'cortex-admin.world.weather',
     ['world.weatherEditor'] = 'cortex-admin.world.weather.editor',
     ['world.weatherReload'] = 'cortex-admin.world.weather.reload',
