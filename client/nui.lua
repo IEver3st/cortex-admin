@@ -345,8 +345,14 @@ RegisterNUICallback('es_admin:requestResources', function(_, cb)
 end)
 
 RegisterNUICallback('es_admin:requestAddonVehicles', function(_, cb)
-    TriggerServerEvent('es_admin:server:requestAddonVehicles')
-    cb({ ok = true })
+    local requested = false
+    if type(Admin.requestAddonVehiclesIfNeeded) == 'function' then
+        requested = Admin.requestAddonVehiclesIfNeeded(false) == true
+    else
+        TriggerServerEvent('es_admin:server:requestAddonVehicles')
+        requested = true
+    end
+    cb({ ok = true, requested = requested })
 end)
 
 RegisterNUICallback('es_admin:resourceAction', function(data, cb)

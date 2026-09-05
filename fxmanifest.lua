@@ -41,6 +41,7 @@ files {
     'ui/index.html',
     'ui/style.css',
     'ui/app.js',
+    'ui/preview-shim.js',
 }
 
 lua54 'yes'

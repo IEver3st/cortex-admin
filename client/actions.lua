@@ -6,7 +6,7 @@ local applyPedOverlay
 
 local jsonEncode = json.encode
 local DEBUG_LOG_REL = '.cursor/debug-8d7dac.log'
-local function agentDbg(hypothesisId, location, message, data)
+function agentDbg(hypothesisId, location, message, data)
     local res = GetCurrentResourceName()
     local payload = {
         sessionId = '8d7dac',
@@ -28,15 +28,15 @@ local function agentDbg(hypothesisId, location, message, data)
     save(res, DEBUG_LOG_REL, line, -1)
 end
 
-local function getPed()
+function getPed()
     return PlayerPedId()
 end
 
-local function notify(type, message)
+function notify(type, message)
     Admin.notify(type, message)
 end
 
-local function ensureVehicle()
+function ensureVehicle()
     local ped = getPed()
     local vehicle = GetVehiclePedIsIn(ped, false)
     if vehicle == 0 then
@@ -46,7 +46,7 @@ local function ensureVehicle()
     return vehicle
 end
 
-local function parseNumber(value)
+function parseNumber(value)
     local num = tonumber(value)
     if not num then
         return nil
@@ -54,14 +54,36 @@ local function parseNumber(value)
     return num
 end
 
-local function copyToClipboard(text)
+function trimString(value)
+    if type(value) ~= 'string' then
+        return nil
+    end
+
+    value = value:match('^%s*(.-)%s*$')
+    if value == '' then
+        return nil
+    end
+
+    return value
+end
+
+function normalizeWeatherCommandArg(value)
+    local weatherType = trimString(value)
+    if not weatherType or not weatherType:match('^[%w_]+$') then
+        return nil
+    end
+
+    return string.upper(weatherType)
+end
+
+function copyToClipboard(text)
     SendNUIMessage({
         action = 'es_admin:copyText',
         data = { text = text }
     })
 end
 
-local function buildCoordClipboardText(format)
+function buildCoordClipboardText(format)
     local coords = GetEntityCoords(getPed())
     local heading = GetEntityHeading(getPed())
 
@@ -78,11 +100,11 @@ local recordingState = {
     startedAt = 0,
 }
 
-local function clearRecordingState()
+function clearRecordingState()
     recordingState.startedAt = 0
 end
 
-local function closeMenuForDevCapture()
+function closeMenuForDevCapture()
     if not state.open or not Admin.setOpen then
         return
     end
@@ -91,7 +113,7 @@ local function closeMenuForDevCapture()
     Wait(75)
 end
 
-local function setToggle(id, enabled)
+function setToggle(id, enabled)
     state.toggles[id] = enabled
     SendNUIMessage({
         action = 'es_admin:setState',
@@ -99,11 +121,11 @@ local function setToggle(id, enabled)
     })
 end
 
-local function kvpKey(prefix, name)
+function kvpKey(prefix, name)
     return ('%s%s'):format(prefix, name)
 end
 
-local function loadKvpJson(key, fallback)
+function loadKvpJson(key, fallback)
     local raw = GetResourceKvpString(key)
     if not raw or raw == '' then
         return fallback
@@ -117,7 +139,7 @@ local function loadKvpJson(key, fallback)
     return fallback
 end
 
-local function saveKvpJson(key, data)
+function saveKvpJson(key, data)
     if not key or key == '' then
         print('[es_admin] ERROR: saveKvpJson called with empty key')
         return false
@@ -197,15 +219,15 @@ local WARDROBE_SHARE_COMPONENT_BLACKLIST = {
     [2] = true,
 }
 
-local function isFreemodeModel(modelHash)
+function isFreemodeModel(modelHash)
     return modelHash == C.MODEL_HASH_MP_M or modelHash == C.MODEL_HASH_MP_F
 end
 
-local function isFreemodePed(ped)
+function isFreemodePed(ped)
     return isFreemodeModel(GetEntityModel(ped))
 end
 
-local function sanitizeJsonValue(value, depth)
+function sanitizeJsonValue(value, depth)
     if depth > 12 then
         return nil
     end
@@ -244,7 +266,7 @@ local function sanitizeJsonValue(value, depth)
     return output
 end
 
-local function cloneJsonTable(data)
+function cloneJsonTable(data)
     if type(data) ~= 'table' then
         return nil
     end
@@ -265,7 +287,7 @@ local function cloneJsonTable(data)
     return nil
 end
 
-local function loadSavedTeleportLocationsRaw()
+function loadSavedTeleportLocationsRaw()
     local locations = loadKvpJson(C.TELEPORT_LOCATIONS_KEY, {})
     if type(locations) ~= 'table' then
         return {}
@@ -273,7 +295,7 @@ local function loadSavedTeleportLocationsRaw()
     return locations
 end
 
-local function buildSavedTeleportLocationList()
+function buildSavedTeleportLocationList()
     local raw = loadSavedTeleportLocationsRaw()
     local list = {}
 
@@ -296,7 +318,7 @@ local function buildSavedTeleportLocationList()
     return list
 end
 
-local function loadWeaponLoadoutsRaw()
+function loadWeaponLoadoutsRaw()
     local loadouts = loadKvpJson(C.WEAPON_LOADOUTS_KEY, {})
     if type(loadouts) ~= 'table' then
         return {}
@@ -304,11 +326,11 @@ local function loadWeaponLoadoutsRaw()
     return loadouts
 end
 
-local function isTableEmpty(data)
+function isTableEmpty(data)
     return type(data) ~= 'table' or next(data) == nil
 end
 
-local function normalizeSavedPedKey(keyOrName)
+function normalizeSavedPedKey(keyOrName)
     if type(keyOrName) ~= 'string' or keyOrName == '' then
         return nil, nil
     end
@@ -320,7 +342,7 @@ local function normalizeSavedPedKey(keyOrName)
     return kvpKey(C.MP_PED_KEY_PREFIX, keyOrName), keyOrName
 end
 
-local function callVmenuBridge(method, ...)
+function callVmenuBridge(method, ...)
     if GetResourceState('vMenu') ~= 'started' then
         return false, 'vMenu is not running'
     end
@@ -379,7 +401,7 @@ RegisterNetEvent('es_admin:client:receiveWardrobeShareTargets', function(request
     pending:resolve(payload)
 end)
 
-local function invalidateVmenuFallbackSnapshot()
+function invalidateVmenuFallbackSnapshot()
     vmenuFallbackSnapshotCache.expiresAt = 0
     vmenuFallbackSnapshotCache.data = nil
 end
@@ -396,7 +418,7 @@ AddEventHandler('onResourceStop', function(resourceName)
     end
 end)
 
-local function getVmenuFallbackSnapshot(forceRefresh)
+function getVmenuFallbackSnapshot(forceRefresh)
     if not Config.VmenuFallback or Config.VmenuFallback.enabled == false then
         return nil
     end
@@ -436,7 +458,7 @@ local function getVmenuFallbackSnapshot(forceRefresh)
     return payload
 end
 
-local function ensureVmenuWriteBridge(actionLabel)
+function ensureVmenuWriteBridge(actionLabel)
     if GetResourceState('vMenu') == 'started' then
         return true
     end
@@ -445,7 +467,7 @@ local function ensureVmenuWriteBridge(actionLabel)
     return false
 end
 
-local function getCurrentHairColors(ped)
+function getCurrentHairColors(ped)
     local hairColor, hairHighlightColor = 0, 0
     if GetPedHairColors then
         hairColor, hairHighlightColor = GetPedHairColors(ped)
@@ -453,7 +475,7 @@ local function getCurrentHairColors(ped)
     return hairColor or 0, hairHighlightColor or 0
 end
 
-local function getWardrobeShareTargetIds()
+function getWardrobeShareTargetIds()
     local requestId = ('%s:wardrobe:%d:%d'):format(GetCurrentResourceName(), GetGameTimer(), math.random(1000, 9999))
     local pending = promise.new()
     pendingWardrobeShareTargetRequests[requestId] = pending
@@ -477,7 +499,7 @@ local function getWardrobeShareTargetIds()
     return payload
 end
 
-local function clampInteger(value, minValue, maxValue)
+function clampInteger(value, minValue, maxValue)
     local numeric = tonumber(value)
     if not numeric then
         numeric = minValue or 0
@@ -496,7 +518,7 @@ local function clampInteger(value, minValue, maxValue)
     return numeric
 end
 
-local function resolveComponentVariation(ped, componentId, drawable, texture)
+function resolveComponentVariation(ped, componentId, drawable, texture)
     local componentIndex = tonumber(componentId)
     if not componentIndex then
         return nil, nil, false
@@ -532,7 +554,7 @@ local function resolveComponentVariation(ped, componentId, drawable, texture)
     return safeDrawable, safeTexture, adjusted
 end
 
-local function resolvePropVariation(ped, propId, drawable, texture)
+function resolvePropVariation(ped, propId, drawable, texture)
     local propIndex = tonumber(propId)
     if not propIndex then
         return nil, nil, false
@@ -556,7 +578,7 @@ local function resolvePropVariation(ped, propId, drawable, texture)
     return safeDrawable, safeTexture, adjusted
 end
 
-local function setPedComponent(ped, componentId, drawable, texture)
+function setPedComponent(ped, componentId, drawable, texture)
     local componentIndex = tonumber(componentId)
     local safeDrawable, safeTexture, adjusted = resolveComponentVariation(ped, componentId, drawable, texture)
     if safeDrawable == nil or componentIndex == nil then
@@ -577,7 +599,7 @@ local function setPedComponent(ped, componentId, drawable, texture)
     SetPedComponentVariation(ped, componentIndex, safeDrawable, safeTexture, 2)
 end
 
-local function setPedProp(ped, propId, drawable, texture)
+function setPedProp(ped, propId, drawable, texture)
     local propIndex = tonumber(propId)
     local safeDrawable, safeTexture, adjusted = resolvePropVariation(ped, propId, drawable, texture)
     if safeDrawable == nil or propIndex == nil then
@@ -602,7 +624,7 @@ local function setPedProp(ped, propId, drawable, texture)
     end
 end
 
-local function applySharedWardrobeData(ped, data)
+function applySharedWardrobeData(ped, data)
     if type(data) ~= 'table' then
         return false
     end
@@ -635,7 +657,7 @@ local function applySharedWardrobeData(ped, data)
     return true
 end
 
-local function buildDefaultHeadBlend()
+function buildDefaultHeadBlend()
     return {
         shapeFirstID = 0,
         shapeSecondID = 0,
@@ -649,7 +671,7 @@ local function buildDefaultHeadBlend()
     }
 end
 
-local function buildEmptyAppearanceData(modelHash)
+function buildEmptyAppearanceData(modelHash)
     local resolvedModel = tonumber(modelHash) or 0
     return {
         components = {},
@@ -667,7 +689,7 @@ local function buildEmptyAppearanceData(modelHash)
     }
 end
 
-local function coerceWholeNumber(value, fallback)
+function coerceWholeNumber(value, fallback)
     local number = tonumber(value)
     if not number or number ~= number then
         return fallback
@@ -676,7 +698,7 @@ local function coerceWholeNumber(value, fallback)
     return math.floor(number)
 end
 
-local function coerceNumber(value, fallback)
+function coerceNumber(value, fallback)
     local number = tonumber(value)
     if not number or number ~= number then
         return fallback
@@ -685,7 +707,7 @@ local function coerceNumber(value, fallback)
     return number
 end
 
-local function safeNativeWholeNumber(fn, fallback, ...)
+function safeNativeWholeNumber(fn, fallback, ...)
     local ok, value = pcall(fn, ...)
     if not ok then
         return fallback
@@ -694,7 +716,7 @@ local function safeNativeWholeNumber(fn, fallback, ...)
     return coerceWholeNumber(value, fallback)
 end
 
-local function safeNativeNumber(fn, fallback, ...)
+function safeNativeNumber(fn, fallback, ...)
     local ok, value = pcall(fn, ...)
     if not ok then
         return fallback
@@ -703,7 +725,7 @@ local function safeNativeNumber(fn, fallback, ...)
     return coerceNumber(value, fallback)
 end
 
-local function readPedHairColorsSafely(ped)
+function readPedHairColorsSafely(ped)
     if type(GetPedHairColors) ~= 'function' then
         return 0, 0
     end
@@ -716,7 +738,7 @@ local function readPedHairColorsSafely(ped)
     return coerceWholeNumber(hairColor, 0), coerceWholeNumber(hairHighlightColor, 0)
 end
 
-local function readPedHeadBlendSafely(ped)
+function readPedHeadBlendSafely(ped)
     local fallback = buildDefaultHeadBlend()
     local ok, hasData, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = pcall(GetPedHeadBlendData, ped)
     if not ok or not hasData then
@@ -736,7 +758,7 @@ local function readPedHeadBlendSafely(ped)
     }, true
 end
 
-local function readPedOverlaySafely(ped, overlayId)
+function readPedOverlaySafely(ped, overlayId)
     local ok, success, style, colourType, firstColour, secondColour, overlayOpacity = pcall(GetPedHeadOverlayData, ped, overlayId)
     if not ok or not success then
         return nil
@@ -894,7 +916,7 @@ Admin.setPedAppearance = function(data)
     end
 end
 
-local function normalizeMpPedData(data, sourceKey)
+function normalizeMpPedData(data, sourceKey)
     local normalized = cloneJsonTable(data) or {}
     normalized.ModelHash = tonumber(normalized.ModelHash) or tonumber(normalized.modelHash) or tonumber(normalized.Model) or tonumber(normalized.model) or 0
     normalized.Version = tonumber(normalized.Version) or tonumber(normalized.version) or 2
@@ -1130,7 +1152,7 @@ end
 
 Admin.normalizeMpPedData = normalizeMpPedData
 
-local function isSavedMpPedData(data)
+function isSavedMpPedData(data)
     return type(data) == 'table'
         and (tonumber(data.ModelHash) ~= nil or tonumber(data.modelHash) ~= nil or tonumber(data.Model) ~= nil or tonumber(data.model) ~= nil)
         and (
@@ -1148,7 +1170,7 @@ local function isSavedMpPedData(data)
         )
 end
 
-local function buildSavedPedEntry(source, sourceKey, data, isDefault)
+function buildSavedPedEntry(source, sourceKey, data, isDefault)
     if not sourceKey or not isSavedMpPedData(data) then
         return nil
     end
@@ -1172,7 +1194,7 @@ local function buildSavedPedEntry(source, sourceKey, data, isDefault)
     }
 end
 
-local function sortSavedPeds(list)
+function sortSavedPeds(list)
     table.sort(list, function(a, b)
         if a.isDefault ~= b.isDefault then
             return a.isDefault
@@ -1196,7 +1218,7 @@ local function sortSavedPeds(list)
     end)
 end
 
-local function getEsAdminDefaultSavedPed()
+function getEsAdminDefaultSavedPed()
     local source = GetResourceKvpString(C.DEFAULT_PED_SOURCE_KEY) or C.MP_PED_SOURCE_ES_ADMIN
     local sourceKey = GetResourceKvpString(C.DEFAULT_PED_SOURCE_REF_KEY)
     if not sourceKey or sourceKey == '' then
@@ -1206,7 +1228,7 @@ local function getEsAdminDefaultSavedPed()
     return source, sourceKey
 end
 
-local function getEsAdminSavedPeds()
+function getEsAdminSavedPeds()
     local peds = {}
     local defaultSource, defaultSourceKey = getEsAdminDefaultSavedPed()
     local handle = StartFindKvp(C.MP_PED_KEY_PREFIX)
@@ -1231,7 +1253,7 @@ local function getEsAdminSavedPeds()
     return peds
 end
 
-local function getVmenuDefaultSavedPedKey()
+function getVmenuDefaultSavedPedKey()
     local ok, defaultKey = callVmenuBridge('GetDefaultSavedMpCharacterKeyForEsAdmin')
     if ok and type(defaultKey) == 'string' and defaultKey ~= '' then
         return defaultKey
@@ -1245,7 +1267,7 @@ local function getVmenuDefaultSavedPedKey()
     return nil
 end
 
-local function getVmenuSavedPeds()
+function getVmenuSavedPeds()
     local peds = {}
     local ok, rawPeds = callVmenuBridge('GetSavedMpCharactersForEsAdmin')
     local defaultKey = nil
@@ -1274,7 +1296,7 @@ local function getVmenuSavedPeds()
     return peds
 end
 
-local function getVmenuSavedPedPayload()
+function getVmenuSavedPedPayload()
     local ok, rawPeds = callVmenuBridge('GetSavedMpCharactersForEsAdmin')
     if ok and type(rawPeds) == 'table' then
         return rawPeds, getVmenuDefaultSavedPedKey(), 'bridge'
@@ -1289,7 +1311,7 @@ local function getVmenuSavedPedPayload()
     return nil, nil, nil
 end
 
-local function getMergedSavedPeds()
+function getMergedSavedPeds()
     local peds = {}
     local seen = {}
 
@@ -1313,7 +1335,7 @@ local function getMergedSavedPeds()
     return peds
 end
 
-local function getVmenuVehiclePayload()
+function getVmenuVehiclePayload()
     local ok, rawVehicles = callVmenuBridge('GetSavedVehiclesForEsAdmin')
     if ok and type(rawVehicles) == 'table' then
         return rawVehicles, 'bridge'
@@ -1328,7 +1350,7 @@ local function getVmenuVehiclePayload()
     return nil, nil
 end
 
-local function countTableEntries(data)
+function countTableEntries(data)
     local count = 0
     if type(data) ~= 'table' then
         return count
@@ -1341,7 +1363,7 @@ local function countTableEntries(data)
     return count
 end
 
-local function getPermissionMigrationSummary()
+function getPermissionMigrationSummary()
     return {
         mode = 'ace_passthrough',
         usesVmenuAce = true,
@@ -1352,7 +1374,7 @@ local function getPermissionMigrationSummary()
     }
 end
 
-local function resolveSavedPedEntry(target)
+function resolveSavedPedEntry(target)
     if type(target) ~= 'table' then
         local sourceKey, name = normalizeSavedPedKey(target)
         if not sourceKey then
@@ -1396,13 +1418,13 @@ local function resolveSavedPedEntry(target)
     return nil
 end
 
-local function clearLastSavedPedReference()
+function clearLastSavedPedReference()
     DeleteResourceKvp(C.LAST_PED_NAME_KEY)
     DeleteResourceKvp(C.LAST_PED_SOURCE_KEY)
     DeleteResourceKvp(C.LAST_PED_SOURCE_REF_KEY)
 end
 
-local function setLastSavedPedReference(entry)
+function setLastSavedPedReference(entry)
     if not entry or not entry.name then
         clearLastSavedPedReference()
         return
@@ -1417,7 +1439,7 @@ local function setLastSavedPedReference(entry)
     end
 end
 
-local function clearLastSavedPedIfMatches(entry)
+function clearLastSavedPedIfMatches(entry)
     if not entry then
         return
     end
@@ -1442,7 +1464,7 @@ local function clearLastSavedPedIfMatches(entry)
     end
 end
 
-local function clearDefaultSavedPedIfMatches(entry)
+function clearDefaultSavedPedIfMatches(entry)
     if not entry then
         return
     end
@@ -1455,7 +1477,7 @@ local function clearDefaultSavedPedIfMatches(entry)
     end
 end
 
-local function setDefaultSavedPedReference(entry)
+function setDefaultSavedPedReference(entry)
     if not entry or not entry.name then
         DeleteResourceKvp(C.DEFAULT_PED_SOURCE_KEY)
         DeleteResourceKvp(C.DEFAULT_PED_SOURCE_REF_KEY)
@@ -1470,7 +1492,7 @@ local function setDefaultSavedPedReference(entry)
     end
 end
 
-local function loadSavedPedData(entry)
+function loadSavedPedData(entry)
     if not entry then
         return nil
     end
@@ -1507,7 +1529,7 @@ local function loadSavedPedData(entry)
     return nil
 end
 
-local function buildOverwriteSavedPedData(existingEntry, capturedData)
+function buildOverwriteSavedPedData(existingEntry, capturedData)
     if not existingEntry or not capturedData then
         return capturedData
     end
@@ -1549,7 +1571,7 @@ local function buildOverwriteSavedPedData(existingEntry, capturedData)
     return merged
 end
 
-local function formatSavedPedImportSummary(result)
+function formatSavedPedImportSummary(result)
     if type(result) ~= 'table' then
         return 'Import finished.'
     end
@@ -1581,7 +1603,7 @@ local function formatSavedPedImportSummary(result)
     return summary
 end
 
-local function buildSavedPedUiEntry(entry)
+function buildSavedPedUiEntry(entry)
     if type(entry) ~= 'table' then
         return nil
     end
@@ -1610,14 +1632,14 @@ Admin.getSavedPeds = function()
     return list
 end
 
-local function syncWardrobeShareRequests()
+function syncWardrobeShareRequests()
     SendNUIMessage({
         action = 'es_admin:setState',
         data = { wardrobeShareRequests = state.wardrobeShareRequests or {} }
     })
 end
 
-local function findWardrobeShareRequest(shareId)
+function findWardrobeShareRequest(shareId)
     local requests = state.wardrobeShareRequests or {}
     for index = 1, #requests do
         local request = requests[index]
@@ -1629,7 +1651,7 @@ local function findWardrobeShareRequest(shareId)
     return nil, nil
 end
 
-local function removeWardrobeShareRequest(shareId)
+function removeWardrobeShareRequest(shareId)
     local index = findWardrobeShareRequest(shareId)
     if not index then
         return false
@@ -1892,7 +1914,7 @@ Admin.importVmenuSavedPeds = function(options)
     return true, result
 end
 
-local function formatSavedVehicleImportSummary(result)
+function formatSavedVehicleImportSummary(result)
     if type(result) ~= 'table' then
         return 'Vehicle import finished.'
     end
@@ -2063,21 +2085,21 @@ Admin.setDefaultSavedPed = function(target)
     return true
 end
 
-local function fetchPedComponent(ped, componentId)
+function fetchPedComponent(ped, componentId)
     return {
         GetPedDrawableVariation(ped, componentId),
         GetPedTextureVariation(ped, componentId)
     }
 end
 
-local function fetchPedProp(ped, propId)
+function fetchPedProp(ped, propId)
     return {
         GetPedPropIndex(ped, propId),
         GetPedPropTextureIndex(ped, propId)
     }
 end
 
-local function getPedOverlay(ped, overlayId)
+function getPedOverlay(ped, overlayId)
     if not isFreemodePed(ped) then
         return nil
     end
@@ -2142,7 +2164,7 @@ applyHeadBlend = function(ped, data)
     )
 end
 
-local function captureMpPedData(ped, saveName)
+function captureMpPedData(ped, saveName)
     print('[es_admin] Capturing MP Ped data...')
     
     local headBlend = getHeadBlend(ped)
@@ -2229,7 +2251,7 @@ local function captureMpPedData(ped, saveName)
     }
 end
 
-local function buildSharedWardrobeData(ped)
+function buildSharedWardrobeData(ped)
     local drawableVariations = { clothes = {} }
     for componentId = 1, 11 do
         if not WARDROBE_SHARE_COMPONENT_BLACKLIST[componentId] then
@@ -2249,7 +2271,7 @@ local function buildSharedWardrobeData(ped)
     }
 end
 
-local function applyMpPedData(ped, data)
+function applyMpPedData(ped, data)
     if not data then return end
     
     print('[es_admin] Applying MP Ped data...')
@@ -2406,19 +2428,19 @@ local VEHICLE_CLASS_CATEGORY_MAP = {
     [22] = 'openwheel',
 }
 
-local function getVehicleCategoryFromClass(class)
+function getVehicleCategoryFromClass(class)
     return VEHICLE_CLASS_CATEGORY_MAP[class] or 'other'
 end
 
-local function getVehicleCategory(vehicle)
+function getVehicleCategory(vehicle)
     return getVehicleCategoryFromClass(GetVehicleClass(vehicle))
 end
 
-local function getVehicleCategoryFromModel(model)
+function getVehicleCategoryFromModel(model)
     return getVehicleCategoryFromClass(GetVehicleClassFromName(model))
 end
 
-local function captureVehicleData(vehicle, saveName)
+function captureVehicleData(vehicle, saveName)
     local props = {
         model = GetEntityModel(vehicle),
         name = saveName,
@@ -2515,7 +2537,7 @@ local function captureVehicleData(vehicle, saveName)
     return props
 end
 
-local function applyVehicleData(vehicle, props)
+function applyVehicleData(vehicle, props)
     if not props then return end
 
     SetVehicleModKit(vehicle, 0)
@@ -2647,7 +2669,7 @@ Admin.giveKeysForVehicle = function(vehicle, silent)
     })
 end
 
-local function deleteOccupiedVehicleIfReplaceSpawnEnabled()
+function deleteOccupiedVehicleIfReplaceSpawnEnabled()
     if state.settings.replacePersonalVehicle == false then
         return
     end
@@ -2659,7 +2681,7 @@ local function deleteOccupiedVehicleIfReplaceSpawnEnabled()
     end
 end
 
-local function spawnVehicleWithProps(props)
+function spawnVehicleWithProps(props)
     if not props or not props.model then
         notify('error', 'Invalid vehicle data.')
         return
@@ -2690,7 +2712,7 @@ local function spawnVehicleWithProps(props)
     notify('success', 'Vehicle spawned.')
 end
 
-local function normalizeModelHash(model)
+function normalizeModelHash(model)
     local hash = tonumber(model)
     if not hash then
         return nil
@@ -2701,7 +2723,7 @@ local function normalizeModelHash(model)
     return math.floor(hash)
 end
 
-local function toUnsignedModelHash(model)
+function toUnsignedModelHash(model)
     local hash = normalizeModelHash(model)
     if not hash then
         return nil
@@ -2712,7 +2734,7 @@ local function toUnsignedModelHash(model)
     return hash
 end
 
-local function getVehicleLabel(model)
+function getVehicleLabel(model)
     local modelHash = normalizeModelHash(model) or model
     local displayName = GetDisplayNameFromVehicleModel(modelHash)
     local label = displayName and GetLabelText(displayName)
@@ -2725,7 +2747,7 @@ local function getVehicleLabel(model)
     return label
 end
 
-local function normalizePersonalVehicleData(data)
+function normalizePersonalVehicleData(data)
     if type(data) ~= 'table' then
         return { version = 2, vehicles = {} }
     end
@@ -2741,7 +2763,7 @@ local function normalizePersonalVehicleData(data)
     return { version = 2, vehicles = {} }
 end
 
-local function migrateLegacyPersonalVehicles()
+function migrateLegacyPersonalVehicles()
     local legacy = loadKvpJson(C.PERSONAL_VEHICLES_LEGACY_KEY, nil)
     if type(legacy) ~= 'table' then
         return { version = 2, vehicles = {} }
@@ -2765,7 +2787,7 @@ local function migrateLegacyPersonalVehicles()
     return list
 end
 
-local function loadStoredPersonalVehicles()
+function loadStoredPersonalVehicles()
     local data = loadKvpJson(C.PERSONAL_VEHICLES_KEY, nil)
     if data and type(data) == 'table' and data.version == 2 then
         return normalizePersonalVehicleData(data)
@@ -2778,7 +2800,7 @@ local function loadStoredPersonalVehicles()
     return migrated
 end
 
-local function sortPersonalVehicles(list)
+function sortPersonalVehicles(list)
     table.sort(list, function(a, b)
         local catA = (a.category or ''):lower()
         local catB = (b.category or ''):lower()
@@ -2791,7 +2813,7 @@ local function sortPersonalVehicles(list)
     end)
 end
 
-local function findPersonalVehicleIndex(list, id, name)
+function findPersonalVehicleIndex(list, id, name)
     local nameLower = name and name:lower() or nil
     for i = 1, #list do
         local entry = list[i]
@@ -2802,7 +2824,7 @@ local function findPersonalVehicleIndex(list, id, name)
     return nil, nil
 end
 
-local function normalizeNumberKeyMap(data, valueHandler)
+function normalizeNumberKeyMap(data, valueHandler)
     local out = {}
     if type(data) ~= 'table' then
         return out
@@ -2818,7 +2840,7 @@ local function normalizeNumberKeyMap(data, valueHandler)
     return out
 end
 
-local function isVmenuVehicleData(data)
+function isVmenuVehicleData(data)
     return type(data) == 'table'
         and type(data.colors) == 'table'
         and type(data.mods) == 'table'
@@ -2830,7 +2852,7 @@ local function isVmenuVehicleData(data)
         and tonumber(data.model) ~= nil
 end
 
-local function convertVmenuDataToProps(saveName, data)
+function convertVmenuDataToProps(saveName, data)
     local colors = data.colors or {}
     local model = normalizeModelHash(data.model)
     if not model then
@@ -2904,7 +2926,7 @@ local function convertVmenuDataToProps(saveName, data)
     return props
 end
 
-local function buildVmenuVehicleDataFromProps(saveName, category, props)
+function buildVmenuVehicleDataFromProps(saveName, category, props)
     local colors = props.colors or {}
     local neonColor = props.neonColor or {}
     local smokeColor = props.tyreSmokeColor or {}
@@ -2963,7 +2985,7 @@ local function buildVmenuVehicleDataFromProps(saveName, category, props)
     }
 end
 
-local function buildVmenuVehicleEntry(key, decoded)
+function buildVmenuVehicleEntry(key, decoded)
     local saveName = key:sub(#C.VMENU_VEHICLE_KEY_PREFIX + 1)
     if saveName == '' then
         saveName = decoded.name or key
@@ -2987,7 +3009,7 @@ local function buildVmenuVehicleEntry(key, decoded)
     }
 end
 
-local function mergeVmenuVehicles(personalData)
+function mergeVmenuVehicles(personalData)
     local vehicles = personalData.vehicles or {}
     local ok, rawVehicles = callVmenuBridge('GetSavedVehiclesForEsAdmin')
     if not ok or type(rawVehicles) ~= 'table' then
@@ -3023,12 +3045,12 @@ local function mergeVmenuVehicles(personalData)
     return personalData
 end
 
-local function loadPersonalVehicles()
+function loadPersonalVehicles()
     local stored = loadStoredPersonalVehicles()
     return mergeVmenuVehicles(stored)
 end
 
-local function savePersonalVehicles(data)
+function savePersonalVehicles(data)
     local normalized = normalizePersonalVehicleData(data)
     local persist = { version = 2, vehicles = {} }
 
@@ -3179,7 +3201,7 @@ if Admin.refreshPersonalVehiclesCache then
     end
 end
 
-local function buildPersonalVehiclesSummary(list)
+function buildPersonalVehiclesSummary(list)
     local summary = {}
     for i = 1, #list do
         local entry = list[i]
@@ -3194,7 +3216,7 @@ local function buildPersonalVehiclesSummary(list)
     return summary
 end
 
-local function actionSpawnVehicleList(data)
+function actionSpawnVehicleList(data)
     local model = data and data.value
     if not model or model == '' then
         notify('error', 'Vehicle model required.')
@@ -3204,7 +3226,7 @@ local function actionSpawnVehicleList(data)
     actionSpawnVehicle({ model = model })
 end
 
-local function actionSaveVehicle(data)
+function actionSaveVehicle(data)
     local name = data and data.name
     if not name or name == '' then
         notify('error', 'Vehicle name required.')
@@ -3219,7 +3241,7 @@ local function actionSaveVehicle(data)
     notify('success', 'Vehicle saved.')
 end
 
-local function actionSaveVehicleLegacy()
+function actionSaveVehicleLegacy()
     local vehicle = ensureVehicle()
     if not vehicle then return end
 
@@ -3228,7 +3250,7 @@ local function actionSaveVehicleLegacy()
     notify('success', 'Vehicle properties saved.')
 end
 
-local function actionLoadVehicle(data)
+function actionLoadVehicle(data)
     local name = data and data.name
     if not name or name == '' then
         notify('error', 'Vehicle name required.')
@@ -3244,7 +3266,7 @@ local function actionLoadVehicle(data)
     spawnVehicleWithProps(props)
 end
 
-local function actionSavePersonalVehicle(data)
+function actionSavePersonalVehicle(data)
     local name = data and data.name
     local id = data and data.id
 
@@ -3315,7 +3337,7 @@ local function actionSavePersonalVehicle(data)
     })
 end
 
-local function actionRemovePersonalVehicle(data)
+function actionRemovePersonalVehicle(data)
     local name = data and data.name
     local id = data and data.id
     if (not id or id == '') and (not name or name == '') then
@@ -3371,7 +3393,7 @@ local function actionRemovePersonalVehicle(data)
     })
 end
 
-local function actionSpawnPersonalVehicle(data)
+function actionSpawnPersonalVehicle(data)
     local name = data and (data.name or data.value)
     local id = data and data.id
     if (not id or id == '') and (not name or name == '') then
@@ -3391,7 +3413,7 @@ local function actionSpawnPersonalVehicle(data)
     spawnVehicleWithProps(props)
 end
 
-local function actionSaveMpPed(data)
+function actionSaveMpPed(data)
     local entry = nil
     if type(data) == 'table' and (type(data.entry) == 'table' or data.id or data.source or data.sourceKey) then
         entry = resolveSavedPedEntry(data.entry or data)
@@ -3458,7 +3480,7 @@ local function actionSaveMpPed(data)
     notify('success', (entry and 'MP ped updated: ' or 'MP ped saved: ') .. name)
 end
 
-local function actionLoadMpPed(data)
+function actionLoadMpPed(data)
     local entry = resolveSavedPedEntry(data)
     if not entry then
         notify('error', 'Saved MP ped not found.')
@@ -3482,7 +3504,7 @@ local function actionLoadMpPed(data)
     notify('success', 'MP ped loaded.')
 end
 
-local function actionSavePed(data)
+function actionSavePed(data)
     local name = data and data.name
     if not name or name == '' then
         notify('error', 'Name required.')
@@ -3503,7 +3525,7 @@ local function actionSavePed(data)
     notify('success', 'Ped saved.')
 end
 
-local function actionLoadPed(data)
+function actionLoadPed(data)
     local name = data and data.name
     if not name or name == '' then
         notify('error', 'Name required.')
@@ -3526,7 +3548,7 @@ local function actionLoadPed(data)
     notify('success', 'Ped loaded.')
 end
 
-local function actionGiveAllWeapons()
+function actionGiveAllWeapons()
     local ped = getPed()
     local weaponList = Config.WeaponList or {}
     CreateThread(function()
@@ -3553,14 +3575,14 @@ end
 
 local WEAPON_UNARMED = joaat('weapon_unarmed')
 
-local function prettifyWeaponComponentLabel(hashStr)
+function prettifyWeaponComponentLabel(hashStr)
     if type(hashStr) ~= 'string' then
         return ''
     end
     return (hashStr:gsub('^COMPONENT_', ''):gsub('_', ' '))
 end
 
-local function weaponNameFromHash(weaponHash)
+function weaponNameFromHash(weaponHash)
     local list = Config.WeaponList or {}
     for i = 1, #list do
         if joaat(list[i]) == weaponHash then
@@ -3570,7 +3592,7 @@ local function weaponNameFromHash(weaponHash)
     return nil
 end
 
-local function collectApplicableWeaponComponents(ped, weaponHash)
+function collectApplicableWeaponComponents(ped, weaponHash)
     local hashes = Config.WeaponComponentHashes or {}
     local rows = {}
     for i = 1, #hashes do
@@ -3590,7 +3612,7 @@ local function collectApplicableWeaponComponents(ped, weaponHash)
     return rows
 end
 
-local function collectEquippedWeaponComponentNames(ped, weaponHash)
+function collectEquippedWeaponComponentNames(ped, weaponHash)
     local hashes = Config.WeaponComponentHashes or {}
     local out = {}
     for i = 1, #hashes do
@@ -3732,7 +3754,7 @@ Admin.deleteWeaponLoadout = function(name)
     return true
 end
 
-local function applyVehicleMods(vehicle)
+function applyVehicleMods(vehicle)
     SetVehicleModKit(vehicle, 0)
 
     for modType = 0, 16 do
@@ -3762,7 +3784,7 @@ local noclip = {
     speed = 2.5,
 }
 
-local function destroyFreecamCam()
+function destroyFreecamCam()
     if freecam.cam and DoesCamExist(freecam.cam) then
         SetCamActive(freecam.cam, false)
         RenderScriptCams(false, true, 250, true, false)
@@ -3771,7 +3793,7 @@ local function destroyFreecamCam()
     freecam.cam = nil
 end
 
-local function setFreecam(enabled, silent)
+function setFreecam(enabled, silent)
     if enabled and noclip.enabled then
         setToggle('dev.freecam', false)
         if not silent then
@@ -3919,7 +3941,7 @@ local function setFreecam(enabled, silent)
     end
 end
 
-local function playNoclipFx(entity, enabled)
+function playNoclipFx(entity, enabled)
     local soundName = enabled and "Power_On" or "Power_Down"
     PlaySoundFrontend(-1, soundName, "DLC_HEIST_BIOLAB_PREP_TRACKING_SOUNDS", 1)
     
@@ -3937,7 +3959,7 @@ local function playNoclipFx(entity, enabled)
     end
 end
 
-local function setNoclip(enabled)
+function setNoclip(enabled)
     if enabled and freecam.enabled then
         setToggle('player.noclip', false)
         notify('error', 'Disable freecam before noclip.')
@@ -4073,7 +4095,7 @@ local function setNoclip(enabled)
     end
 end
 
-local function requestEntityControl(entity, timeoutMs)
+function requestEntityControl(entity, timeoutMs)
     if entity == 0 or not DoesEntityExist(entity) then
         return false
     end
@@ -4105,7 +4127,7 @@ local function requestEntityControl(entity, timeoutMs)
     return NetworkHasControlOfEntity(entity)
 end
 
-local function tryDeleteEntity(entity)
+function tryDeleteEntity(entity)
     if entity == 0 or not DoesEntityExist(entity) then
         return false
     end
@@ -4127,7 +4149,7 @@ local function tryDeleteEntity(entity)
     return not DoesEntityExist(entity)
 end
 
-local function vehicleHasPlayerOccupant(vehicle)
+function vehicleHasPlayerOccupant(vehicle)
     if vehicle == 0 or not DoesEntityExist(vehicle) then
         return false
     end
@@ -4143,7 +4165,7 @@ local function vehicleHasPlayerOccupant(vehicle)
     return false
 end
 
-local function clearPoolEntities(poolName, radius, excludeEntity)
+function clearPoolEntities(poolName, radius, excludeEntity)
     local ped = getPed()
     local coords = GetEntityCoords(ped)
     local cx, cy, cz = coords.x, coords.y, coords.z
@@ -4179,7 +4201,7 @@ local function clearPoolEntities(poolName, radius, excludeEntity)
     return removed
 end
 
-local function setAmbientSuppressionState(enabled)
+function setAmbientSuppressionState(enabled)
     local allowAmbient = not enabled
     SetRandomBoats(allowAmbient)
     SetGarbageTrucks(allowAmbient)
@@ -4196,7 +4218,7 @@ local function setAmbientSuppressionState(enabled)
     end
 end
 
-local function applyAmbientSuppressionFrame()
+function applyAmbientSuppressionFrame()
     SetPedDensityMultiplierThisFrame(0.0)
     SetScenarioPedDensityMultiplierThisFrame(0.0, 0.0)
     SetRandomVehicleDensityMultiplierThisFrame(0.0)
@@ -4208,18 +4230,18 @@ local function applyAmbientSuppressionFrame()
     end
 end
 
-local function actionPlayerHeal()
+function actionPlayerHeal()
     local ped = getPed()
     SetEntityHealth(ped, GetEntityMaxHealth(ped))
     notify('success', 'Health restored.')
 end
 
-local function actionPlayerArmor()
+function actionPlayerArmor()
     SetPedArmour(getPed(), 100)
     notify('success', 'Armor restored.')
 end
 
-local function actionPlayerRevive()
+function actionPlayerRevive()
     local ped = getPed()
     local coords = GetEntityCoords(ped)
     NetworkResurrectLocalPlayer(coords.x, coords.y, coords.z, GetEntityHeading(ped), true, true)
@@ -4228,12 +4250,12 @@ local function actionPlayerRevive()
     notify('success', 'Player revived.')
 end
 
-local function actionClearWanted()
+function actionClearWanted()
     ClearPlayerWantedLevel(PlayerId())
     notify('success', 'Wanted level cleared.')
 end
 
-local function actionSetFaceFeature(data)
+function actionSetFaceFeature(data)
     if type(data) ~= 'table' or data.id == nil then return end
     local featureId = tonumber(data.id)
     if featureId == nil then return end
@@ -4244,7 +4266,7 @@ local function actionSetFaceFeature(data)
     SetPedFaceFeature(ped, featureId, v)
 end
 
-local function actionRandomizeMpPedFace()
+function actionRandomizeMpPedFace()
     local ped = getPed()
     local pedModel = GetEntityModel(ped)
     local isFreemode = pedModel == joaat('mp_m_freemode_01') or pedModel == joaat('mp_f_freemode_01')
@@ -4297,12 +4319,12 @@ local function actionRandomizeMpPedFace()
     notify('success', 'Randomized MP face and overlays.')
 end
 
-local function actionClearPedTattoos()
+function actionClearPedTattoos()
     ClearPedDecorations(getPed())
     notify('success', 'Cleared ped tattoos and decorations.')
 end
 
-local function actionSetModel(data)
+function actionSetModel(data)
     local model = data and data.model
     if not model or model == '' then
         notify('error', 'Model name required.')
@@ -4335,13 +4357,13 @@ local function actionSetModel(data)
     notify('success', 'Model updated.')
 end
 
-local function actionCopyCoords(data)
+function actionCopyCoords(data)
     local text, format = buildCoordClipboardText(data and data.format)
     copyToClipboard(text)
     notify('success', ('%s copied.'):format(format))
 end
 
-local function actionCopyHeading()
+function actionCopyHeading()
     local heading = GetEntityHeading(getPed())
     copyToClipboard(('%0.2f'):format(heading))
     notify('success', 'Heading copied.')
@@ -4353,7 +4375,7 @@ local previewWatcherActive = false
 local previewShared = false
 local clearVehiclePreview
 
-local function collectPreviewExtraStates()
+function collectPreviewExtraStates()
     local list = {}
     if previewVehicle == 0 or not DoesEntityExist(previewVehicle) then
         return list
@@ -4371,7 +4393,7 @@ local function collectPreviewExtraStates()
     return list
 end
 
-local function applyVehicleExtraStates(vehicle, states)
+function applyVehicleExtraStates(vehicle, states)
     if vehicle == 0 or type(states) ~= 'table' then
         return
     end
@@ -4386,7 +4408,7 @@ local function applyVehicleExtraStates(vehicle, states)
     end
 end
 
-local function syncPreviewExtrasStatebag()
+function syncPreviewExtrasStatebag()
     if previewShared ~= true then
         return
     end
@@ -4402,7 +4424,7 @@ local function syncPreviewExtrasStatebag()
     end
 end
 
-local function destroyPreviewEntityOnly()
+function destroyPreviewEntityOnly()
     if previewVehicle ~= 0 and DoesEntityExist(previewVehicle) then
         SetEntityAsMissionEntity(previewVehicle, true, true)
         DeleteEntity(previewVehicle)
@@ -4410,7 +4432,7 @@ local function destroyPreviewEntityOnly()
     previewVehicle = 0
 end
 
-local function computePedPreviewSpawn()
+function computePedPreviewSpawn()
     local ped = getPed()
     local coords = GetEntityCoords(ped)
     local heading = GetEntityHeading(ped)
@@ -4428,7 +4450,7 @@ local function computePedPreviewSpawn()
     return spawnX, spawnY, spawnZ, spawnHeading
 end
 
-local function configurePreviewVehicleEntity(vehicle, networkShared)
+function configurePreviewVehicleEntity(vehicle, networkShared)
     SetEntityAsMissionEntity(vehicle, true, true)
     FreezeEntityPosition(vehicle, true)
     SetEntityInvincible(vehicle, true)
@@ -4450,7 +4472,7 @@ local function configurePreviewVehicleEntity(vehicle, networkShared)
     end
 end
 
-local function spawnPreviewVehicleEntity(model, networkShared, transform)
+function spawnPreviewVehicleEntity(model, networkShared, transform)
     if not model or model == '' then
         return false
     end
@@ -4481,7 +4503,7 @@ local function spawnPreviewVehicleEntity(model, networkShared, transform)
     return true
 end
 
-local function spawnVehicleAtPedWithExtras(model, extraStates)
+function spawnVehicleAtPedWithExtras(model, extraStates)
     if not model or model == '' then
         notify('error', 'Vehicle model required.')
         return false
@@ -4518,7 +4540,7 @@ local function spawnVehicleAtPedWithExtras(model, extraStates)
     return true
 end
 
-local function startPreviewWatcher()
+function startPreviewWatcher()
     if previewWatcherActive then
         return
     end
@@ -4546,7 +4568,7 @@ clearVehiclePreview = function()
     previewShared = false
 end
 
-local function startVehiclePreview(model)
+function startVehiclePreview(model)
     if not model or model == '' then
         notify('error', 'Vehicle model required.')
         return false
@@ -4654,7 +4676,7 @@ Admin.spawnVehicleFromPreview = function()
     return spawnVehicleAtPedWithExtras(model, extrasSnapshot) == true
 end
 
-local function actionSpawnVehicle(data)
+function actionSpawnVehicle(data)
     local model = data and data.model
     if not model or model == '' then
         notify('error', 'Vehicle model required.')
@@ -4665,7 +4687,7 @@ local function actionSpawnVehicle(data)
     spawnVehicleAtPedWithExtras(model, nil)
 end
 
-local function actionRepairVehicle()
+function actionRepairVehicle()
     local vehicle = ensureVehicle()
     if not vehicle then return end
 
@@ -4675,7 +4697,7 @@ local function actionRepairVehicle()
     notify('success', 'Vehicle repaired.')
 end
 
-local function actionCleanVehicle()
+function actionCleanVehicle()
     local vehicle = ensureVehicle()
     if not vehicle then return end
 
@@ -4684,7 +4706,7 @@ local function actionCleanVehicle()
     notify('success', 'Vehicle cleaned.')
 end
 
-local function actionDeleteVehicle()
+function actionDeleteVehicle()
     local vehicle = ensureVehicle()
     if not vehicle then return end
 
@@ -4693,7 +4715,7 @@ local function actionDeleteVehicle()
     notify('success', 'Vehicle deleted.')
 end
 
-local function actionFlipVehicle()
+function actionFlipVehicle()
     local vehicle = ensureVehicle()
     if not vehicle then return end
 
@@ -4703,7 +4725,7 @@ local function actionFlipVehicle()
     notify('success', 'Vehicle flipped.')
 end
 
-local function actionMaxMods()
+function actionMaxMods()
     local vehicle = ensureVehicle()
     if not vehicle then return end
 
@@ -4712,11 +4734,48 @@ local function actionMaxMods()
 end
 
 
-local function actionSetWeather(value)
+function actionSetWeather(value)
     TriggerServerEvent('es_admin:server:setWorldState', { weather = value })
 end
 
-local function actionSetTime(value)
+function getCurrentDynamicWeatherZone()
+    if GetResourceState('Dynamic_weather') ~= 'started' then
+        notify('error', 'Dynamic_weather is not started.')
+        return nil
+    end
+
+    local coords = GetEntityCoords(getPed())
+    local ok, zone = pcall(function()
+        return exports['Dynamic_weather']:getZoneAt(coords.x, coords.y)
+    end)
+
+    if not ok then
+        notify('error', 'Could not detect current weather zone.')
+        return nil
+    end
+
+    if type(zone) ~= 'table' or type(zone.id) ~= 'string' or zone.id == '' then
+        notify('error', 'You are not inside a Dynamic_weather zone.')
+        return nil
+    end
+
+    return zone
+end
+
+function actionForceCurrentZoneWeather(data)
+    local weatherType = normalizeWeatherCommandArg(data and (data.weatherType or data.value))
+    if not weatherType then
+        notify('error', 'Weather type is required.')
+        return
+    end
+
+    local zone = getCurrentDynamicWeatherZone()
+    if not zone then return end
+
+    ExecuteCommand(('weather force %s %s'):format(zone.id, weatherType))
+end
+
+function actionSetTime(value)
     local hour = tonumber(value)
     if not hour then
         notify('error', 'Invalid hour.')
@@ -4725,7 +4784,7 @@ local function actionSetTime(value)
     TriggerServerEvent('es_admin:server:setWorldState', { hour = hour, minute = 0 })
 end
 
-local function actionTeleportWaypoint()
+function actionTeleportWaypoint()
     local blip = GetFirstBlipInfoId(8)
     if blip == 0 then
         notify('error', 'No waypoint set.')
@@ -4738,7 +4797,7 @@ local function actionTeleportWaypoint()
     notify('success', 'Teleported to waypoint.')
 end
 
-local function actionTeleportCoords(data)
+function actionTeleportCoords(data)
     local x = parseNumber(data and data.x)
     local y = parseNumber(data and data.y)
     local z = parseNumber(data and data.z)
@@ -4753,7 +4812,7 @@ local function actionTeleportCoords(data)
     notify('success', 'Teleported to coordinates.')
 end
 
-local function actionTeleportBack()
+function actionTeleportBack()
     if not state.lastCoords then
         notify('error', 'No previous location stored.')
         return
@@ -4828,7 +4887,7 @@ Admin.deleteSavedTeleportLocation = function(name)
     return true
 end
 
-local function teleportToCoords(x, y, showNotification)
+function teleportToCoords(x, y, showNotification)
     if not x or not y then return false end
 
     local ped = getPed()
@@ -4868,7 +4927,7 @@ end
 
 exports('teleportToCoords', teleportToCoords)
 
-local function actionGiveWeapon(data)
+function actionGiveWeapon(data)
     local weapon = data and (data.weapon or data.value)
     if not weapon or weapon == '' then
         notify('error', 'Weapon name required.')
@@ -4886,7 +4945,7 @@ end
 --- GTA parachute gadget hash (see vespura parachute tints doc)
 local PARACHUTE_WEAPON_HASH = joaat('gadget_parachute')
 
-local function actionGiveParachute(value)
+function actionGiveParachute(value)
     local tint = tonumber(value)
     if tint == nil then
         tint = 0
@@ -4909,12 +4968,12 @@ local function actionGiveParachute(value)
     notify('success', ('Parachute given (tint %d).'):format(tint))
 end
 
-local function actionRemoveWeapons()
+function actionRemoveWeapons()
     RemoveAllPedWeapons(getPed(), true)
     notify('success', 'Weapons removed.')
 end
 
-local function actionSetAmmo(data)
+function actionSetAmmo(data)
     local ammo = parseNumber(data and data.ammo)
     if not ammo then
         notify('error', 'Ammo amount required.')
@@ -4931,7 +4990,7 @@ local function actionSetAmmo(data)
     notify('success', 'Ammo updated.')
 end
 
-local function actionClearArea(data)
+function actionClearArea(data)
     local radius = parseNumber(data and (data.radius or data.value)) or 50
     local pedsCleared = clearPoolEntities('CPed', radius)
     local vehiclesCleared = clearPoolEntities('CVehicle', radius)
@@ -4940,25 +4999,25 @@ local function actionClearArea(data)
     notify('success', ('Cleared %d entities (%d peds, %d vehicles, %d objects).'):format(total, pedsCleared, vehiclesCleared, objectsCleared))
 end
 
-local function actionClearVehicles(data)
+function actionClearVehicles(data)
     local radius = parseNumber(data and (data.radius or data.value)) or 100
     local cleared = clearPoolEntities('CVehicle', radius)
     notify('success', ('Cleared %d vehicle(s).'):format(cleared))
 end
 
-local function actionClearPeds(data)
+function actionClearPeds(data)
     local radius = parseNumber(data and (data.radius or data.value)) or 100
     local cleared = clearPoolEntities('CPed', radius)
     notify('success', ('Cleared %d ped(s).'):format(cleared))
 end
 
-local function actionClearObjects(data)
+function actionClearObjects(data)
     local radius = parseNumber(data and (data.radius or data.value)) or 100
     local cleared = clearPoolEntities('CObject', radius)
     notify('success', ('Cleared %d object(s).'):format(cleared))
 end
 
-local function actionTakePhoto()
+function actionTakePhoto()
     if GetResourceState('screenshot-basic') ~= 'started' then
         notify('error', 'screenshot-basic must be started before taking a photo.')
         return
@@ -4969,13 +5028,13 @@ local function actionTakePhoto()
     TriggerServerEvent('es_admin:server:takePhoto')
 end
 
-local function actionOpenGallery()
+function actionOpenGallery()
     Admin.setOpen(false)
     Wait(75)
     ActivateFrontendMenu(joaat('FE_MENU_VERSION_MP_PAUSE'), true, 3)
 end
 
-local function actionStartRecording()
+function actionStartRecording()
     if IsRecording() then
         notify('error', 'Already recording. Stop your current recording first.')
         return
@@ -4997,7 +5056,7 @@ local function actionStartRecording()
     notify('success', ('Recording started. Press %s or /%s to reopen admin, then Stop or Discard.'):format(keyLabel, cmdLabel))
 end
 
-local function actionStopRecording()
+function actionStopRecording()
     if not IsRecording() then
         clearRecordingState()
         notify('error', 'You are not currently recording.')
@@ -5019,7 +5078,7 @@ local function actionStopRecording()
     notify('success', 'Recording stopped. Saving clip...')
 end
 
-local function actionDiscardRecording()
+function actionDiscardRecording()
     if not IsRecording() then
         clearRecordingState()
         notify('error', 'You are not currently recording.')
@@ -5031,7 +5090,7 @@ local function actionDiscardRecording()
     notify('success', 'Recording discarded.')
 end
 
-local function actionOpenRockstarEditor()
+function actionOpenRockstarEditor()
     if IsRecording() then
         notify('error', 'Stop or discard the active recording before opening Rockstar Editor.')
         return
@@ -5053,7 +5112,7 @@ local function actionOpenRockstarEditor()
     end
 end
 
-local function toggleHud(enabled)
+function toggleHud(enabled)
     state.toggles['dev.noHud'] = enabled
 end
 
@@ -5179,14 +5238,17 @@ Admin.executeAction = function(actionId, data)
         ExecuteCommand('weather reload')
         return
     elseif actionId == 'world.weatherForce' then
-        local zoneId = data and data.zoneId
-        local weatherType = data and data.weatherType
+        local zoneId = trimString(data and data.zoneId)
+        local weatherType = normalizeWeatherCommandArg(data and data.weatherType)
         if not zoneId or zoneId == '' or not weatherType or weatherType == '' then
             notify('error', 'Zone ID and weather type are required.')
             return
         end
 
-        ExecuteCommand(('weather force %s %s'):format(zoneId, string.upper(weatherType)))
+        ExecuteCommand(('weather force %s %s'):format(zoneId, weatherType))
+        return
+    elseif actionId == 'world.weatherForceCurrent' then
+        actionForceCurrentZoneWeather(data)
         return
     elseif actionId == 'world.time' then
         return actionSetTime(data and data.value)
