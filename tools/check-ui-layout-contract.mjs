@@ -9,6 +9,36 @@ const app = fs.readFileSync(path.join(root, 'ui', 'app.js'), 'utf8');
 const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 const failures = [];
+// The studio has its own authored stylesheet; both the browser and FiveM's
+// resource file list must include it for an installed client to receive it.
+const studioCssName = 'character-studio.css';
+const html = fs.readFileSync(path.join(root, 'ui', 'index.html'), 'utf8');
+const manifest = fs.readFileSync(path.join(root, 'fxmanifest.lua'), 'utf8');
+for (const name of ['vehicle-studio.js', 'vehicle-studio.css']) {
+    if (!fs.existsSync(path.join(root, 'ui', name)) || !html.includes(`${name}?`) || !manifest.includes(`'ui/${name}'`)) {
+        failures.push(`Vehicle studio asset must exist, load and ship: ${name}`);
+    }
+}
+if (html.indexOf('src="vehicle-studio.js') > html.indexOf('src="app.js')) {
+    failures.push('Vehicle studio component must load before the app mounts');
+}
+if (!fs.existsSync(path.join(root, 'ui', studioCssName))
+    || !html.includes(`href="${studioCssName}?`)
+    || !manifest.includes(`'ui/${studioCssName}'`)) {
+    failures.push('Studio stylesheet must exist, load from index.html and ship in fxmanifest.lua');
+}
+
+// app.js consumes the React global without module imports. Bundling alone
+// does not catch an unbound hook, so verify the hooks called by bare name.
+const hookBindings = new Set((app.match(/const\s*\{([^}]+)\}\s*=\s*React;/)?.[1] || '')
+    .split(',').map((name) => name.trim()));
+const reactHooks = new Set(['useState', 'useEffect', 'useMemo', 'useCallback', 'useLayoutEffect', 'useRef', 'useId', 'useReducer', 'useContext', 'useImperativeHandle', 'useInsertionEffect', 'useSyncExternalStore', 'useTransition', 'useDeferredValue', 'useDebugValue']);
+for (const [, hook] of app.matchAll(/(?<![\w.])\b(use[A-Z]\w*)\s*\(/g)) {
+    if (reactHooks.has(hook) && !hookBindings.has(hook)) {
+        const message = `Unbound React hook: ${hook}`;
+        if (!failures.includes(message)) failures.push(message);
+    }
+}
 
 function ruleBody(selector) {
     const rulePattern = /([^{}]+)\{([^{}]*)\}/g;
@@ -49,12 +79,11 @@ const favoriteIndex = actionSource.indexOf('className: `admin-action-star');
 
 if (!actionSource) {
     failures.push('Could not isolate ActionItem source');
-} else if (infoIndex < 0 || favoriteIndex < 0 || infoIndex >= favoriteIndex) {
-    failures.push('ActionItem must render command copy before the favorite control so labels start at the left content edge');
+} else if (infoIndex < 0 || favoriteIndex < 0 || favoriteIndex >= infoIndex) {
+    failures.push('ActionItem must render the favorite star before command copy and trailing controls');
 }
 
 requireDeclarations('.admin-action-info', ['flex: 1;', 'min-width: 0;']);
-requireDeclarations('.admin-action-enabled-dot', ['position: absolute;']);
 requireDeclarations('.admin-select-trigger', ['min-height: calc(32px * var(--es-ui-scale));', 'font-size: calc(12px * var(--es-ui-scale));']);
 requireDeclarations('.admin-select-option', ['flex: 0 0 auto;', 'min-height: calc(32px * var(--es-ui-scale));', 'line-height: 1.25;']);
 requireDeclarations('.appearance-header--wardrobe', ['display: grid;', 'grid-template-columns:']);

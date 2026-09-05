@@ -1,0 +1,168 @@
+/* Discrete parts use a tuning sheet, with one open body-part catalogue. */
+.vehicle-mod-workbench {
+    --mod-paper: var(--studio-paper, var(--text-1));
+    --mod-ink: var(--studio-ink, var(--ink-1));
+    --mod-surface: rgba(13, 18, 23, 0.84);
+    --mod-line: rgba(240, 238, 231, 0.2);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    color: var(--mod-paper);
+    container-type: inline-size;
+}
+.vehicle-mod-workbench button {
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    transition: background-color 120ms, color 120ms;
+}
+.vehicle-mod-workbench button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.vehicle-mod-workbench button:disabled,
+.vehicle-mod-workbench button[aria-disabled=true] { opacity: 0.55; cursor: not-allowed; }
+.vehicle-mod-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(2px * var(--es-ui-scale)); }
+.vehicle-mod-modes button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: calc(8px * var(--es-ui-scale));
+    padding: calc(13px * var(--es-ui-scale)) calc(8px * var(--es-ui-scale));
+    background: var(--mod-surface);
+    font-size: calc(12px * var(--es-ui-scale));
+    font-weight: 600;
+}
+.vehicle-mod-workbench .vehicle-mod-modes button[aria-pressed=true],
+.vehicle-mod-workbench .vehicle-mod-choice[aria-pressed=true],
+.vehicle-mod-workbench .vehicle-mod-stage[aria-pressed=true] { background: var(--mod-paper); color: var(--mod-ink); }
+.vehicle-mod-workbench button:hover:not(:disabled):not([aria-disabled=true]) { background: var(--ink-4, #212836); color: var(--mod-paper); }
+.vehicle-mod-workbench button[aria-pressed=true]:hover:not([aria-disabled=true]) { background: #fff; color: var(--mod-ink); }
+.vehicle-mod-groups { display: flex; flex-wrap: wrap; gap: 0; padding-top: calc(8px * var(--es-ui-scale)); }
+.vehicle-mod-groups button { flex: 1 1 auto; padding: calc(9px * var(--es-ui-scale)) calc(8px * var(--es-ui-scale)); background: var(--mod-surface); border-bottom: 2px solid transparent; font-size: calc(10px * var(--es-ui-scale)); }
+.vehicle-mod-groups button[aria-pressed=true] { border-bottom-color: var(--mod-paper); }
+.vehicle-mod-sheet-heading { display: flex; justify-content: space-between; gap: calc(8px * var(--es-ui-scale)); margin: calc(18px * var(--es-ui-scale)) 0 calc(8px * var(--es-ui-scale)); font: calc(9px * var(--es-ui-scale))/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; text-shadow: 0 1px 3px #000; }
+.vehicle-mod-sheet { min-width: 0; background: var(--mod-surface); border-top: 1px solid var(--mod-line); }
+.vehicle-mod-stage-row { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.5fr); align-items: center; gap: calc(10px * var(--es-ui-scale)); padding: calc(10px * var(--es-ui-scale)) calc(12px * var(--es-ui-scale)); border-bottom: 1px solid var(--mod-line); }
+.vehicle-mod-row-heading { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: calc(3px * var(--es-ui-scale)); }
+.vehicle-mod-row-heading strong, .vehicle-mod-part-copy strong, .vehicle-mod-switch strong { font-size: calc(12px * var(--es-ui-scale)); font-weight: 600; }
+.vehicle-mod-row-heading > span { color: var(--text-2); font-size: calc(10px * var(--es-ui-scale)); overflow-wrap: anywhere; }
+.vehicle-mod-stages { display: flex; flex-wrap: wrap; gap: calc(3px * var(--es-ui-scale)); }
+.vehicle-mod-workbench .vehicle-mod-stage {
+    position: relative;
+    flex: 1 0 calc(27px * var(--es-ui-scale));
+    min-height: calc(30px * var(--es-ui-scale));
+    padding: calc(5px * var(--es-ui-scale)) calc(4px * var(--es-ui-scale)) calc(8px * var(--es-ui-scale));
+    background: rgba(240, 238, 231, 0.06);
+    font: calc(10px * var(--es-ui-scale))/1.2 var(--font-mono);
+}
+.vehicle-mod-stage:first-child { flex-grow: 1.65; flex-basis: calc(43px * var(--es-ui-scale)); }
+.vehicle-mod-stage::after { content: ''; position: absolute; left: calc(5px * var(--es-ui-scale)); right: calc(5px * var(--es-ui-scale)); bottom: calc(3px * var(--es-ui-scale)); height: calc(2px * var(--es-ui-scale)); background: var(--mod-line); transform: skewX(-25deg); }
+.vehicle-mod-stage.is-reached::after { background: var(--mod-paper); }
+.vehicle-mod-stage[aria-pressed=true]::after { background: var(--mod-ink); }
+.vehicle-mod-part { min-width: 0; border-bottom: 1px solid var(--mod-line); }
+.vehicle-mod-part.is-expanded { border-left: calc(2px * var(--es-ui-scale)) solid var(--mod-paper); }
+.vehicle-mod-part-trigger { display: flex; align-items: center; width: 100%; gap: calc(12px * var(--es-ui-scale)); padding: calc(12px * var(--es-ui-scale)); background: transparent; text-align: left; }
+.vehicle-mod-part-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: calc(3px * var(--es-ui-scale)); }
+.vehicle-mod-part-copy strong, .vehicle-mod-part-copy small { overflow-wrap: anywhere; }
+.vehicle-mod-part-copy small { font-size: calc(10px * var(--es-ui-scale)); color: var(--text-2); }
+.vehicle-mod-part-count { font: italic calc(22px * var(--es-ui-scale))/1 'Arial Narrow', Impact, sans-serif; color: var(--text-2); }
+.vehicle-mod-part-trigger svg { flex-shrink: 0; }
+.vehicle-mod-choices { padding: 0 calc(10px * var(--es-ui-scale)) calc(10px * var(--es-ui-scale)); }
+.vehicle-mod-choice-list { position: relative; display: flex; flex-direction: column; gap: 1px; max-height: min(calc(280px * var(--es-ui-scale)), 40vh); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--mod-line) transparent; }
+.vehicle-mod-choice-list > button { flex-shrink: 0; }
+.vehicle-mod-choice { display: flex; align-items: center; gap: calc(10px * var(--es-ui-scale)); min-height: calc(34px * var(--es-ui-scale)); padding: calc(7px * var(--es-ui-scale)) calc(10px * var(--es-ui-scale)); text-align: left; background: rgba(240, 238, 231, 0.05); }
+.vehicle-mod-choice-number { flex: 0 0 calc(24px * var(--es-ui-scale)); font: calc(10px * var(--es-ui-scale))/1.3 var(--font-mono); opacity: 0.75; }
+.vehicle-mod-choice-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: calc(11px * var(--es-ui-scale)); }
+.vehicle-mod-choice svg { flex-shrink: 0; }
+.vehicle-mod-switch { display: grid; grid-template-columns: minmax(0, 1fr) calc(70px * var(--es-ui-scale)); width: 100%; padding: 0; text-align: left; background: transparent; }
+.vehicle-mod-switch > span:first-child { display: flex; flex-direction: column; gap: calc(3px * var(--es-ui-scale)); padding: calc(12px * var(--es-ui-scale)); }
+.vehicle-mod-switch small { font-size: calc(10px * var(--es-ui-scale)); color: var(--text-2); }
+.vehicle-mod-feedback { padding: calc(10px * var(--es-ui-scale)) 0; min-height: calc(34px * var(--es-ui-scale)); font-size: calc(10px * var(--es-ui-scale)); color: var(--text-2); text-shadow: 0 1px 3px #000; }
+.vehicle-mod-feedback.is-error { padding-inline: calc(10px * var(--es-ui-scale)); color: var(--text-1); background: var(--mod-surface); border-left: 2px solid var(--danger); }
+.vehicle-mod-empty { margin: 0; padding: calc(18px * var(--es-ui-scale)); background: var(--mod-surface); color: var(--text-2); font-size: calc(12px * var(--es-ui-scale)); }
+@container (max-width: 340px) {
+    .vehicle-mod-stage-row { grid-template-columns: minmax(0, 1fr); }
+    .vehicle-mod-row-heading { flex-direction: row; flex-wrap: wrap; justify-content: space-between; gap: calc(3px * var(--es-ui-scale)) calc(8px * var(--es-ui-scale)); }
+}
+@container (max-width: 280px) {
+    .vehicle-mod-modes button { gap: calc(4px * var(--es-ui-scale)); }
+    .vehicle-mod-modes svg { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .vehicle-mod-workbench button { transition: none; } }
+
+/* Vehicle workshop shares the character studio's floating material language. */
+.vehicle-studio { --vehicle-copy-surface: rgba(13, 18, 23, 0.92); }
+.vehicle-studio-launcher { gap: calc(14px * var(--es-ui-scale)); overflow-y: auto; }
+.vehicle-studio-launcher h2 { margin: 0; }
+.vehicle-model-field { display: flex; flex-direction: column; gap: calc(8px * var(--es-ui-scale)); font-size: calc(12px * var(--es-ui-scale)); }
+.vehicle-studio .studio-panel-primary { width: min(calc(390px * var(--es-ui-scale)), 31vw); }
+.vehicle-studio h1 { overflow-wrap: anywhere; font-size: calc(38px * var(--es-ui-scale)); }
+.vehicle-studio .vehicle-customizer { overflow: visible; }
+.vehicle-studio .vehicle-customizer-toolbar { padding: 0; border: 0; background: transparent; margin-bottom: calc(12px * var(--es-ui-scale)); }
+.vehicle-studio .vehicle-customizer-toolbar .admin-section-kicker,
+.vehicle-studio .vehicle-customizer-toolbar strong,
+.vehicle-studio .vehicle-customizer-toolbar > button { display: none; }
+.vehicle-studio .vehicle-customizer-toolbar small { display: block; color: var(--studio-paper); text-shadow: 0 1px 3px #000; }
+.vehicle-studio .appearance-content-area { overflow: visible; flex: none; }
+.vehicle-studio .appearance-collapsible { background: transparent; border: 0; }
+.vehicle-studio .appearance-collapsible-trigger { display: none; }
+.vehicle-studio .appearance-collapsible-panel { padding: 0; }
+.vehicle-studio .admin-section { padding: 0; background: transparent; border: 0; margin-bottom: calc(18px * var(--es-ui-scale)); }
+.vehicle-studio .admin-section-title { color: var(--studio-paper); font-size: calc(11px * var(--es-ui-scale)); letter-spacing: 0.1em; border-bottom: 1px solid var(--studio-line); }
+/* Small copy needs its own contrast floor over sunlit roads and HUD elements.
+   Back only the reading rows, leaving the panel and game canvas transparent. */
+.vehicle-studio .admin-section-title,
+.vehicle-studio .vehicle-catalog-selection,
+.vehicle-studio .vehicle-catalog-pages,
+.vehicle-studio .vehicle-customizer .studio-caption,
+.vehicle-studio .vehicle-mod-sheet-heading,
+.vehicle-studio .vehicle-mod-feedback:not(:empty),
+.vehicle-studio .vehicle-customizer-toolbar small {
+    background: var(--vehicle-copy-surface);
+    padding: calc(8px * var(--es-ui-scale)) calc(12px * var(--es-ui-scale));
+    text-shadow: none;
+    overflow-wrap: anywhere;
+}
+.vehicle-studio .vehicle-catalog-selection { flex-wrap: wrap; row-gap: calc(4px * var(--es-ui-scale)); }
+.vehicle-studio .vehicle-catalog-pages { padding: 0; }
+.vehicle-studio .vehicle-catalog-pages button { background: transparent; }
+.vehicle-studio .vehicle-catalog-pages button:disabled { opacity: 1; color: var(--text-3); }
+.vehicle-studio .vehicle-catalog-pages button:focus-visible { outline-offset: -2px; }
+.vehicle-studio .vehicle-customizer .studio-caption { margin-block: calc(8px * var(--es-ui-scale)) 0; }
+.vehicle-studio .vehicle-customizer-toolbar small { width: fit-content; max-width: 100%; box-sizing: border-box; }
+.vehicle-studio .appearance-control.wide { width: 100%; gap: calc(8px * var(--es-ui-scale)); }
+.vehicle-studio .vehicle-custom-rgb { background: var(--studio-wash); border: 0; border-radius: 0; padding: calc(12px * var(--es-ui-scale)); }
+.vehicle-studio .vehicle-custom-rgb-controls { grid-template-columns: minmax(0, 1fr); }
+.vehicle-studio .vehicle-custom-extra-grid { grid-template-columns: minmax(0, 1fr); }
+.vehicle-studio .vehicle-custom-extra { background: var(--studio-wash); border-radius: 0; }
+.vehicle-studio .vehicle-custom-extra.active { border-color: var(--studio-paper); }
+.vehicle-lighting-panel { width: min(calc(270px * var(--es-ui-scale)), 23vw); margin-top: calc(38px * var(--es-ui-scale)); }
+.vehicle-lighting-panel > .studio-panel-scroll { padding: calc(16px * var(--es-ui-scale)); background: var(--studio-wash); border-top: 1px solid var(--studio-line); }
+.vehicle-light-time { display: flex; flex-direction: column; gap: calc(4px * var(--es-ui-scale)); margin-bottom: calc(20px * var(--es-ui-scale)); }
+.vehicle-light-time strong { font: 400 calc(30px * var(--es-ui-scale))/1.1 var(--font-mono); letter-spacing: -0.05em; }
+.vehicle-light-time > span { color: var(--text-2); font-size: calc(10px * var(--es-ui-scale)); text-transform: uppercase; letter-spacing: 0.12em; }
+.vehicle-light-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: calc(3px * var(--es-ui-scale)); }
+.vehicle-light-presets button { display: flex; flex-direction: column; align-items: center; gap: calc(7px * var(--es-ui-scale)); background: transparent; color: var(--studio-paper); border: 0; border-bottom: 1px solid var(--studio-line); padding: calc(10px * var(--es-ui-scale)) 0; font-size: calc(10px * var(--es-ui-scale)); cursor: pointer; }
+.vehicle-light-presets button[aria-pressed=true] { background: var(--studio-paper); color: var(--studio-ink); }
+.vehicle-time-slider { display: flex; flex-direction: column; gap: calc(10px * var(--es-ui-scale)); margin: calc(22px * var(--es-ui-scale)) 0; font-size: calc(11px * var(--es-ui-scale)); }
+.vehicle-time-slider input { width: 100%; accent-color: var(--studio-paper); }
+.vehicle-studio .vehicle-cycle { width: 100%; justify-content: center; }
+.vehicle-studio-save { margin-top: calc(28px * var(--es-ui-scale)); padding-top: calc(8px * var(--es-ui-scale)); border-top: 1px solid var(--studio-line); display: flex; flex-direction: column; gap: calc(10px * var(--es-ui-scale)); }
+.vehicle-studio-save h3 { margin: calc(8px * var(--es-ui-scale)) 0; }
+.vehicle-studio .vehicle-studio-save button { background: var(--studio-paper); color: var(--studio-ink); justify-content: center; }
+.vehicle-studio-status { font-size: calc(11px * var(--es-ui-scale)); line-height: 1.5; }
+.vehicle-camera-group { display: flex; gap: calc(3px * var(--es-ui-scale)); align-items: center; }
+.vehicle-camera-group > span { margin-right: calc(8px * var(--es-ui-scale)); font: calc(9px * var(--es-ui-scale)) var(--font-mono); text-shadow: 0 1px 3px #000; }
+@media (max-width: 1200px) {
+    .vehicle-studio .studio-panel-primary { width: 37vw; }
+    .vehicle-lighting-panel { width: 29vw; }
+    .vehicle-light-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+    .vehicle-studio .studio-panel-primary { width: 45vw; }
+    .vehicle-lighting-panel { width: 40vw; margin-top: 0; }
+    .vehicle-camera-group > span { display: none; }
+    .vehicle-studio .studio-camera { gap: calc(8px * var(--es-ui-scale)); }
+}

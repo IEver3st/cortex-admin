@@ -1,0 +1,1138 @@
+[
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 20,
+    "name": "Double Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/5/53/Clothing_M_11_20.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 23,
+    "name": "Sports Coat",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c6/Clothing_M_11_23.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 24,
+    "name": "Smart Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/85/Clothing_M_11_24.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 26,
+    "name": "Tucked Shirt",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/15/Clothing_M_11_26.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 27,
+    "name": "Double Breasted",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/8f/Clothing_M_11_27.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 28,
+    "name": "Tailored Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/7/7b/Clothing_M_11_28.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 30,
+    "name": "Smooth Fitted",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/f5/Clothing_M_11_30.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 32,
+    "name": "Sharp Fitted",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a6/Clothing_M_11_32.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 49,
+    "name": "Combat Top",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/b1/Clothing_M_11_49.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 50,
+    "name": "Combat Sweater",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/ba/Clothing_M_11_50.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 68,
+    "name": "Hooded Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c4/Clothing_M_11_68.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 70,
+    "name": "Leather Fur Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c2/Clothing_M_11_70.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 72,
+    "name": "Wool Coat",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/63/Clothing_M_11_72.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 74,
+    "name": "Bomber",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/fe/Clothing_M_11_74.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 75,
+    "name": "Zipped Bomber",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/0f/Clothing_M_11_75.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 76,
+    "name": "Trench Coat",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/39/Clothing_M_11_76.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 77,
+    "name": "Overcoat",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c6/Clothing_M_11_77.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 78,
+    "name": "Print Sweater",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/d/da/Clothing_M_11_78.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 82,
+    "name": "Loose Polo",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/2/2f/Clothing_M_11_82.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 86,
+    "name": "Sport Hoodie",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/e/ee/Clothing_M_11_86.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 87,
+    "name": "Varsity Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/9/9b/Clothing_M_11_87.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 97,
+    "name": "Utility Tee",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/0f/Clothing_M_11_97.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 100,
+    "name": "Continental Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/bd/Clothing_M_11_100.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 11,
+    "drawable": 119,
+    "name": "Check Double Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/69/Clothing_M_11_119.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 22,
+    "name": "Smart Regular",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/34/Clothing_M_4_22.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 24,
+    "name": "Skinny Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/bd/Clothing_M_4_24.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 25,
+    "name": "Regular Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a9/Clothing_M_4_25.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 28,
+    "name": "Slim Fit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/d/d6/Clothing_M_4_28.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 29,
+    "name": "Striped Chinos",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/85/Clothing_M_4_29.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 37,
+    "name": "Scruffy Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/b8/Clothing_M_4_37.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 41,
+    "name": "Flight Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/62/Clothing_M_4_41.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 43,
+    "name": "Loose Jeans",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c6/Clothing_M_4_43.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 55,
+    "name": "Tracksuit Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a1/Clothing_M_4_55.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 60,
+    "name": "Check Suit Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c2/Clothing_M_4_60.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 62,
+    "name": "Work Shorts",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/d/d0/Clothing_M_4_62.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 63,
+    "name": "Classic Jeans",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/63/Clothing_M_4_63.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 64,
+    "name": "Modern Tracksuit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/4b/Clothing_M_4_64.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 71,
+    "name": "Plain Biker",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/15/Clothing_M_4_71.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 73,
+    "name": "Padded Biker",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/7/78/Clothing_M_4_73.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 75,
+    "name": "Ribbed Denim",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/ab/Clothing_M_4_75.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 76,
+    "name": "Roadworn Denim",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/e/ea/Clothing_M_4_76.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 78,
+    "name": "Low Crotch",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/b5/Clothing_M_4_78.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 82,
+    "name": "Tapered Low Crotch",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/aa/Clothing_M_4_82.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 4,
+    "drawable": 83,
+    "name": "Leather Jeans",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/4c/Clothing_M_4_83.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 18,
+    "name": "Toe Oxfords",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/06/Clothing_M_6_18.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 20,
+    "name": "Two Tone Oxfords",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/9/9e/Clothing_M_6_20.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 21,
+    "name": "Slip Ons",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/5/5a/Clothing_M_6_21.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 22,
+    "name": "Dlc Canvas",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/17/Clothing_M_6_22.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 23,
+    "name": "Wingtips",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/63/Clothing_M_6_23.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 24,
+    "name": "Flight Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/00/Clothing_M_6_24.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 25,
+    "name": "Tactical Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/69/Clothing_M_6_25.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 28,
+    "name": "Studded Sneakers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/7/79/Clothing_M_6_28.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 30,
+    "name": "Driving Loafers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/06/Clothing_M_6_30.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 31,
+    "name": "Calypso Runners",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/9/98/Clothing_M_6_31.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 32,
+    "name": "Hi Top Sneakers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c2/Clothing_M_6_32.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 35,
+    "name": "Walking Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/63/Clothing_M_6_35.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 36,
+    "name": "Leather Loafers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/3b/Clothing_M_6_36.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 40,
+    "name": "Tip Oxfords",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c6/Clothing_M_6_40.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 42,
+    "name": "Canvas Slip Ons",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/7/72/Clothing_M_6_42.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 43,
+    "name": "Ankle Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/ac/Clothing_M_6_43.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 50,
+    "name": "Laceup Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/60/Clothing_M_6_50.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 53,
+    "name": "Slack Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/18/Clothing_M_6_53.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 57,
+    "name": "Plain High Tops",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c5/Clothing_M_6_57.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 60,
+    "name": "Tech Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/61/Clothing_M_6_60.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 65,
+    "name": "Moc Toe Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/9/9d/Clothing_M_6_65.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 72,
+    "name": "Trail Shoes",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/cc/Clothing_M_6_72.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 93,
+    "name": "Retro Sneakers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/87/Clothing_M_6_93.jpg"
+  },
+  {
+    "gender": "male",
+    "component": 6,
+    "drawable": 96,
+    "name": "Uniform Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c8/Clothing_M_6_96.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 25,
+    "name": "Blazer",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/44/Clothing_F_11_25.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 27,
+    "name": "Blouse",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/34/Clothing_F_11_27.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 28,
+    "name": "Tailored Vest",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/bf/Clothing_F_11_28.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 35,
+    "name": "Cropped Biker",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/bf/Clothing_F_11_35.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 42,
+    "name": "Combat Top",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/36/Clothing_F_11_42.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 43,
+    "name": "Combat Sweater",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/8d/Clothing_F_11_43.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 56,
+    "name": "Rolled Shirt",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/41/Clothing_F_11_56.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 58,
+    "name": "Fitted Tux",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/2/25/Clothing_F_11_58.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 62,
+    "name": "Hooded Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/81/Clothing_F_11_62.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 64,
+    "name": "Peacoat",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/5/52/Clothing_F_11_64.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 65,
+    "name": "Leather Fur Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/2/2b/Clothing_F_11_65.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 66,
+    "name": "Belted Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/e/ec/Clothing_F_11_66.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 70,
+    "name": "Trench Coat",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/48/Clothing_F_11_70.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 71,
+    "name": "Print Sweater",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/8f/Clothing_F_11_71.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 74,
+    "name": "Loose Tank",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/34/Clothing_F_11_74.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 78,
+    "name": "Sport Hoodie",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/46/Clothing_F_11_78.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 81,
+    "name": "Varsity Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/ca/Clothing_F_11_81.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 88,
+    "name": "Utility Tee",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/9/95/Clothing_F_11_88.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 91,
+    "name": "Continental Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/f0/Clothing_F_11_91.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 93,
+    "name": "Shiny Jacket",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/65/Clothing_F_11_93.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 11,
+    "drawable": 119,
+    "name": "Work Shirt",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a7/Clothing_F_11_119.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 23,
+    "name": "Tailored Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/09/Clothing_F_4_23.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 24,
+    "name": "Panel Pencil",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/6d/Clothing_F_4_24.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 25,
+    "name": "Denim Shorts",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/ca/Clothing_F_4_25.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 27,
+    "name": "Leggings",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/cc/Clothing_F_4_27.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 30,
+    "name": "Combat Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/1c/Clothing_F_4_30.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 32,
+    "name": "Heist Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/32/Clothing_F_4_32.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 36,
+    "name": "Pencil Skirt",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/6/6f/Clothing_F_4_36.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 37,
+    "name": "Regular Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/30/Clothing_F_4_37.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 41,
+    "name": "Scruffy Suit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/8d/Clothing_F_4_41.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 42,
+    "name": "Flight Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/f0/Clothing_F_4_42.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 43,
+    "name": "Leather Zippers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/fb/Clothing_F_4_43.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 44,
+    "name": "Skinny Cuts",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/05/Clothing_F_4_44.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 45,
+    "name": "Baggy Cargo",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/cc/Clothing_F_4_45.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 48,
+    "name": "Battle Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/08/Clothing_F_4_48.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 49,
+    "name": "Utility Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/ad/Clothing_F_4_49.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 58,
+    "name": "Tracksuit Pants",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/b4/Clothing_F_4_58.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 64,
+    "name": "Fitted Chinos",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/f6/Clothing_F_4_64.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 65,
+    "name": "High Waisted",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/0f/Clothing_F_4_65.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 66,
+    "name": "Modern Tracksuit",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/08/Clothing_F_4_66.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 73,
+    "name": "Ribbed Denim",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/2/22/Clothing_F_4_73.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 74,
+    "name": "Roadworn Denim",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a9/Clothing_F_4_74.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 75,
+    "name": "Plain Biker",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/5/57/Clothing_F_4_75.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 76,
+    "name": "Quilted Biker",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/08/Clothing_F_4_76.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 80,
+    "name": "Low Crotch",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/1b/Clothing_F_4_80.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 81,
+    "name": "Leather Low Crotch",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c3/Clothing_F_4_81.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 84,
+    "name": "Tapered Low Crotch",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/4e/Clothing_F_4_84.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 4,
+    "drawable": 85,
+    "name": "Leather Jeans",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/14/Clothing_F_4_85.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 19,
+    "name": "Platforms",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/8/88/Clothing_F_6_19.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 20,
+    "name": "Patent Heels",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/33/Clothing_F_6_20.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 21,
+    "name": "Knee High Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/c1/Clothing_F_6_21.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 22,
+    "name": "Folded Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/38/Clothing_F_6_22.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 24,
+    "name": "Flight Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/0/0e/Clothing_F_6_24.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 25,
+    "name": "Tactical Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/40/Clothing_F_6_25.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 27,
+    "name": "Backside Sneakers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a4/Clothing_F_6_27.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 28,
+    "name": "Black Sports",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/7/7a/Clothing_F_6_28.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 29,
+    "name": "Dlc Oxfords",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/b1/Clothing_F_6_29.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 30,
+    "name": "Studded Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/16/Clothing_F_6_30.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 32,
+    "name": "Calypso Runners",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/f0/Clothing_F_6_32.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 33,
+    "name": "Canvas Snugs",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/4/4e/Clothing_F_6_33.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 36,
+    "name": "Walking Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/2/28/Clothing_F_6_36.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 37,
+    "name": "Leather Loafers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/ce/Clothing_F_6_37.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 42,
+    "name": "Rounded Heels",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/d/dc/Clothing_F_6_42.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 43,
+    "name": "Sneaker Wedges",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/31/Clothing_F_6_43.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 44,
+    "name": "Sneaker Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/a/a6/Clothing_F_6_44.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 51,
+    "name": "Laceup Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/e/ec/Clothing_F_6_51.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 54,
+    "name": "Slack Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/d/da/Clothing_F_6_54.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 56,
+    "name": "Calf Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/34/Clothing_F_6_56.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 60,
+    "name": "Plain High Tops",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/1b/Clothing_F_6_60.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 63,
+    "name": "Tech Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/c/cc/Clothing_F_6_63.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 68,
+    "name": "Moc Toe Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/f/f5/Clothing_F_6_68.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 75,
+    "name": "Trail Shoes",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/3/31/Clothing_F_6_75.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 96,
+    "name": "Retro Sneakers",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/1/1b/Clothing_F_6_96.jpg"
+  },
+  {
+    "gender": "female",
+    "component": 6,
+    "drawable": 100,
+    "name": "Uniform Boots",
+    "image": null,
+    "source": "https://wiki.rage.mp/images/b/bc/Clothing_F_6_100.jpg"
+  }
+]

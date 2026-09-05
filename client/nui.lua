@@ -4,6 +4,26 @@ local mathFloor = math.floor
 local tonumber = tonumber
 local type = type
 local nativeRegisterNUICallback = RegisterNUICallback
+local nativeCreateThread = CreateThread
+local silentThreads = setmetatable({}, { __mode = 'k' })
+Admin.silentNotificationThreads = silentThreads
+
+local function studioNotificationsSuppressed()
+    return silentThreads[coroutine.running()]
+        or (Admin.isCharacterStudioActive and Admin.isCharacterStudioActive())
+end
+
+-- Retain the originating studio context across yields and after the studio closes.
+local function CreateThread(handler)
+    local silent = studioNotificationsSuppressed()
+    return nativeCreateThread(function()
+        local thread = coroutine.running()
+        silentThreads[thread] = silent or nil
+        local ok, err = pcall(handler)
+        silentThreads[thread] = nil
+        if not ok then error(err, 0) end
+    end)
+end
 
 local function RegisterNUICallback(name, handler)
     nativeRegisterNUICallback(name, function(data, cb)
@@ -14,7 +34,11 @@ local function RegisterNUICallback(name, handler)
             cb(payload)
         end
 
+        local thread = coroutine.running()
+        local previous = silentThreads[thread]
+        silentThreads[thread] = studioNotificationsSuppressed() or nil
         local ok, err = pcall(handler, data, reply)
+        silentThreads[thread] = previous
         if not ok then
             print(('[cortex-admin] NUI callback %s failed: %s'):format(name, tostring(err)))
             reply({ ok = false, error = 'internal_error' })
@@ -569,6 +593,19 @@ RegisterNUICallback('cortex-admin:resourceAction', function(data, cb)
 end)
 
 -- Appearance
+RegisterNUICallback('cortex-admin:studio', function(data, cb)
+    if type(data) ~= 'table' then return replyError(cb, 'invalid_payload') end
+    if data.action == 'close' then
+        Admin.closeCharacterStudio()
+        return cb({ ok = true })
+    end
+    if not state.open or not canInvokeAction('player.setAppearance') then return replyError(cb, 'forbidden') end
+    if data.action == 'open' then return cb(Admin.openCharacterStudio()) end
+    if data.action == 'camera' then return cb(Admin.moveCharacterStudioCamera(data)) end
+    if data.action == 'catalog' then return cb(Admin.getStudioCatalog()) end
+    replyError(cb, 'invalid_action')
+end)
+
 RegisterNUICallback('cortex-admin:getAppearance', function(_, cb)
     agentDbg('H4', 'nui.lua:getAppearance', 'enter', {})
     local ok, data = pcall(Admin.getPedAppearance)
@@ -589,10 +626,36 @@ RegisterNUICallback('cortex-admin:setAppearance', function(data, cb)
         return
     end
 
+    local valid = false
+    if data.type == 'component' or data.type == 'prop' then
+        local component = data.type == 'component'
+        valid = toInteger(data.id, 0, component and 11 or 7) ~= nil
+            and toInteger(data.drawable, component and 0 or -1, 4095) ~= nil
+            and toInteger(data.texture, 0, 1023) ~= nil
+    elseif data.type == 'blend' then
+        local mix = data.field == 'shapeMix' or data.field == 'skinMix' or data.field == 'thirdMix'
+        local parent = data.field == 'shapeFirstID' or data.field == 'shapeSecondID' or data.field == 'shapeThirdID'
+            or data.field == 'skinFirstID' or data.field == 'skinSecondID' or data.field == 'skinThirdID'
+        valid = (mix and toFiniteNumber(data.value, 0, 1) ~= nil) or (parent and toInteger(data.value, 0, 45) ~= nil)
+    elseif data.type == 'overlay' then
+        valid = toInteger(data.id, 0, 12) ~= nil and (
+            (data.field == 'opacity' and toFiniteNumber(data.value, 0, 1) ~= nil)
+            or (data.field == 'style' and toInteger(data.value, 0, 255) ~= nil)
+            or ((data.field == 'color' or data.field == 'secondColor') and toInteger(data.value, 0, 63) ~= nil))
+    elseif data.type == 'color' then
+        local colorTypes = { hair = true, hairHighlight = true, eyes = true }
+        -- Preserve the existing overlay color controls.
+        local overlayColor = data.colorType == 'overlay' and toInteger(data.id, 0, 12) ~= nil
+        valid = (colorTypes[data.colorType] == true or overlayColor)
+            and toInteger(data.value, 0, data.colorType == 'eyes' and 31 or 63) ~= nil
+    end
+    if not valid then return replyError(cb, 'invalid_appearance') end
+
     Admin.setPedAppearance(data)
-    cb({ ok = true })
+    cb({ ok = true, appearance = Admin.getPedAppearance() })
 end)
 
+local appearanceGenerationBusy = false
 RegisterNUICallback('cortex-admin:randomizeAppearance', function(data, cb)
     if not canInvokeAction('player.randomizeAppearance') or type(data) ~= 'table'
         or type(Admin.randomizeAppearance) ~= 'function' then
@@ -607,8 +670,12 @@ RegisterNUICallback('cortex-admin:randomizeAppearance', function(data, cb)
         return
     end
 
+    if appearanceGenerationBusy then return replyError(cb, 'generation_busy') end
+    appearanceGenerationBusy = true
+
     CreateThread(function()
         local ok, result = pcall(Admin.randomizeAppearance, options)
+        appearanceGenerationBusy = false
         if not ok then
             print(('[cortex-admin] appearance generator failed: %s'):format(tostring(result)))
             replyError(cb, 'generation_failed')
@@ -637,7 +704,28 @@ RegisterNUICallback('cortex-admin:undoRandomizedAppearance', function(_, cb)
 end)
 
 -- Vehicle Customization
-RegisterNUICallback('cortex-admin:getVehicleCustomization', function(_, cb)
+RegisterNUICallback('cortex-admin:vehicleStudio', function(data, cb)
+    if type(data) ~= 'table' then return replyError(cb, 'invalid_payload') end
+    if data.action == 'close' then return cb(Admin.closeVehicleStudio(data.session)) end
+    if not state.open or not canInvokeAction('vehicle.spawn') then return replyError(cb, 'forbidden') end
+    if data.action == 'open' then
+        CreateThread(function()
+            local ok, result = pcall(Admin.openVehicleStudio, data)
+            if not ok then
+                Admin.closeVehicleStudio()
+                print('[cortex-admin] Vehicle studio open failed: ' .. tostring(result))
+                return replyError(cb, 'studio_open_failed')
+            end
+            cb(result)
+        end)
+    else cb(Admin.controlVehicleStudio(data)) end
+end)
+
+RegisterNUICallback('cortex-admin:getVehicleCustomization', function(query, cb)
+    if not state.open then return replyError(cb, 'forbidden') end
+    if type(query) == 'table' and query.studioSession ~= nil and type(query.studioSession) ~= 'string' then
+        return replyError(cb, 'studio_session_expired')
+    end
     local permissions = {
         mods = canInvokeAction('vehicle.customMods'),
         colors = canInvokeAction('vehicle.customColors'),
@@ -652,7 +740,7 @@ RegisterNUICallback('cortex-admin:getVehicleCustomization', function(_, cb)
         return
     end
 
-    local data, errorReason = Admin.getVehicleCustomization()
+    local data, errorReason = Admin.getVehicleCustomization(type(query) == 'table' and query.studioSession or nil)
     if type(data) ~= 'table' then
         replyError(cb, errorReason or 'no_vehicle')
         return
@@ -663,6 +751,7 @@ RegisterNUICallback('cortex-admin:getVehicleCustomization', function(_, cb)
 end)
 
 RegisterNUICallback('cortex-admin:setVehicleCustomization', function(data, cb)
+    if not state.open then return replyError(cb, 'forbidden') end
     if type(data) ~= 'table' then
         replyError(cb, 'invalid_vehicle_customization')
         return
@@ -737,8 +826,8 @@ RegisterNUICallback('cortex-admin:setVehicleCustomization', function(data, cb)
         end
     elseif kind == 'customColor' then
         sanitized.id = trimString(data.id, 16)
-        sanitized.enabled = type(data.enabled) == 'boolean' and data.enabled or nil
-        if (sanitized.id ~= 'primary' and sanitized.id ~= 'secondary') or sanitized.enabled == nil then
+        sanitized.enabled = data.enabled
+        if (sanitized.id ~= 'primary' and sanitized.id ~= 'secondary') or type(sanitized.enabled) ~= 'boolean' then
             replyError(cb, 'invalid_custom_color')
             return
         end
@@ -783,14 +872,14 @@ RegisterNUICallback('cortex-admin:setVehicleCustomization', function(data, cb)
         if sanitized.value == nil then replyError(cb, 'invalid_livery'); return end
     elseif kind == 'extra' then
         sanitized.id = toInteger(data.id, 0, 20)
-        sanitized.enabled = type(data.enabled) == 'boolean' and data.enabled or nil
-        if sanitized.id == nil or sanitized.enabled == nil then replyError(cb, 'invalid_extra'); return end
+        sanitized.enabled = data.enabled
+        if sanitized.id == nil or type(sanitized.enabled) ~= 'boolean' then replyError(cb, 'invalid_extra'); return end
     elseif kind == 'enveff' then
         sanitized.value = toFiniteNumber(data.value, 0.0, 1.0)
         if sanitized.value == nil then replyError(cb, 'invalid_enveff'); return end
     end
 
-    local ok, errorReason = Admin.setVehicleCustomization(sanitized)
+    local ok, errorReason = Admin.setVehicleCustomization(sanitized, data.studioSession)
     if ok ~= true then
         replyError(cb, errorReason or 'customization_failed')
         return

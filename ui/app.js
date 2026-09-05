@@ -1,4 +1,4 @@
-const { useState, useEffect, useMemo, useCallback, useLayoutEffect } = React;
+const { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } = React;
 const { createPortal } = ReactDOM;
 const h = React.createElement;
 
@@ -905,7 +905,7 @@ function PersonalVehicleModal({ vehicles, settings, onCancel, onSpawn, onDelete,
                             onClick: () => onToggleSetting('replacePersonalVehicle', !isAutoReplace),
                             title: 'Delete vehicle you are in before spawning (same as Options → Replace Previous Spawned Vehicle)'
                         },
-                            React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }),
+                            React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }, React.createElement('span', { className: 'studio-switch-state' }, isAutoReplace ? 'On' : 'Off')),
                             React.createElement('span', null, 'Replace prev.')
                         )
                     ),
@@ -1072,7 +1072,7 @@ function InlinePersonalVehicles({ vehicles, settings, onSpawn, onDelete, onSave,
                 onClick: () => onToggleSetting('replacePersonalVehicle', !isAutoReplace),
                 title: 'Replace previous spawned vehicle: delete occupied vehicle before spawn (list, preview, garage, personal)'
             },
-                React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }),
+                React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }, React.createElement('span', { className: 'studio-switch-state' }, isAutoReplace ? 'On' : 'Off')),
                 React.createElement('span', null, 'Replace')
             )
         ),
@@ -1125,6 +1125,16 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     const [previewName, setPreviewName] = useState('');
     const [extrasList, setExtrasList] = useState([]);
     const [shareOn, setShareOn] = useState(previewSharedProp === true);
+    const hoverPreviewTimerRef = React.useRef(null);
+    const previewModelRef = React.useRef('');
+
+    useEffect(() => {
+        previewModelRef.current = previewModel;
+    }, [previewModel]);
+
+    useEffect(() => () => {
+        if (hoverPreviewTimerRef.current) window.clearTimeout(hoverPreviewTimerRef.current);
+    }, []);
 
     // Popular vehicles organized by category
     const vehicleDatabase = useMemo(() => ({
@@ -1173,7 +1183,19 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'voltic', name: 'Voltic' },
             { model: 'xa21', name: 'XA-21' },
             { model: 'zentorno', name: 'Zentorno' },
-            { model: 'zorrusso', name: 'Zorrusso' }
+            { model: 'zorrusso', name: 'Zorrusso' },
+            { model: 'champion', name: 'Champion' },
+            { model: 'corsita', name: 'Corsita' },
+            { model: 'entity3', name: 'Entity MT' },
+            { model: 'ignus', name: 'Ignus' },
+            { model: 'italirsx', name: 'Itali RSX' },
+            { model: 'lm87', name: 'LM87' },
+            { model: 'pipistrello', name: 'Pipistrello' },
+            { model: 'torero2', name: 'Torero XO' },
+            { model: 'turismo3', name: 'Turismo Omaggio' },
+            { model: 'vigilante', name: 'Vigilante' },
+            { model: 'virtue', name: 'Virtue' },
+            { model: 'voltic2', name: 'Rocket Voltic' }
         ],
         sports: [
             { model: '9f', name: '9F' },
@@ -1233,7 +1255,35 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'tropos', name: 'Tropos Rallye' },
             { model: 'verlierer2', name: 'Verlierer' },
             { model: 'vstr', name: 'V-STR' },
-            { model: 'zr380', name: 'ZR380' }
+            { model: 'zr380', name: 'ZR380' },
+            { model: 'calico', name: 'Calico GTF' },
+            { model: 'comet6', name: 'Comet S2' },
+            { model: 'comet7', name: 'Comet S2 Cabrio' },
+            { model: 'coureur', name: 'La Coureuse' },
+            { model: 'cypher', name: 'Cypher' },
+            { model: 'driftcypher', name: 'Cypher (Drift)' },
+            { model: 'driftjester', name: 'Jester (Drift)' },
+            { model: 'driftremus', name: 'Remus (Drift)' },
+            { model: 'fr36', name: 'FR36' },
+            { model: 'futo2', name: 'Futo GTX' },
+            { model: 'growler', name: 'Growler' },
+            { model: 'jester4', name: 'Jester RR' },
+            { model: 'kanjosj', name: 'Kanjo SJ' },
+            { model: 'niobe', name: 'Niobe' },
+            { model: 'omnisegt', name: 'Omnis e-GT' },
+            { model: 'panthere', name: 'Panthere' },
+            { model: 'postlude', name: 'Postlude' },
+            { model: 'previon', name: 'Previon' },
+            { model: 'remus', name: 'Remus' },
+            { model: 'rhinehart', name: 'Rhinehart' },
+            { model: 'rt3000', name: 'RT3000' },
+            { model: 's95', name: 'S95' },
+            { model: 'sentinel4', name: 'Sentinel GTS' },
+            { model: 'sm722', name: 'SM722' },
+            { model: 'stingertt', name: 'Stinger TT' },
+            { model: 'tenf', name: '10F' },
+            { model: 'tenf2', name: '10F Widebody' },
+            { model: 'vectre', name: 'Vectre' }
         ],
         muscle: [
             { model: 'blade', name: 'Blade' },
@@ -1289,7 +1339,23 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'virgo2', name: 'Virgo Classic Custom' },
             { model: 'virgo3', name: 'Virgo Classic' },
             { model: 'voodoo', name: 'Voodoo Custom' },
-            { model: 'yosemite', name: 'Yosemite' }
+            { model: 'yosemite', name: 'Yosemite' },
+            { model: 'buffalo4', name: 'Buffalo STX' },
+            { model: 'dominator7', name: 'Dominator ASP' },
+            { model: 'dominator8', name: 'Dominator GTT' },
+            { model: 'dominator9', name: 'Dominator GT' },
+            { model: 'dukes3', name: 'Beater Dukes' },
+            { model: 'eudora', name: 'Eudora' },
+            { model: 'gauntlet5', name: 'Gauntlet Classic Custom' },
+            { model: 'gauntlet6', name: 'Gauntlet Interceptor' },
+            { model: 'greenwood', name: 'Greenwood' },
+            { model: 'impaler2', name: 'Impaler (Arena)' },
+            { model: 'impaler6', name: 'Impaler LX' },
+            { model: 'ruiner4', name: 'Ruiner ZZ-8' },
+            { model: 'tulip2', name: 'Tulip M-100' },
+            { model: 'vigero2', name: 'Vigero ZX' },
+            { model: 'voodoo2', name: 'Voodoo' },
+            { model: 'yosemite2', name: 'Yosemite Rancher' }
         ],
         offroad: [
             { model: 'bfinjection', name: 'BF Injection' },
@@ -1335,7 +1401,18 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'trophytruck2', name: 'Desert Raid' },
             { model: 'vagrant', name: 'Vagrant' },
             { model: 'winky', name: 'Winky' },
-            { model: 'zhaba', name: 'Zhaba' }
+            { model: 'zhaba', name: 'Zhaba' },
+            { model: 'boor', name: 'Boor' },
+            { model: 'draugur', name: 'Draugur' },
+            { model: 'dune3', name: 'Dune FAV' },
+            { model: 'dune5', name: 'Dune FAV (Mk II)' },
+            { model: 'monstrociti', name: 'MonstroCiti' },
+            { model: 'patriot3', name: 'Patriot Mil-Spec' },
+            { model: 'rancherxl2', name: 'Rancher XL (Snow)' },
+            { model: 'ratel', name: 'Ratel' },
+            { model: 'squaddie', name: 'Squaddie' },
+            { model: 'verus', name: 'Verus' },
+            { model: 'yosemite3', name: 'Yosemite 1500' }
         ],
         motorcycles: [
             { model: 'akuma', name: 'Akuma' },
@@ -1387,7 +1464,13 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'vortex', name: 'Vortex' },
             { model: 'wolfsbane', name: 'Wolfsbane' },
             { model: 'zombiea', name: 'Zombie Bobber' },
-            { model: 'zombieb', name: 'Zombie Chopper' }
+            { model: 'zombieb', name: 'Zombie Chopper' },
+            { model: 'deathbike2', name: 'Deathbike (Arena)' },
+            { model: 'manchez2', name: 'Manchez Scout' },
+            { model: 'powersurge', name: 'Powersurge' },
+            { model: 'reever', name: 'Reever' },
+            { model: 'rrocket', name: 'Rampant Rocket' },
+            { model: 'shinobi', name: 'Shinobi' }
         ],
         helicopters: [
             { model: 'akula', name: 'Akula' },
@@ -1413,7 +1496,12 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'swift2', name: 'Swift Deluxe' },
             { model: 'valkyrie', name: 'Valkyrie' },
             { model: 'valkyrie2', name: 'Valkyrie MOD.0' },
-            { model: 'volatus', name: 'Volatus' }
+            { model: 'volatus', name: 'Volatus' },
+            { model: 'annihilator2', name: 'Annihilator Stealth' },
+            { model: 'conada', name: 'Conada' },
+            { model: 'conada2', name: 'Conada (Weaponized)' },
+            { model: 'seasparrow2', name: 'Sea Sparrow (TPE)' },
+            { model: 'seasparrow3', name: 'Sea Sparrow (Yacht)' }
         ],
         planes: [
             { model: 'alphaz1', name: 'Alpha-Z1' },
@@ -1450,7 +1538,10 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'velum', name: 'Velum' },
             { model: 'velum2', name: 'Velum 5-Seater' },
             { model: 'vestra', name: 'Vestra' },
-            { model: 'volatol', name: 'Volatol' }
+            { model: 'volatol', name: 'Volatol' },
+            { model: 'alkonost', name: 'Alkonost' },
+            { model: 'coursair', name: 'Coursair' },
+            { model: 'raiju', name: 'F-160 Raiju' }
         ],
         boats: [
             { model: 'dinghy', name: 'Dinghy' },
@@ -1473,7 +1564,11 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'toro2', name: 'Toro (Yacht)' },
             { model: 'tropic', name: 'Tropic' },
             { model: 'tropic2', name: 'Tropic (Yacht)' },
-            { model: 'tug', name: 'Tug' }
+            { model: 'tug', name: 'Tug' },
+            { model: 'avisa', name: 'Avisa' },
+            { model: 'kosatka', name: 'Kosatka' },
+            { model: 'longfin', name: 'Longfin' },
+            { model: 'patrolboat', name: 'Patrol Boat' }
         ],
         emergency: [
             { model: 'ambulance', name: 'Ambulance' },
@@ -1496,7 +1591,8 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'riot', name: 'RCV' },
             { model: 'riot2', name: 'RCV (Spoiler)' },
             { model: 'sheriff', name: 'Sheriff Cruiser' },
-            { model: 'sheriff2', name: 'Sheriff SUV' }
+            { model: 'sheriff2', name: 'Sheriff SUV' },
+            { model: 'police5', name: 'Gauntlet Interceptor' }
         ],
         military: [
             { model: 'apc', name: 'APC' },
@@ -1512,7 +1608,8 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'rhino', name: 'Rhino Tank' },
             { model: 'scarab', name: 'Scarab' },
             { model: 'thruster', name: 'Thruster (Jetpack)' },
-            { model: 'trailersmall2', name: 'AA Trailer' }
+            { model: 'menacer', name: 'Menacer' },
+            { model: 'vetir', name: 'Vetir' }
         ],
         compacts: [
             { model: 'asbo', name: 'Asbo' },
@@ -1534,7 +1631,10 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'prairie', name: 'Prairie' },
             { model: 'rhapsody', name: 'Rhapsody' },
             { model: 'weevil', name: 'Weevil' },
-            { model: 'weevil2', name: 'Weevil Custom' }
+            { model: 'weevil2', name: 'Weevil Custom' },
+            { model: 'issi6', name: 'Issi (Arena)' },
+            { model: 'issi7', name: 'Issi (Arena Future)' },
+            { model: 'issi8', name: 'Issi (Arena Nightmare)' }
         ],
         sedans: [
             { model: 'asea', name: 'Asea' },
@@ -1570,7 +1670,9 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'tailgater2', name: 'Tailgater S' },
             { model: 'warrener', name: 'Warrener' },
             { model: 'warrener2', name: 'Warrener HKR' },
-            { model: 'washington', name: 'Washington' }
+            { model: 'washington', name: 'Washington' },
+            { model: 'cinquemila', name: 'Cinquemila' },
+            { model: 'deity', name: 'Deity' }
         ],
         coupes: [
             { model: 'cogcabrio', name: 'Cognoscenti Cabrio' },
@@ -1586,7 +1688,9 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'windsor', name: 'Windsor' },
             { model: 'windsor2', name: 'Windsor Drop' },
             { model: 'zion', name: 'Zion' },
-            { model: 'zion2', name: 'Zion Cabrio' }
+            { model: 'zion2', name: 'Zion Cabrio' },
+            { model: 'euros', name: 'Euros' },
+            { model: 'zr350', name: 'ZR350' }
         ],
         sportsclassics: [
             { model: 'ardent', name: 'Ardent' },
@@ -1630,7 +1734,10 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'viseris', name: 'Viseris' },
             { model: 'z190', name: '190z' },
             { model: 'zion3', name: 'Zion Classic' },
-            { model: 'ztype', name: 'Z-Type' }
+            { model: 'ztype', name: 'Z-Type' },
+            { model: 'manana2', name: 'Manana Custom' },
+            { model: 'peyote3', name: 'Peyote Custom' },
+            { model: 'toreador', name: 'Toreador' }
         ],
         industrial: [
             { model: 'bulldozer', name: 'Bulldozer' },
@@ -1701,7 +1808,9 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'taco', name: 'Taco Van' },
             { model: 'youga', name: 'Youga' },
             { model: 'youga2', name: 'Youga Classic' },
-            { model: 'youga3', name: 'Youga Classic 4x4' }
+            { model: 'youga3', name: 'Youga Classic 4x4' },
+            { model: 'youga4', name: 'Youga Custom' },
+            { model: 'surfer3', name: 'Surfer Custom' }
         ],
         cycles: [
             { model: 'bmx', name: 'BMX' },
@@ -1725,7 +1834,8 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'tourbus', name: 'Tour Bus' },
             { model: 'trash', name: 'Trashmaster' },
             { model: 'trash2', name: 'Trashmaster (Rusty)' },
-            { model: 'wastelander', name: 'Wastelander' }
+            { model: 'wastelander', name: 'Wastelander' },
+            { model: 'brickade2', name: 'Brickade 6x6' }
         ],
         commercial: [
             { model: 'benson', name: 'Benson' },
@@ -1744,13 +1854,18 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'pounder2', name: 'Pounder Custom' },
             { model: 'stockade', name: 'Stockade' },
             { model: 'stockade3', name: 'Stockade (Snow)' },
-            { model: 'terbyte', name: 'Terrorbyte' }
+            { model: 'terbyte', name: 'Terrorbyte' },
+            { model: 'cerberus', name: 'Cerberus' },
+            { model: 'cerberus2', name: 'Cerberus (Arena)' },
+            { model: 'cerberus3', name: 'Cerberus (Arena Custom)' }
         ],
         openwheel: [
             { model: 'formula', name: 'PR4' },
             { model: 'formula2', name: 'R88' },
             { model: 'openwheel1', name: 'BR8' },
-            { model: 'openwheel2', name: 'DR1' }
+            { model: 'openwheel2', name: 'DR1' },
+            { model: 'veto', name: 'Veto Classic' },
+            { model: 'veto2', name: 'Veto Modern' }
         ],
         suvs: [
             { model: 'baller', name: 'Baller' },
@@ -1783,7 +1898,41 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
             { model: 'serrano', name: 'Serrano' },
             { model: 'toros', name: 'Toros' },
             { model: 'xls', name: 'XLS' },
-            { model: 'xls2', name: 'XLS (Armored)' }
+            { model: 'xls2', name: 'XLS (Armored)' },
+            { model: 'astron', name: 'Astron' },
+            { model: 'baller7', name: 'Baller ST' },
+            { model: 'granger2', name: 'Granger 3600LX' },
+            { model: 'iwagen', name: 'I-Wagen' },
+            { model: 'jubilee', name: 'Jubilee' },
+            { model: 'landstalker2', name: 'Landstalker XL' },
+            { model: 'seminole2', name: 'Seminole Frontier' }
+        ],
+        trailers: [
+            { model: 'armytanker', name: 'Army Tanker' },
+            { model: 'armytrailer', name: 'Army Trailer' },
+            { model: 'armytrailer2', name: 'Army Trailer (Covered)' },
+            { model: 'baletrailer', name: 'Bale Trailer' },
+            { model: 'boattrailer', name: 'Boat Trailer' },
+            { model: 'docktrailer', name: 'Dock Trailer' },
+            { model: 'freighttrailer', name: 'Freight Trailer' },
+            { model: 'graintrailer', name: 'Grain Trailer' },
+            { model: 'proptrailer', name: 'Prop Trailer' },
+            { model: 'raketrailer', name: 'Rake Trailer' },
+            { model: 'tanker', name: 'Tanker' },
+            { model: 'tanker2', name: 'Tanker (Heist)' },
+            { model: 'tr2', name: 'TR2' },
+            { model: 'tr3', name: 'TR3' },
+            { model: 'tr4', name: 'TR4' },
+            { model: 'trflat', name: 'Flatbed Trailer' },
+            { model: 'trailerlarge', name: 'Large Trailer' },
+            { model: 'trailerlogs', name: 'Log Trailer' },
+            { model: 'trailers', name: 'Trailer' },
+            { model: 'trailers2', name: 'Trailer 2' },
+            { model: 'trailers3', name: 'Trailer 3' },
+            { model: 'trailers4', name: 'Trailer 4' },
+            { model: 'trailersmall', name: 'Small Trailer' },
+            { model: 'trailersmall2', name: 'AA Trailer' },
+            { model: 'tvtrailer', name: 'TV Trailer' }
         ]
     }), []);
 
@@ -1845,6 +1994,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
         { id: 'motorcycles', label: 'Bikes' },
         { id: 'cycles', label: 'Cycles' },
         { id: 'commercial', label: 'Commercial' },
+        { id: 'trailers', label: 'Trailers' },
         { id: 'industrial', label: 'Industrial' },
         { id: 'utility', label: 'Utility' },
         { id: 'service', label: 'Service' },
@@ -1857,13 +2007,25 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     ];
 
     const filteredVehicles = useMemo(() => {
-        const categoryVehicles = vehicleDatabaseWithAddons[activeCategory] || [];
-        if (!search.trim()) return categoryVehicles;
-        const query = search.toLowerCase();
-        return categoryVehicles.filter(v => 
-            v.name.toLowerCase().includes(query) || 
-            v.model.toLowerCase().includes(query)
-        );
+        const query = search.trim().toLowerCase();
+        if (!query) return vehicleDatabaseWithAddons[activeCategory] || [];
+        // Global search across all categories so trailers and new additions are discoverable
+        // without switching categories first. Attach category label for context.
+        const seen = new Set();
+        const out = [];
+        Object.entries(vehicleDatabaseWithAddons).forEach(([catId, list]) => {
+            if (!Array.isArray(list)) return;
+            list.forEach((v) => {
+                if (!v || !v.model) return;
+                const key = String(v.model).toLowerCase();
+                if (seen.has(key)) return;
+                if (String(v.name || '').toLowerCase().includes(query) || key.includes(query)) {
+                    seen.add(key);
+                    out.push({ ...v, categoryId: catId });
+                }
+            });
+        });
+        return out.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     }, [vehicleDatabaseWithAddons, activeCategory, search]);
 
     const isAutoReplace = settings.replacePersonalVehicle !== false;
@@ -1952,8 +2114,26 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
     };
 
     const handlePreviewFromList = (v, e) => {
-        e.stopPropagation();
+        if (e) e.stopPropagation();
+        if (hoverPreviewTimerRef.current) window.clearTimeout(hoverPreviewTimerRef.current);
         setPreviewSelection(v.model, v.name);
+    };
+
+    const handleHoverPreviewEnter = (v) => {
+        setHovered(v.model);
+        if (!v || !v.model) return;
+        if (previewModelRef.current === v.model) return;
+        if (hoverPreviewTimerRef.current) window.clearTimeout(hoverPreviewTimerRef.current);
+        const model = v.model;
+        const name = v.name;
+        hoverPreviewTimerRef.current = window.setTimeout(() => {
+            setPreviewSelection(model, name);
+        }, 180);
+    };
+
+    const handleHoverPreviewLeave = () => {
+        setHovered(null);
+        if (hoverPreviewTimerRef.current) window.clearTimeout(hoverPreviewTimerRef.current);
     };
 
     const handleClearPreview = (e) => {
@@ -2043,7 +2223,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                 'aria-checked': isAutoReplace,
                 title: 'Replace previous spawned vehicle: delete occupied vehicle before spawn (list, preview, personal, garage)'
             },
-                React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }),
+                React.createElement('div', { className: `admin-toggle${isAutoReplace ? ' active' : ''}`, 'aria-hidden': true }, React.createElement('span', { className: 'studio-switch-state' }, isAutoReplace ? 'On' : 'Off')),
                 React.createElement('span', null, 'Replace')
             )
         ),
@@ -2054,16 +2234,20 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                 : filteredVehicles.map(v => React.createElement('button', {
                     type: 'button',
                     key: v.model,
-                    className: `admin-inline-spawner-item${hovered === v.model ? ' hovered' : ''}`,
-                    onMouseEnter: () => setHovered(v.model),
-                    onMouseLeave: () => setHovered(null),
-                    onClick: (e) => handlePreviewFromList(v, e)
+                    className: `admin-inline-spawner-item${hovered === v.model ? ' hovered' : ''}${previewModel === v.model ? ' previewing' : ''}`,
+                    onMouseEnter: () => handleHoverPreviewEnter(v),
+                    onMouseLeave: handleHoverPreviewLeave,
+                    onFocus: () => handleHoverPreviewEnter(v),
+                    onBlur: handleHoverPreviewLeave,
+                    onClick: (e) => handlePreviewFromList(v, e),
+                    title: `Hover to preview · click to preview ${v.name}`
                 },
                     React.createElement('div', { className: 'admin-inline-spawner-info' },
                         React.createElement('div', { className: 'admin-inline-spawner-name-row' },
                             React.createElement('span', { className: 'admin-inline-spawner-name' }, v.name),
                             v.isReplacement && React.createElement('span', { className: 'admin-inline-spawner-badge replacement' }, 'Replacement'),
-                            v.sourceType === 'stream_fallback' && React.createElement('span', { className: 'admin-inline-spawner-badge fallback' }, 'Fallback')
+                            v.sourceType === 'stream_fallback' && React.createElement('span', { className: 'admin-inline-spawner-badge fallback' }, 'Fallback'),
+                            v.categoryId && search.trim() && React.createElement('span', { className: 'admin-inline-spawner-badge' }, v.categoryId)
                         ),
                         React.createElement('span', { className: 'admin-inline-spawner-model' }, v.model)
                     )
@@ -2099,7 +2283,7 @@ function InlineVehicleSpawner({ settings, addonVehicles, onSpawn, onPreview, onC
                     )
                 )
                 : React.createElement('div', { className: 'admin-inline-spawner-status', 'aria-live': 'polite' },
-                    React.createElement('div', { className: 'admin-inline-spawner-status-sub' }, `${filteredVehicles.length} vehicles in category`)
+                    React.createElement('div', { className: 'admin-inline-spawner-status-sub' }, search.trim() ? `${filteredVehicles.length} matches across all categories` : `${filteredVehicles.length} vehicles in category`)
                 ),
             React.createElement('div', { className: 'admin-inline-spawner-footer-actions' },
                 previewModel && extrasEnabled && React.createElement('button', {
@@ -2679,6 +2863,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
         controls.push(React.createElement('button', {
             key: 'toggle-pill',
             className: `admin-option-toggle${isEnabled ? ' active' : ''}${!isAllowed ? ' disabled' : ''}`,
+            role: 'switch', 'aria-checked': !!isEnabled,
             type: 'button',
             title: `${isEnabled ? 'Disable' : 'Enable'} ${action.label}`,
             'aria-label': `${isEnabled ? 'Disable' : 'Enable'} ${action.label}`,
@@ -2687,7 +2872,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
                 e.stopPropagation();
                 onToggle(action, !isEnabled);
             }
-        }, React.createElement('span', { className: 'admin-option-toggle-thumb' })));
+        }, React.createElement('span', { className: 'studio-switch-state', 'aria-hidden': true }, isEnabled ? 'On' : 'Off')));
     }
 
     if (isAction) {
@@ -2714,6 +2899,7 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
     // Build class name with selected state
     const isActive = isToggle && isEnabled;
     let className = 'admin-action';
+    if (isToggle) className += ' admin-action--toggle';
     if (!isAllowed) className += ' disabled';
     if (isSelected) className += ' selected';
     if (isActive) className += ' active';
@@ -2782,17 +2968,6 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
         }
     },
         React.createElement('div', { className: 'admin-action-row' },
-            React.createElement('div', { className: 'admin-action-left' },
-                React.createElement('div', {
-                    className: `admin-action-enabled-dot${isToggle && isEnabled ? ' visible' : ''}`,
-                    'aria-hidden': true
-                }),
-                React.createElement('div', { className: 'admin-action-info' },
-                    React.createElement('div', { className: 'admin-action-label' }, action.label),
-                    React.createElement('div', { className: 'admin-action-description' }, action.description || '')
-                )
-            ),
-            React.createElement('div', { className: 'admin-action-controls' },
                 React.createElement('button', {
                     className: `admin-action-star${isFavorite ? ' active' : ''}`,
                     type: 'button',
@@ -2803,7 +2978,14 @@ const ActionItem = React.memo(function ActionItem({ action, toggles, favorites, 
                         e.stopPropagation();
                         onFavorite(action.id);
                     }
-                }, React.createElement(Icon, { name: 'star', size: 14 })),
+                }, React.createElement(Icon, { name: isFavorite ? 'star-filled' : 'star', size: 14 })),
+            React.createElement('div', { className: 'admin-action-left' },
+                React.createElement('div', { className: 'admin-action-info' },
+                    React.createElement('div', { className: 'admin-action-label' }, action.label),
+                    React.createElement('div', { className: 'admin-action-description' }, action.description || '')
+                )
+            ),
+            React.createElement('div', { className: 'admin-action-controls' },
                 controls
             )
         ),
@@ -2982,7 +3164,7 @@ function ActionContextMenu({ context, favorites, allowed, onActivate, onFavorite
             type: 'button',
             role: 'menuitem',
             onClick: () => { onFavorite(action.id); onClose(); }
-        }, h(Icon, { name: 'star', size: 13 }), isFavorite ? 'Remove favorite' : 'Add favorite')
+        }, h(Icon, { name: isFavorite ? 'star-filled' : 'star', size: 13 }), isFavorite ? 'Remove favorite' : 'Add favorite')
     ), document.body);
 }
 
@@ -3048,33 +3230,37 @@ const PlayerList = React.memo(function PlayerList({ players, onAction, allowed, 
                             onClick: () => setSelectedId(player.id),
                             onDoubleClick: () => !player.isSelf && allowed['player.goto'] !== false && onAction('goto', player)
                         },
-                            h('span', { className: `admin-player-presence${player.dead ? ' dead' : ''}` }),
+                            h('span', { className: `admin-player-presence${player.dead ? ' dead' : ''}`, 'aria-hidden': true }),
                             h('span', { className: 'admin-player-row-copy' },
-                                h('span', { className: 'admin-player-name' }, player.name || `Player ${player.id}`),
+                                h('span', { className: 'admin-player-name-row' },
+                                    h('span', { className: 'admin-player-name', title: player.name || `Player ${player.id}` }, player.name || `Player ${player.id}`),
+                                    player.isSelf && h('span', { className: 'admin-player-self' }, 'You')
+                                ),
                                 h('span', { className: 'admin-player-row-meta' }, `#${player.id} · ${Number(player.ping || 0)} ms · bucket ${Number(player.bucket || 0)}`)
                             ),
-                            player.isSelf && h('span', { className: 'admin-player-self' }, 'You'),
                             h(Icon, { name: 'chevron-right', size: 13 })
                         ))
                 ),
                 h('section', { className: 'admin-player-inspector', 'aria-label': 'Selected player actions' },
                     selected && h(React.Fragment, null,
                         h('div', { className: 'admin-player-inspector-head' },
-                            h('div', null,
+                            h('div', { className: 'admin-player-inspector-title' },
                                 h('span', { className: 'admin-workspace-eyebrow' }, `PLAYER #${selected.id}`),
-                                h('h3', null, selected.name || `Player ${selected.id}`)
+                                h('h3', { title: selected.name || `Player ${selected.id}` }, selected.name || `Player ${selected.id}`)
                             ),
                             h('span', { className: `admin-status-label${selected.dead ? ' danger' : ''}` }, selected.dead ? 'Dead' : 'Online')
                         ),
+                        selected.isSelf && h('p', { className: 'admin-player-self-note', role: 'note' }, 'This is you. Teleport and moderation actions target other players.'),
                         h('div', { className: 'admin-player-action-grid' },
                             PLAYER_WORKSPACE_ACTIONS.map((entry) => {
-                                const disabled = selected.isSelf || (allowed && allowed[entry.permission] === false);
+                                const noPermission = allowed && allowed[entry.permission] === false;
+                                const disabled = selected.isSelf || noPermission;
                                 return h('button', {
                                     type: 'button',
                                     key: entry.id,
                                     className: `admin-player-action${entry.danger ? ' danger' : ''}`,
                                     disabled,
-                                    title: disabled && selected.isSelf ? 'Unavailable for your own player' : entry.label,
+                                    title: selected.isSelf ? `${entry.label} — unavailable for your own player` : noPermission ? `${entry.label} — no permission` : entry.label,
                                     onClick: () => onAction(entry.id, selected)
                                 }, h(Icon, { name: entry.icon, size: 14 }), h('span', null, entry.label));
                             })
@@ -3688,20 +3874,21 @@ const VehicleConfig = {
         { id: 'dashboard', label: 'Dashboard Color' },
         { id: 'trim', label: 'Interior Color' },
     ],
+    // Cfx native indices, not the ordering of the Los Santos Customs menu.
     plates: [
         { label: 'Blue on White 1', value: 0 },
-        { label: 'Blue on White 2', value: 1 },
-        { label: 'Blue on White 3', value: 2 },
-        { label: 'Yellow on Blue', value: 3 },
-        { label: 'Yellow on Black', value: 4 },
+        { label: 'Yellow on Black', value: 1 },
+        { label: 'Yellow on Blue', value: 2 },
+        { label: 'Blue on White 2', value: 3 },
+        { label: 'Blue on White 3', value: 4 },
         { label: 'North Yankton', value: 5 },
-        { label: 'E-Cola', value: 6 },
-        { label: 'Las Venturas', value: 7 },
-        { label: 'Liberty City', value: 8 },
-        { label: 'LS Car Meet', value: 9 },
-        { label: 'LSPD', value: 10 },
-        { label: 'Pounders', value: 11 },
-        { label: 'Sprunk', value: 12 },
+        { label: 'eCola', value: 6, minBuild: 3095 },
+        { label: 'Las Venturas', value: 7, minBuild: 3095 },
+        { label: 'Liberty City', value: 8, minBuild: 3095 },
+        { label: 'LS Car Meet', value: 9, minBuild: 3095 },
+        { label: 'LS Panic', value: 10, minBuild: 3095 },
+        { label: 'LS Pounders', value: 11, minBuild: 3095 },
+        { label: 'Sprunk', value: 12, minBuild: 3095 },
     ],
     windows: [
         { label: 'None', value: 0 },
@@ -3772,14 +3959,14 @@ const AppearanceConfig = {
         { id: 8, label: 'Undershirt' },
         { id: 9, label: 'Kevlar / Vest' },
         { id: 10, label: 'Decals / Badges' },
-        { id: 11, label: 'Torso 2 / Jacket' }
+        { id: 11, label: 'Tops / Jackets' }
     ],
     props: [
         { id: 0, label: 'Hats' },
         { id: 1, label: 'Glasses' },
         { id: 2, label: 'Ears' },
         { id: 6, label: 'Watches' },
-        { id: 7, label: 'Braces' }
+        { id: 7, label: 'Bracelets' }
     ],
     features: [
         { id: 0, label: 'Nose Width' },
@@ -4181,7 +4368,63 @@ function AppearanceCollapsible({ title, meta, isNew = false, expanded, onToggle,
     );
 }
 
-function AppearanceWorkspaceView({ onPrompt } = {}) {
+function WardrobeCatalogPhoto({ model, kind = 'component', slot, drawable, reference }) {
+    const [photo, setPhoto] = useState(reference || null);
+    useEffect(() => {
+        let active = true;
+        setPhoto(reference || null);
+        if (!reference) {
+            window.WardrobePhotos.read(`${model}:${kind}:${slot}:${drawable}`,
+                () => fetchNui('cortex-admin:catalog:photo', { kind, slot, drawable }).then(res => res.json()),
+                () => active).then(result => { if (active && result) setPhoto(result); }).catch(() => {});
+        }
+        return () => { active = false; };
+    }, [model, kind, slot, drawable, reference]);
+    return photo ? React.createElement('img', { src: photo, alt: '', loading: 'lazy', onError: () => setPhoto(null) })
+        : React.createElement('span', { className: 'studio-garment-number' }, String(drawable).padStart(3, '0'));
+}
+
+function WardrobeDrawableGrid({ model, kind, slot, count, selected, disabled, onSelect }) {
+    const [page, setPage] = useState(0);
+    const pages = Math.max(1, Math.ceil(count / 24));
+    const current = Math.min(page, pages - 1);
+    return React.createElement(React.Fragment, null,
+        React.createElement('p', { className: 'studio-caption' }, `${count} items · Previews show texture 0`),
+        React.createElement('div', { className: 'studio-garments' },
+            Array.from({ length: Math.min(24, Math.max(0, count - current * 24)) }, (_, offset) => {
+                const drawable = current * 24 + offset;
+                return React.createElement('button', { key: drawable, type: 'button', className: 'studio-garment',
+                    'aria-label': `Drawable ${drawable}`, 'aria-pressed': selected === drawable, disabled,
+                    onClick: () => onSelect(drawable) },
+                    React.createElement(WardrobeCatalogPhoto, { model, kind, slot, drawable }),
+                    React.createElement('span', { className: 'studio-garment-label' }, `#${drawable}`));
+            })),
+        React.createElement('div', { className: 'studio-pagination' },
+            React.createElement('button', { type: 'button', className: 'admin-button', disabled: current === 0, onClick: () => setPage(current - 1) }, 'Previous'),
+            React.createElement('span', null, `${current + 1} / ${pages}`),
+            React.createElement('button', { type: 'button', className: 'admin-button', disabled: current + 1 >= pages, onClick: () => setPage(current + 1) }, 'Next')));
+}
+
+function AppearanceWorkspaceView({ onPrompt, menuOpen = true, launchRequest = 0, onExit } = {}) {
+    const [studioOpen, setStudioOpen] = useState(false);
+    const [studioBusy, setStudioBusy] = useState(false);
+    const [studioError, setStudioError] = useState('');
+    const [studioSection, setStudioSection] = useState('outfits');
+    const [wardrobeOpen, setWardrobeOpen] = useState(false);
+    const [studioComponent, setStudioComponent] = useState(11);
+    const [studioProp, setStudioProp] = useState(0);
+    const [studioOverlay, setStudioOverlay] = useState(2);
+    const [catalog, setCatalog] = useState([]);
+    const [catalogSearch, setCatalogSearch] = useState('');
+    const [catalogOnly, setCatalogOnly] = useState(true);
+    const [catalogPage, setCatalogPage] = useState(0);
+    const [cameraFrame, setCameraFrame] = useState('body');
+    const mutationQueue = useRef(Promise.resolve());
+    const mutationVersion = useRef(0);
+    const workspaceAlive = useRef(true);
+    const menuOpenRef = useRef(menuOpen);
+    menuOpenRef.current = menuOpen;
+    useEffect(() => () => { workspaceAlive.current = false; }, []);
     const [data, setData] = useState(null);
     const [savedPeds, setSavedPeds] = useState([]);
     const [migrationInfo, setMigrationInfo] = useState(null);
@@ -4220,6 +4463,46 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     const toggleCat = useCallback((key) => {
         setCatOpen((prev) => ({ ...prev, [key]: !prev[key] }));
     }, []);
+
+    const closeStudio = useCallback(() => {
+        setStudioOpen(false);
+        fetchNui('cortex-admin:studio', { action: 'close' });
+    }, []);
+
+    useEffect(() => {
+        if (!menuOpen) closeStudio();
+    }, [menuOpen, closeStudio]);
+
+    useEffect(() => {
+        if (!studioOpen) return;
+        document.body.classList.add('character-studio-open');
+        const focusTick = requestAnimationFrame(() => document.querySelector('.studio-tabs button')?.focus());
+        const onMessage = (event) => {
+            if (event.data && ['cortex-admin:studioClosed', 'cortex-admin:close'].includes(event.data.action)) setStudioOpen(false);
+        };
+        window.addEventListener('message', onMessage);
+        return () => {
+            cancelAnimationFrame(focusTick);
+            document.body.classList.remove('character-studio-open');
+            window.removeEventListener('message', onMessage);
+            fetchNui('cortex-admin:studio', { action: 'close' });
+            document.querySelector('.studio-open-button')?.focus();
+        };
+    }, [studioOpen]);
+
+    useEffect(() => {
+        if (!studioOpen) return;
+        let cancelled = false;
+        setCatalog([]);
+        fetchNui('cortex-admin:studio', { action: 'catalog' }).then(res => res.json()).then(result => {
+            if (cancelled) return;
+            if (result && result.ok && Array.isArray(result.items)) setCatalog(result.items);
+            else setStudioError('The clothing catalog could not be loaded. Close and reopen the studio to retry.');
+        });
+        return () => { cancelled = true; };
+    }, [studioOpen, data && data.model]);
+
+    useEffect(() => { setCatalogPage(0); }, [studioComponent, catalogOnly, catalogSearch, data && data.model]);
 
     const markFeatureDiscovered = useCallback((featureKey) => {
         const release = FEATURE_RELEASES[featureKey];
@@ -4303,10 +4586,47 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             });
     }, [savedPedSearch, savedPeds]);
 
+    const openStudio = async () => {
+        if (studioBusy) return;
+        setStudioBusy(true);
+        setStudioError('');
+        const result = await (await fetchNui('cortex-admin:studio', { action: 'open' })).json();
+        if (!workspaceAlive.current || !menuOpenRef.current) {
+            fetchNui('cortex-admin:studio', { action: 'close' });
+            return;
+        }
+        setStudioBusy(false);
+        if (!result || !result.ok) {
+            const errors = { camera_busy: 'Close the active camera or freecam first.', stand_on_foot: 'Stand on foot before opening the character studio.', forbidden: 'Appearance editing is not available with your permissions.' };
+            setStudioError(errors[result && result.error] || 'The character studio did not respond. Try again.');
+            return;
+        }
+        markFeatureDiscovered('appearanceGenerator');
+        setStudioOpen(true);
+        setWardrobeOpen(false);
+        setCameraFrame('body');
+        refreshData();
+    };
+    const lastStudioLaunch = useRef(0);
+    useEffect(() => {
+        if (!menuOpen || !launchRequest || lastStudioLaunch.current === launchRequest) return;
+        lastStudioLaunch.current = launchRequest;
+        openStudio();
+    }, [launchRequest, menuOpen]);
+    const exitStudio = () => { closeStudio(); if (onExit) onExit(); };
+
     if (!data) return React.createElement('div', { className: 'admin-no-results' }, 'Loading appearance data...');
 
     const handleUpdate = (type, id, drawable, texture) => {
-        fetchNui('cortex-admin:setAppearance', { type, id, drawable, texture });
+        const version = ++mutationVersion.current;
+        // Serialize writes and accept only the newest native readback. Texture
+        // counts belong to the newly selected drawable, not the previous one.
+        mutationQueue.current = mutationQueue.current.catch(() => {}).then(() => fetchNui('cortex-admin:setAppearance', { type, id, drawable, texture }))
+            .then(res => res.json()).then(result => {
+                if (version !== mutationVersion.current) return;
+                if (result && result.ok && result.appearance) setData(normalizeAppearancePayload(result.appearance));
+                else { setStudioError('That clothing change was not applied.'); refreshData(); }
+            });
         setData((prev) => {
             const next = { ...prev };
             const key = type === 'component' ? 'components' : 'props';
@@ -4467,7 +4787,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
         if (generatorBusy) return;
         setGeneratorBusy('generate');
         setGeneratorStatus({ type: 'progress', message: 'Building a new look…' });
-        fetchNui('cortex-admin:randomizeAppearance', generatorOptions)
+        mutationQueue.current.catch(() => {}).then(() => fetchNui('cortex-admin:randomizeAppearance', generatorOptions))
             .then((res) => res.json())
             .then((result) => {
                 if (!result || result.ok !== true) {
@@ -4604,7 +4924,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     step: 0.01,
                     value: value,
                     disabled,
-                    onInput: onRange,
+
                     onChange: onRange
                 }),
                 React.createElement('div', { className: 'appearance-btns appearance-btns--feature' },
@@ -4653,7 +4973,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
             React.createElement('div', { className: 'appearance-control wide' },
                 React.createElement(ClickableValue, {
                     value,
-                    max: 63,
+                    max: item.type === 'eyes' ? 31 : 63,
                     min: 0,
                     disabled,
                     onConfirm: updateColorValue
@@ -4663,7 +4983,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     className: 'appearance-slider',
                     'aria-label': item.label,
                     min: 0,
-                    max: 63,
+                    max: item.type === 'eyes' ? 31 : 63,
                     value,
                     disabled,
                     onChange: (e) => updateColorValue(parseInt(e.target.value))
@@ -4725,7 +5045,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                                 onClick: () => handleSetDefault(ped),
                                 title: 'Set default',
                                 'aria-label': `Set ${ped.name} as default`
-                            }, React.createElement(Icon, { name: 'star', size: 14 })),
+                            }, React.createElement(Icon, { name: ped.isDefault ? 'star-filled' : 'star', size: 14 })),
                             React.createElement('button', {
                                 type: 'button',
                                 className: 'admin-button appearance-tool-btn appearance-icon-btn',
@@ -4772,9 +5092,11 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     };
 
     const generatorChoice = (key, value, label, description) => React.createElement('button', {
+        key: value,
         type: 'button',
         className: `appearance-generator-choice${generatorOptions[key] === value ? ' is-selected' : ''}`,
         'aria-pressed': generatorOptions[key] === value,
+        'data-option': value,
         disabled: Boolean(generatorBusy),
         onClick: () => setGeneratorOption(key, value)
     },
@@ -4807,10 +5129,27 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
         React.createElement('fieldset', { className: 'appearance-generator-fieldset' },
             React.createElement('legend', null, 'Style direction'),
             React.createElement('div', { className: 'appearance-generator-choices appearance-generator-choices--style' },
-                generatorChoice('style', 'polished', 'Polished', 'Shirts, polos, clean shoes'),
-                generatorChoice('style', 'casual', 'Casual', 'T-shirts, denim, canvas'),
-                generatorChoice('style', 'street', 'Street', 'Cargos, boots, high tops')
-            )
+                generatorChoice('style', 'polished', 'Polished'),
+                generatorChoice('style', 'casual', 'Casual'),
+                generatorChoice('style', 'street', 'Street'),
+                generatorChoice('style', 'sport', 'Sport'),
+                generatorChoice('style', 'utility', 'Utility'),
+                generatorChoice('style', 'biker', 'Biker'),
+                generatorChoice('style', 'resort', 'Resort'),
+                generatorChoice('style', 'nightlife', 'Nightlife'),
+                generatorChoice('style', 'designer', 'Designer')
+            ),
+            React.createElement('p', { className: 'appearance-style-description', 'aria-live': 'polite' }, {
+                polished: 'Revere collars, knitwear, straight chinos and buckled loafers.',
+                casual: 'Chore jackets, layered shirts, cuffed sweats and knit sneakers.',
+                street: 'Oversized hoodies, puffers, large cargos and statement sneakers.',
+                sport: 'Track tops, snap joggers, cuffed sweats and knit runners.',
+                utility: 'Technical shells, field jackets, work trousers and logger boots.',
+                biker: 'Road leathers, racing jackets, chain denim and road boots.',
+                resort: 'Botanical shirts, relaxed shorts, pool sliders and loafers.',
+                nightlife: 'Open-collar shirts, leather, designer knits and sharp shoes.',
+                designer: 'Bigness, Blagueurs and Broker layers with wide trousers and designer shoes.'
+            }[generatorOptions.style])
         ),
         React.createElement('div', { className: 'appearance-generator-grid' },
             generatorSelect('palette', 'Clothing palette', [
@@ -4860,6 +5199,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                 type: 'button',
                 role: 'switch',
                 className: `appearance-generator-switch${generatorOptions.accessories ? ' is-on' : ''}`,
+                'aria-label': 'Accessories',
                 'aria-checked': generatorOptions.accessories,
                 disabled: Boolean(generatorBusy),
                 onClick: () => setGeneratorOption('accessories', !generatorOptions.accessories)
@@ -4868,9 +5208,8 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     React.createElement('strong', null, 'Accessories'),
                     React.createElement('small', null, generatorOptions.accessories ? 'Preset watch or glasses' : 'No added props')
                 ),
-                React.createElement('span', { className: 'appearance-generator-switch-track', 'aria-hidden': true },
-                    React.createElement('span', { className: 'appearance-generator-switch-thumb' })
-                )
+                React.createElement('span', { className: 'studio-switch-state', 'aria-hidden': true },
+                    generatorOptions.accessories ? 'On' : 'Off')
             )
         ),
         React.createElement('div', { className: 'appearance-generator-actions' },
@@ -5037,7 +5376,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                     step: item.step,
                     value: current,
                     disabled,
-                    onInput: onRange,
+
                     onChange: onRange
                 })
             )
@@ -5075,7 +5414,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                         step: 1,
                         value: overlay.style || 0,
                         disabled,
-                        onInput: (e) => handleOverlayUpdate(item.id, 'style', parseInt(e.target.value, 10)),
+
                         onChange: (e) => handleOverlayUpdate(item.id, 'style', parseInt(e.target.value, 10))
                     })
                 ),
@@ -5091,7 +5430,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                         step: 0.01,
                         value: overlay.opacity || 0,
                         disabled,
-                        onInput: (e) => handleOverlayUpdate(item.id, 'opacity', parseFloat(e.target.value)),
+
                         onChange: (e) => handleOverlayUpdate(item.id, 'opacity', parseFloat(e.target.value))
                     })
                 ),
@@ -5107,7 +5446,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                         step: 1,
                         value: overlay.color || 0,
                         disabled,
-                        onInput: (e) => handleOverlayUpdate(item.id, 'color', parseInt(e.target.value, 10)),
+
                         onChange: (e) => handleOverlayUpdate(item.id, 'color', parseInt(e.target.value, 10))
                     })
                 ),
@@ -5123,7 +5462,7 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
                         step: 1,
                         value: overlay.secondColor || 0,
                         disabled,
-                        onInput: (e) => handleOverlayUpdate(item.id, 'secondColor', parseInt(e.target.value, 10)),
+
                         onChange: (e) => handleOverlayUpdate(item.id, 'secondColor', parseInt(e.target.value, 10))
                     })
                 )
@@ -5171,101 +5510,179 @@ function AppearanceWorkspaceView({ onPrompt } = {}) {
     const mpMaleActive = data.isFreemode && modelHashU32(data.model) === MODEL_HASH_MP_M;
     const mpFemaleActive = data.isFreemode && modelHashU32(data.model) === MODEL_HASH_MP_F;
 
-    const savedLabel = `${savedPeds.length} saved`;
-
-    return React.createElement('div', { className: 'admin-appearance' },
-        React.createElement('div', { className: 'appearance-summary-bar' },
-            React.createElement('div', { className: 'appearance-summary-compact', title: modelStatusLabel },
-                React.createElement('span', { className: 'appearance-summary-model' }, modelStatusLabel),
-                React.createElement('span', { className: 'appearance-summary-sep', 'aria-hidden': true }, '·'),
-                React.createElement('span', { className: 'appearance-summary-count' }, savedLabel)
-            ),
-            React.createElement('div', { className: 'appearance-model-bar' },
-                data.isFreemode && React.createElement('div', { className: 'appearance-gender-split' },
-                    React.createElement('button', {
-                        type: 'button',
-                        className: `appearance-gender-btn${mpMaleActive ? ' active' : ''}`,
-                        onClick: () => fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model: 'mp_m_freemode_01' } }).then(() => setTimeout(refreshData, 1000))
-                    }, 'Male'),
-                    React.createElement('button', {
-                        type: 'button',
-                        className: `appearance-gender-btn${mpFemaleActive ? ' active' : ''}`,
-                        onClick: () => fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model: 'mp_f_freemode_01' } }).then(() => setTimeout(refreshData, 1000))
-                    }, 'Female')
-                ),
-                React.createElement('button', {
-                    type: 'button',
-                    className: 'admin-button small appearance-top-refresh',
-                    title: 'Refresh',
-                    onClick: refreshData
-                }, React.createElement(Icon, { name: 'refresh-cw', size: 16 }))
-            )
-        ),
-        React.createElement('div', { className: 'appearance-content-area appearance-content-area--scroll' },
-            React.createElement(AppearanceCollapsible, {
-                title: 'Appearance generator',
-                isNew: discoveredFeatureReleases.appearanceGenerator !== FEATURE_RELEASES.appearanceGenerator,
-                expanded: catOpen.generator,
-                onToggle: () => {
-                    if (!catOpen.generator) markFeatureDiscovered('appearanceGenerator');
-                    toggleCat('generator');
+    const studioTabs = [
+        ['outfits', 'Outfits'], ['clothing', 'Clothing'], ['props', 'Accessories'],
+        ['heritage', 'Heritage'], ['face', 'Face'], ['hair', 'Hair'], ['overlays', 'Skin & makeup']
+    ];
+    const camera = (options) => fetchNui('cortex-admin:studio', { action: 'camera', ...options });
+    const chooseSection = (section) => {
+        setStudioSection(section);
+        setWardrobeOpen(false);
+        const frame = ['heritage', 'face', 'hair', 'overlays'].includes(section) ? 'face' : 'body';
+        setCameraFrame(frame);
+        camera({ frame });
+    };
+    const component = AppearanceConfig.components.find(item => item.id === studioComponent);
+    const categoryItems = catalog.filter(item => item.component === studioComponent);
+    const maxDrawable = Math.max(0, Number(data.maxComponents[studioComponent]?.drawables) || 0);
+    const clothingItems = catalogOnly ? categoryItems : Array.from({ length: Math.min(maxDrawable, 4096) }, (_, drawable) =>
+        categoryItems.find(item => item.drawable === drawable) || { drawable, name: `${component?.label || 'Clothing'} ${drawable}`, component: studioComponent });
+    const query = catalogSearch.trim().toLowerCase();
+    const matchingItems = clothingItems.filter(item => !query || `${item.drawable} ${item.name}`.toLowerCase().includes(query));
+    const pageCount = Math.max(1, Math.ceil(matchingItems.length / 24));
+    const page = Math.min(catalogPage, pageCount - 1);
+    const currentGarment = data.components[studioComponent];
+    const selectedGarment = categoryItems.find(item => item.drawable === currentGarment?.drawable);
+    const sectionTitle = studioTabs.find(([id]) => id === studioSection)?.[1];
+    const cameraButton = (label, icon, options) => React.createElement('button', {
+        type: 'button', className: 'admin-button', title: label, 'aria-label': label,
+        onClick: () => camera(options)
+    }, React.createElement(Icon, { name: icon, size: 16 }));
+    const renderCatalog = () => React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'studio-catalog-tools' },
+            React.createElement(CustomSelect, {
+                options: AppearanceConfig.components.filter(item => item.id !== 0 && item.id !== 2).map(item => ({ value: String(item.id), label: item.label })),
+                value: String(studioComponent), ariaLabel: 'Clothing category',
+                onChange: value => {
+                    const id = Number(value);
+                    setStudioComponent(id);
+                    const frame = [4, 6].includes(id) ? 'legs' : 'torso';
+                    setCameraFrame(frame); camera({ frame });
+                    if (![11, 4, 6].includes(id)) setCatalogOnly(false);
                 }
-            }, renderGenerator()),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Outfit workspace',
-                expanded: catOpen.workspace,
-                onToggle: () => toggleCat('workspace')
-            }, renderWorkspaceStack()),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Saved outfits',
-                expanded: catOpen.library,
-                onToggle: () => toggleCat('library')
-            },
-                React.createElement('div', { className: 'appearance-library-panel' },
-                    React.createElement('input', {
-                        type: 'text',
-                        className: 'appearance-input appearance-library-filter',
-                        placeholder: 'Search…',
-                        value: savedPedSearch,
-                        onChange: (e) => setSavedPedSearch(e.target.value),
-                        onKeyDown: (e) => e.stopPropagation()
-                    }),
-                    React.createElement('div', { className: 'appearance-list-shell appearance-library-shell' }, renderLibraryState())
-                )
-            ),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Clothing components',
-                meta: String(AppearanceConfig.components.length),
-                expanded: catOpen.wardrobeClothing,
-                onToggle: () => toggleCat('wardrobeClothing'),
-                className: 'appearance-collapsible--wardrobe-clothing'
-            }, renderWardrobePanel(['Component', 'Drawable', 'Texture'], AppearanceConfig.components.map((c) => renderSlider(c, 'component')), { scrollBody: true })),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Props',
-                meta: String(AppearanceConfig.props.length),
-                expanded: catOpen.wardrobeProps,
-                onToggle: () => toggleCat('wardrobeProps'),
-                className: 'appearance-collapsible--wardrobe-props'
-            }, renderWardrobePanel(['Prop', 'Index', 'Texture'], AppearanceConfig.props.map((p) => renderSlider(p, 'prop')), { scrollBody: true })),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Palette',
-                meta: String(AppearanceConfig.colors.length),
-                expanded: catOpen.wardrobeColors,
-                onToggle: () => toggleCat('wardrobeColors')
-            }, renderWardrobePanel(null, AppearanceConfig.colors.map((c) => renderColorSlider(c)))),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Face sculpt',
-                meta: String(AppearanceConfig.features.length),
-                expanded: catOpen.face,
-                onToggle: () => toggleCat('face')
-            }, renderFaceBody()),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Heritage & overlays',
-                meta: String(heritageControlCount),
-                expanded: catOpen.heritage,
-                onToggle: () => toggleCat('heritage')
-            }, renderHeritageBody())
-        )
+            }),
+            React.createElement('input', { type: 'search', className: 'appearance-input', placeholder: 'Find clothing or enter a number',
+                'aria-label': 'Find clothing or drawable number', value: catalogSearch, onChange: event => setCatalogSearch(event.target.value) }),
+            React.createElement('div', { className: 'studio-segments', 'aria-label': 'Catalog scope' },
+                [[true, 'Catalog picks'], [false, 'All available']].map(([value, label]) => React.createElement('button', {
+                    key: label, type: 'button', 'aria-pressed': catalogOnly === value, onClick: () => setCatalogOnly(value)
+                }, label)))
+        ),
+        React.createElement('p', { className: 'studio-caption' }, `${matchingItems.length} items · Photos show reference texture 0`),
+        matchingItems.length === 0 && React.createElement('p', { className: 'studio-empty' }, 'No catalog matches. Try All available or a different search.'),
+        React.createElement('div', { className: 'studio-garments' }, matchingItems.slice(page * 24, (page + 1) * 24).map(item => React.createElement('button', {
+            key: item.drawable, type: 'button', className: 'studio-garment',
+            'aria-pressed': currentGarment?.drawable === item.drawable,
+            'aria-label': `${item.name}, drawable ${item.drawable}`,
+            onClick: () => handleUpdate('component', studioComponent, item.drawable, 0),
+            disabled: !data.isFreemode || Boolean(generatorBusy)
+        },
+            React.createElement(WardrobeCatalogPhoto, { model: data.model, slot: studioComponent, drawable: item.drawable, reference: item.photo }),
+            React.createElement('span', { className: 'studio-garment-label' }, React.createElement('strong', null, item.name), React.createElement('small', null, `#${item.drawable}`))
+        ))),
+        React.createElement('div', { className: 'studio-pagination' },
+            React.createElement('button', { type: 'button', className: 'admin-button', disabled: page === 0, onClick: () => setCatalogPage(page - 1) }, 'Previous'),
+            React.createElement('span', null, `${page + 1} / ${pageCount}`),
+            React.createElement('button', { type: 'button', className: 'admin-button', disabled: page + 1 >= pageCount, onClick: () => setCatalogPage(page + 1) }, 'Next'))
+    );
+    const primaryContent = () => {
+        if (studioSection === 'outfits') return renderGenerator();
+        if (studioSection === 'clothing') return renderCatalog();
+        if (studioSection === 'face') return renderFaceBody();
+        if (studioSection === 'heritage') return React.createElement(React.Fragment, null,
+            React.createElement('div', { className: 'studio-segments' }, [['mp_m_freemode_01', 'Male', mpMaleActive], ['mp_f_freemode_01', 'Female', mpFemaleActive]].map(([model, label, active]) => React.createElement('button', {
+                key: model, type: 'button', 'aria-pressed': active, disabled: Boolean(generatorBusy),
+                onClick: () => {
+                    setGeneratorBusy('model');
+                    fetchNui('cortex-admin:action', { id: 'player.setModel', data: { model } }).then(() => {
+                        setTimeout(() => { refreshData(); setGeneratorBusy(''); }, 1000);
+                    });
+                }
+            }, label))),
+            React.createElement('p', { className: 'studio-caption' }, 'Blend parent features and skin tones.'),
+            AppearanceConfig.heritage.map(renderHeritageSlider));
+        if (studioSection === 'hair') return React.createElement(React.Fragment, null,
+            renderSlider(AppearanceConfig.components.find(item => item.id === 2), 'component'),
+            React.createElement(WardrobeDrawableGrid, { key: `${data.model}-hair`, model: data.model, kind: 'component', slot: 2,
+                count: Number(data.maxComponents[2]?.drawables) || 0, selected: data.components[2]?.drawable,
+                disabled: !data.isFreemode || Boolean(generatorBusy), onSelect: drawable => handleUpdate('component', 2, drawable, 0) }),
+            AppearanceConfig.colors.filter(item => ['hair', 'hairHighlight', 'eyes'].includes(item.type)).map(renderColorSlider));
+        if (studioSection === 'props') return React.createElement(React.Fragment, null,
+            React.createElement(CustomSelect, { options: AppearanceConfig.props.map(item => ({ value: String(item.id), label: item.label })),
+                value: String(studioProp), onChange: value => setStudioProp(Number(value)), ariaLabel: 'Accessory category' }),
+            renderSlider(AppearanceConfig.props.find(item => item.id === studioProp), 'prop'),
+            React.createElement(WardrobeDrawableGrid, { key: `${data.model}-prop-${studioProp}`, model: data.model, kind: 'prop', slot: studioProp,
+                count: Number(data.maxProps[studioProp]?.drawables) || 0, selected: data.props[studioProp]?.drawable,
+                disabled: !data.isFreemode || Boolean(generatorBusy), onSelect: drawable => handleUpdate('prop', studioProp, drawable, 0) }));
+        return React.createElement(React.Fragment, null,
+            React.createElement(CustomSelect, { options: AppearanceConfig.overlays.map(item => ({ value: String(item.id), label: item.label })),
+                value: String(studioOverlay), onChange: value => setStudioOverlay(Number(value)), ariaLabel: 'Skin or makeup category' }),
+            renderOverlayControl(AppearanceConfig.overlays.find(item => item.id === studioOverlay)),
+            React.createElement('button', { type: 'button', className: 'admin-button', onClick: () => handleOverlayUpdate(studioOverlay, 'opacity', 0) }, 'Remove this overlay'),
+            React.createElement('button', { type: 'button', className: 'admin-button', onClick: () => fetchNui('cortex-admin:action', { id: 'player.clearPedTattoos' }) }, 'Clear tattoos'));
+    };
+    const renderStudioLibrary = () => filteredSavedPeds.length ? React.createElement('div', { className: 'studio-saved-list' },
+        filteredSavedPeds.map(ped => React.createElement('article', { className: 'studio-saved-entry', key: ped.id },
+            React.createElement('div', { className: 'studio-saved-main' },
+                React.createElement('div', null, React.createElement('strong', null, ped.name),
+                    React.createElement('small', null, [ped.isDefault ? 'Default' : '', ped.source === 'vmenu' ? 'vMenu' : ''].filter(Boolean).join(' · '))),
+                React.createElement('button', { type: 'button', className: 'admin-button', onClick: () => handleLoad(ped), 'aria-label': `Wear ${ped.name}` }, 'Wear')),
+            React.createElement('details', { className: 'studio-saved-manage' },
+                React.createElement('summary', null, 'Manage'),
+                React.createElement('div', null,
+                    [['Set default', handleSetDefault], ['Update', handleOverwrite], ['Duplicate', handleClone], ['Rename', handleRename], ['Delete', handleDelete]].map(([label, handler]) =>
+                        React.createElement('button', { key: label, type: 'button', className: `admin-button${label === 'Delete' ? ' danger' : ''}`, onClick: () => handler(ped) }, label))))
+        ))) : React.createElement('p', { className: 'studio-empty' }, savedPeds.length ? 'No outfits match your search.' : 'Save your first look above.');
+    const secondaryContent = () => !wardrobeOpen && studioSection === 'clothing' ? React.createElement(React.Fragment, null,
+        React.createElement('h2', null, selectedGarment?.name || component?.label),
+        component && renderSlider(component, 'component'),
+        selectedGarment && React.createElement('p', { className: 'studio-caption studio-item-id' }, `${selectedGarment.collection || 'Base game'} · Local ${selectedGarment.localDrawable}`),
+        studioComponent === 11 && React.createElement(React.Fragment, null,
+            React.createElement('h3', null, 'Fit & layers'),
+            React.createElement('p', { className: 'studio-caption' }, 'Manual tops may need matching arms and an undershirt.'),
+            [3, 8].map(id => renderSlider(AppearanceConfig.components.find(item => item.id === id), 'component')))
+    ) : React.createElement(React.Fragment, null,
+        renderWorkspaceStack(),
+        React.createElement('h3', null, `Saved outfits · ${savedPeds.length}`),
+        React.createElement('input', { type: 'search', className: 'appearance-input', placeholder: 'Search saved outfits',
+            'aria-label': 'Search saved outfits', value: savedPedSearch, onChange: event => setSavedPedSearch(event.target.value) }), renderStudioLibrary());
+
+    return React.createElement('div', { className: 'admin-appearance studio-launcher' },
+        React.createElement('div', { className: 'appearance-summary-bar' },
+            React.createElement('strong', null, modelStatusLabel),
+            React.createElement('span', { className: 'studio-caption' }, data.gameBuild ? `Build ${data.gameBuild}` : 'Build unavailable')),
+        React.createElement('button', { type: 'button', className: 'admin-button studio-open-button', onClick: openStudio, disabled: studioBusy },
+            React.createElement(Icon, { name: 'scan-face', size: 22 }), React.createElement('span', null, studioBusy ? 'Opening studio…' : 'Open character studio'), React.createElement(Icon, { name: 'arrow-up-right', size: 18 })),
+        React.createElement('p', { className: 'studio-caption' }, 'Clothing, character creation and saved outfits with a full character view.'),
+        studioError && !studioOpen && React.createElement('p', { role: 'alert', className: 'studio-error' }, studioError),
+        studioOpen && menuOpen && ReactDOM.createPortal(React.createElement('section', {
+            className: 'character-studio', 'aria-label': 'Character studio',
+            onKeyDown: event => {
+                event.stopPropagation();
+                if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); exitStudio(); }
+            }
+        },
+            React.createElement('header', { className: 'studio-topbar' },
+                React.createElement('div', { className: 'studio-brand' }, React.createElement('strong', null, 'CORTEX'), React.createElement('span', null, 'Character studio')),
+                React.createElement('nav', { className: 'studio-tabs', 'aria-label': 'Character sections' }, studioTabs.map(([id, label]) => React.createElement('button', {
+                    key: id, type: 'button', 'aria-pressed': studioSection === id, onClick: () => chooseSection(id)
+                }, label))),
+                React.createElement('div', { className: 'studio-head-actions' },
+                    React.createElement('button', { type: 'button', className: 'studio-wardrobe-toggle', 'aria-expanded': wardrobeOpen, onClick: () => setWardrobeOpen(value => !value) },
+                        React.createElement(Icon, { name: 'archive', size: 15 }), 'Wardrobe', React.createElement('span', null, String(savedPeds.length).padStart(2, '0'))),
+                    React.createElement('button', { type: 'button', className: 'studio-done', onClick: exitStudio }, 'Done', React.createElement(Icon, { name: 'arrow-up-right', size: 16 })))),
+            React.createElement('fieldset', { className: 'studio-panels', disabled: Boolean(generatorBusy), 'aria-label': 'Character controls' },
+                React.createElement('section', { className: 'studio-panel studio-panel-primary' },
+                    React.createElement('div', { className: 'studio-panel-heading' },
+                        React.createElement('div', { className: 'studio-overline' }, React.createElement('span', null, `${String(studioTabs.findIndex(([id]) => id === studioSection) + 1).padStart(2, '0')} / 07`),
+                            React.createElement('span', null, data.gameBuild ? `BUILD ${data.gameBuild}` : 'BUILD UNKNOWN')),
+                        React.createElement('h1', null, sectionTitle)),
+                    !data.isFreemode && React.createElement('p', { className: 'studio-caption' }, 'Choose Full character and a freemode body to enable character controls.'),
+                    React.createElement('div', { className: 'studio-panel-scroll' }, primaryContent())),
+                (wardrobeOpen || studioSection === 'clothing') && React.createElement('aside', { className: 'studio-panel studio-panel-secondary', 'aria-label': wardrobeOpen ? 'Saved wardrobe' : 'Garment details' },
+                    React.createElement('div', { className: 'studio-drawer-heading' }, React.createElement('h2', null, wardrobeOpen ? 'Wardrobe' : 'Details'),
+                        wardrobeOpen && React.createElement('button', { type: 'button', className: 'admin-button', 'aria-label': 'Close wardrobe', onClick: () => setWardrobeOpen(false) }, React.createElement(Icon, { name: 'x', size: 16 }))),
+                    React.createElement('div', { className: 'studio-panel-scroll' }, secondaryContent()))),
+            React.createElement('footer', { className: 'studio-footer' },
+                React.createElement('div', { className: 'studio-camera' },
+                    React.createElement('div', { className: 'studio-segments' }, ['body', 'face', 'torso', 'legs'].map(frame => React.createElement('button', {
+                        key: frame, type: 'button', 'aria-pressed': cameraFrame === frame, onClick: () => { setCameraFrame(frame); camera({ frame }); }
+                    }, frame))),
+                    React.createElement('div', { className: 'studio-camera-orbit' },
+                        cameraButton('Rotate left', 'rotate-ccw', { rotate: -1 }), cameraButton('Rotate right', 'rotate-cw', { rotate: 1 }),
+                        cameraButton('Zoom in', 'zoom-in', { zoom: -1 }), cameraButton('Zoom out', 'zoom-out', { zoom: 1 }), cameraButton('Reset camera', 'focus', { reset: true }))),
+                React.createElement('span', { className: 'studio-caption' }, 'Live preview', React.createElement('span', null, 'ESC  /  RETURN')))
+        ), document.body)
     );
 }
 
@@ -5309,6 +5726,7 @@ function VoiceChatWorkspace({ actions, toggles, allowed, voiceState, onToggle, o
             ? (reportedProximity >= 9999 ? 'GLOBAL' : `${reportedProximity} M`)
             : '--');
     const currentChannelLabel = currentChannel === null ? '--' : (currentChannel > 0 ? `#${currentChannel}` : 'NONE');
+    const isInChannel = currentChannel !== null && currentChannel > 0;
     const rawChannel = channelInput.trim();
     const parsedChannel = rawChannel === '' ? NaN : Number(rawChannel);
     const channelInputValid = Number.isInteger(parsedChannel) && parsedChannel >= 0 && parsedChannel <= 65535;
@@ -5347,9 +5765,7 @@ function VoiceChatWorkspace({ actions, toggles, allowed, voiceState, onToggle, o
             disabled: !canUse,
             onClick: () => typeof onToggle === 'function' && onToggle(action, !isOn)
         },
-            h('span', { className: 'voice-switch-track', 'aria-hidden': true },
-                h('span', { className: 'voice-switch-thumb' })
-            )
+            h('span', { className: 'studio-switch-state', 'aria-hidden': true }, isOn ? 'On' : 'Off')
         );
     };
 
@@ -5408,7 +5824,7 @@ function VoiceChatWorkspace({ actions, toggles, allowed, voiceState, onToggle, o
                                 h('p', null, proximityAction ? proximityAction.description : 'Set the native talker proximity')
                             )
                         ),
-                        h('output', { className: 'voice-section-readout', 'aria-live': 'polite' }, proximityMetric)
+                        h('output', { className: `voice-section-readout${isGlobalProximity ? ' is-global' : ''}`, 'aria-live': 'polite' }, proximityMetric)
                     ),
                     h('div', { className: 'voice-proximity-grid', role: 'group', 'aria-label': 'Talker proximity' },
                         proximityOptions.map((option) => {
@@ -5441,7 +5857,7 @@ function VoiceChatWorkspace({ actions, toggles, allowed, voiceState, onToggle, o
                                 h('p', null, channelAction ? channelAction.description : 'Join a numbered native voice channel, or 0 to leave')
                             )
                         ),
-                        h('div', { className: 'voice-channel-current', 'aria-live': 'polite' },
+                        h('div', { className: `voice-channel-current${isInChannel ? ' is-live' : ''}`, 'aria-live': 'polite' },
                             h('span', null, 'CURRENT'),
                             h('strong', null, currentChannelLabel)
                         )
@@ -5484,7 +5900,7 @@ function VoiceChatWorkspace({ actions, toggles, allowed, voiceState, onToggle, o
                             }, h(Icon, { name: 'log-in', size: 13 }), 'Join'),
                             h('button', {
                                 type: 'button',
-                                className: 'admin-button voice-channel-leave',
+                                className: `admin-button voice-channel-leave${isInChannel && channelAvailable ? ' danger' : ''}`,
                                 disabled: currentChannel === null || currentChannel === 0 || !channelAvailable,
                                 onClick: () => submitChannel(0)
                             }, 'Leave')
@@ -5651,7 +6067,26 @@ function TeleportWorkspaceView({ onPrompt } = {}) {
     );
 }
 
-function VehicleView() {
+function VehicleView({ studioSession, studioSection } = {}) {
+    const requestQueue = useRef(null);
+    const mounted = useRef(false);
+    const updateRevision = useRef(0);
+    const wheelRevision = useRef(0);
+    const repairNeeded = useRef(false);
+    const [wheelBusy, setWheelBusy] = useState(false);
+    const [fitmentTab, setFitmentTab] = useState('wheels');
+    useEffect(() => {
+        mounted.current = true;
+        requestQueue.current = createVehicleUpdateQueue(async payload => {
+            if (payload.read) return fetchNui('cortex-admin:getVehicleCustomization', { studioSession });
+            const response = await fetchNui('cortex-admin:setVehicleCustomization', { ...payload, studioSession });
+            if (payload.type === 'wheelType' && response.ok && response.data?.ok) {
+                response.wheels = await fetchNui('cortex-admin:getVehicleCustomization', { studioSession });
+            }
+            return response;
+        });
+        return () => { mounted.current = false; updateRevision.current++; requestQueue.current.close(); };
+    }, [studioSession]);
     const [data, setData] = useState(null);
     const [phase, setPhase] = useState('loading');
     const [status, setStatus] = useState('Reading the vehicle you are driving…');
@@ -5670,7 +6105,9 @@ function VehicleView() {
 
     const refreshData = useCallback(async () => {
         setPhase('loading');
-        const response = await fetchNui('cortex-admin:getVehicleCustomization');
+        const revision = updateRevision.current;
+        const response = await requestQueue.current.push({ read: true });
+        if (!mounted.current || revision !== updateRevision.current) return;
         const payload = response && response.data;
         if (!response.ok || !payload || payload.ok === false || !payload.mods) {
             const reason = payload && payload.error;
@@ -5684,9 +6121,11 @@ function VehicleView() {
             return;
         }
         setData(payload);
+        repairNeeded.current = false;
         setPhase('ready');
+        setWheelBusy(false);
         setStatus(`${payload.vehicle && payload.vehicle.label || 'Current vehicle'} · ${payload.vehicle && payload.vehicle.plate || 'no plate'}`);
-    }, []);
+    }, [studioSession]);
 
     useEffect(() => {
         refreshData();
@@ -5732,126 +6171,38 @@ function VehicleView() {
 
     const permissions = data.permissions || { mods: true, colors: true, liveries: true, extras: true, underglow: true, plate: true };
 
-    const handleUpdate = async (type, id, value, isToggle, enabled) => {
-        const response = await fetchNui('cortex-admin:setVehicleCustomization', { type, id, value, isToggle, enabled });
-        if (!response.ok || !response.data || response.data.ok !== true) {
-            setStatus(`Change rejected: ${response.data && response.data.error || response.error || 'request failed'}`);
+    const handleUpdate = async (type, id, value, isToggle, enabled, waitForConfirmation = false) => {
+        const payload = { type, id, value, isToggle, enabled };
+        const revision = ++updateRevision.current;
+        const wheelRequest = type === 'wheelType' ? ++wheelRevision.current : null;
+        if (wheelRequest !== null) setWheelBusy(true);
+        // Paint and range thumbs respond immediately, even during a slow NUI roundtrip.
+        if (!waitForConfirmation) setData(prev => applyVehicleDraft(prev, payload));
+        const response = await requestQueue.current.push(payload, `${type}:${id ?? ''}`);
+        if (!mounted.current || response.cancelled || response.superseded) return false;
+        if (!response.ok || response.data?.ok !== true) {
+            // A later edit to another field must not leave this rejected draft visible.
+            repairNeeded.current = true;
             await refreshData();
+            if (mounted.current && revision === updateRevision.current) setStatus(`Change rejected: ${response.data?.error || response.error || 'request failed'}`);
             return false;
         }
-        setStatus('Change applied');
-        if (type === 'mod') {
-            setData(prev => {
-                const next = { ...prev };
-                if (isToggle) {
-                    next.mods[id] = { ...prev.mods[id], enabled };
-                } else {
-                    next.mods[id] = { ...prev.mods[id], current: value };
-                }
-                return next;
-            });
-        } else if (type === 'color') {
-            setData(prev => ({
-                ...prev,
-                colors: { ...prev.colors, [id]: value },
-                ...(id === 'primary' ? { customPrimary: { ...prev.customPrimary, enabled: false } } : {}),
-                ...(id === 'secondary' ? { customSecondary: { ...prev.customSecondary, enabled: false } } : {})
-            }));
-        } else if (type === 'paintFinish') {
-            setData(prev => ({ ...prev, paintFinish: { ...prev.paintFinish, [id]: value } }));
-        } else if (type === 'customColor') {
-            const key = id === 'primary' ? 'customPrimary' : 'customSecondary';
-            setData(prev => ({ ...prev, [key]: { enabled: !!enabled, value: value || prev[key]?.value || [0, 0, 0] } }));
-        } else if (type === 'xenonColor') {
-            setData(prev => ({ ...prev, xenonColor: value }));
-        } else if (type === 'neon') {
-            const key = 'neon' + id.charAt(0).toUpperCase() + id.slice(1);
-            if (id === 'all') {
-                setData(prev => ({ ...prev, neonFront: value, neonBack: value, neonLeft: value, neonRight: value }));
+        if (wheelRequest === wheelRevision.current) {
+            const snapshot = response.wheels?.data;
+            if (response.wheels?.ok && snapshot?.mods) {
+                setData(prev => ({ ...prev, wheelType: snapshot.wheelType,
+                    mods: { ...prev.mods, 23: snapshot.mods['23'], 24: snapshot.mods['24'] } }));
+                setWheelBusy(false);
             } else {
-                setData(prev => ({ ...prev, [key]: value }));
+                // Keep selection locked until the native wheel list can be read again.
+                setStatus('Wheel list could not refresh. Use Refresh before choosing a wheel.');
+                return false;
             }
-        } else if (type === 'neonColor') {
-            setData(prev => ({ ...prev, neonColor: value }));
-        } else if (type === 'tyreSmokeColor') {
-            setData(prev => ({ ...prev, tyreSmokeColor: value }));
-        } else if (type === 'livery') {
-            setData(prev => ({ ...prev, livery: value }));
-        } else if (type === 'extra') {
-            setData(prev => ({ ...prev, extras: (prev.extras || []).map((extra) => extra.id === id ? { ...extra, enabled: !!enabled } : extra) }));
-        } else if (type === 'enveff') {
-            setData(prev => ({ ...prev, enveffScale: value }));
-        } else {
-            setData(prev => ({ ...prev, [type]: value }));
         }
+        if (waitForConfirmation) setData(prev => applyVehicleDraft(prev, payload));
+        if (revision === updateRevision.current && repairNeeded.current) await refreshData();
+        if (mounted.current && revision === updateRevision.current) setStatus('Change applied');
         return true;
-    };
-
-    const renderSlider = (item) => {
-        const current = data.mods[item.id];
-        if (!current) return null;
-        if (!current.isToggle && current.max <= 0) return null;
-
-        if (item.isToggle || current.isToggle) {
-            return React.createElement('div', { className: 'appearance-row', key: `mod-${item.id}` },
-                React.createElement('div', { className: 'appearance-label' }, item.label),
-                React.createElement('div', { className: 'appearance-control align-right' },
-                    React.createElement('div', {
-                        className: `admin-toggle${current.enabled ? ' active' : ''}`,
-                        role: 'switch',
-                        'aria-checked': current.enabled,
-                        tabIndex: 0,
-                        onKeyDown: (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                handleUpdate('mod', item.id, null, true, !current.enabled);
-                            }
-                        },
-                        onClick: () => handleUpdate('mod', item.id, null, true, !current.enabled)
-                    })
-                )
-            );
-        }
-
-        const max = current.max - 1;
-        const modName = (current.names && current.names[current.current]) || (current.current === -1 ? 'Stock' : `Mod ${current.current + 1}`);
-
-        return React.createElement('div', { className: 'appearance-row mod-row', key: `mod-${item.id}` },
-            React.createElement('div', { className: 'mod-info' },
-                React.createElement('div', { className: 'mod-current-name' }, modName),
-                React.createElement('div', { className: 'appearance-label' }, item.label)
-            ),
-            React.createElement('div', { className: 'appearance-control wide' },
-                React.createElement('span', { className: 'appearance-value' }, `${current.current}/${max}`),
-                React.createElement('input', {
-                    type: 'range',
-                    className: 'appearance-slider',
-                    'aria-label': item.label,
-                    min: -1,
-                    max: max,
-                    value: current.current,
-                    onChange: (e) => handleUpdate('mod', item.id, parseInt(e.target.value))
-                }),
-                React.createElement('div', { className: 'appearance-btns' },
-                    React.createElement('button', { className: 'appearance-btn', onClick: () => handleUpdate('mod', item.id, Math.max(-1, current.current - 1)) }, '−'),
-                    React.createElement('button', { className: 'appearance-btn', onClick: () => handleUpdate('mod', item.id, Math.min(max, current.current + 1)) }, '+')
-                )
-            )
-        );
-    };
-
-    const renderSection = (title, items) => {
-        const validItems = items.filter(m => {
-            const current = data.mods[m.id];
-            return current && (current.isToggle || current.max > 0);
-        });
-
-        if (validItems.length === 0) return null;
-
-        return React.createElement('div', { className: 'admin-section mod-section', key: title },
-            React.createElement('div', { className: 'admin-section-title' }, title),
-            validItems.map(m => renderSlider(m))
-        );
     };
 
     const renderPermissionNotice = (label) => React.createElement('div', { className: 'admin-inline-empty permission' }, `Your ACE role does not grant ${label}.`);
@@ -5863,19 +6214,9 @@ function VehicleView() {
         const setColor = (next) => handleUpdate('customColor', id, next, false, true);
 
         return React.createElement('div', { className: 'vehicle-custom-rgb', key: id },
-            React.createElement('div', { className: 'vehicle-custom-rgb-head' },
-                React.createElement('div', null,
-                    React.createElement('strong', null, label),
-                    React.createElement('span', null, colorState.enabled ? `${color.join(', ')}` : 'Indexed color active')
-                ),
-                React.createElement('button', {
-                    type: 'button',
-                    className: `admin-option-toggle${colorState.enabled ? ' active' : ''}`,
-                    'aria-label': `${colorState.enabled ? 'Disable' : 'Enable'} ${label}`,
-                    'aria-pressed': !!colorState.enabled,
-                    onClick: () => handleUpdate('customColor', id, color, false, !colorState.enabled)
-                }, React.createElement('span', { className: 'admin-option-toggle-thumb' }))
-            ),
+            React.createElement(StudioSwitch, { label, checked: colorState.enabled,
+                description: colorState.enabled ? color.join(', ') : 'Indexed color active',
+                onChange: enabled => handleUpdate('customColor', id, color, false, enabled) }),
             React.createElement('div', { className: 'vehicle-custom-rgb-controls' },
                 React.createElement('input', {
                     type: 'color',
@@ -5907,7 +6248,7 @@ function VehicleView() {
     };
 
     return React.createElement('div', { className: 'admin-appearance vehicle-customizer' },
-        React.createElement('div', { className: 'vehicle-customizer-toolbar' },
+        (studioSection !== 'mods' || status.startsWith('Change rejected:')) && React.createElement('div', { className: 'vehicle-customizer-toolbar' },
             React.createElement('div', null,
                 React.createElement('span', { className: 'admin-section-kicker' }, 'CURRENT VEHICLE'),
                 React.createElement('strong', null, data.vehicle && data.vehicle.label || 'Vehicle customizer'),
@@ -5916,45 +6257,26 @@ function VehicleView() {
             React.createElement('button', { type: 'button', className: 'admin-button', onClick: refreshData }, React.createElement(Icon, { name: 'refresh-cw', size: 14 }), 'Refresh')
         ),
         React.createElement('div', { className: 'appearance-content-area appearance-content-area--scroll' },
-            React.createElement(AppearanceCollapsible, {
+            (!studioSection || studioSection === 'mods') && React.createElement(AppearanceCollapsible, {
                 title: 'Modifications',
                 meta: String(visibleModCount),
-                expanded: catOpen.mods,
+                expanded: !!studioSection || catOpen.mods,
                 onToggle: () => toggleCat('mods')
-            }, permissions.mods ? React.createElement(React.Fragment, null,
-                renderSection('Performance', VehicleConfig.mods.filter(m => m.cat === 'Performance')),
-                renderSection('Exterior', VehicleConfig.mods.filter(m => m.cat === 'Exterior')),
-                renderSection('Interior', VehicleConfig.mods.filter(m => m.cat === 'Interior')),
-                renderSection('Engine Bay', VehicleConfig.mods.filter(m => m.cat === 'Engine')),
-                renderSection('Misc', VehicleConfig.mods.filter(m => m.cat === 'Misc'))
-            ) : renderPermissionNotice('vehicle modifications')),
-            React.createElement(AppearanceCollapsible, {
+            }, permissions.mods ? React.createElement(VehicleModWorkbench, {
+                mods: data.mods, config: VehicleConfig.mods,
+                onUpdate: (type, id, value, isToggle, enabled) => handleUpdate(type, id, value, isToggle, enabled, true)
+            }) : renderPermissionNotice('vehicle modifications')),
+            (!studioSection || studioSection === 'colors') && React.createElement(AppearanceCollapsible, {
                 title: 'Colors',
                 meta: permissions.colors ? 'Indexed · RGB · Finish' : 'Locked',
-                expanded: catOpen.colors,
+                expanded: !!studioSection || catOpen.colors,
                 onToggle: () => toggleCat('colors')
             }, permissions.colors ? React.createElement(React.Fragment, null,
                 React.createElement('div', { className: 'admin-section' },
                     React.createElement('div', { className: 'admin-section-title' }, 'Indexed colors'),
-                    VehicleConfig.colors.map(c => React.createElement('div', { className: 'appearance-row', key: c.id },
-                        React.createElement('div', { className: 'appearance-label' }, c.label),
-                        React.createElement('div', { className: 'appearance-control wide' },
-                            React.createElement('span', { className: 'appearance-value' }, data.colors[c.id]),
-                            React.createElement('input', {
-                                type: 'range',
-                                className: 'appearance-slider',
-                                'aria-label': c.label,
-                                min: 0,
-                                max: 160,
-                                value: Math.min(160, data.colors[c.id] || 0),
-                                onChange: (e) => handleUpdate('color', c.id, parseInt(e.target.value))
-                            }),
-                            React.createElement('div', { className: 'appearance-btns' },
-                                React.createElement('button', { type: 'button', className: 'appearance-btn', onClick: () => handleUpdate('color', c.id, Math.max(0, Math.min(160, data.colors[c.id] || 0) - 1)) }, '−'),
-                                React.createElement('button', { type: 'button', className: 'appearance-btn', onClick: () => handleUpdate('color', c.id, Math.min(160, (data.colors[c.id] || 0) + 1)) }, '+')
-                            )
-                        )
-                    )),
+                    React.createElement(VehiclePaintPicker, { channels: VehicleConfig.colors, colors: data.colors,
+                        customPrimary: data.customPrimary, customSecondary: data.customSecondary,
+                        onChange: (id, value) => handleUpdate('color', id, value) }),
                     ['primary', 'secondary'].map((id) => React.createElement('div', { className: 'appearance-row', key: `chameleon-${id}` },
                         React.createElement('div', { className: 'appearance-label' }, `${id === 'primary' ? 'Primary' : 'Secondary'} Chameleon`),
                         React.createElement(CustomSelect, {
@@ -5994,65 +6316,46 @@ function VehicleView() {
                     renderRgbEditor('secondary', 'Secondary custom color', 'customSecondary')
                 )
             ) : renderPermissionNotice('vehicle colors')),
-            React.createElement(AppearanceCollapsible, {
-                title: 'Wheels & fitment',
-                meta: String(wheelsExtrasCount),
-                expanded: catOpen.wheels,
-                onToggle: () => toggleCat('wheels')
-            }, React.createElement('div', { className: 'admin-section' },
-                React.createElement('div', { className: 'appearance-row' },
-                    React.createElement('div', { className: 'appearance-label' }, 'Wheel Type'),
-                    React.createElement(CustomSelect, {
-                        options: VehicleConfig.wheelTypes,
-                        value: data.wheelType,
-                        disabled: !permissions.mods,
-                        onChange: (v) => handleUpdate('wheelType', null, v)
-                    })
-                ),
-                permissions.mods ? renderSection('Wheels', VehicleConfig.mods.filter(m => m.cat === 'Wheels')) : renderPermissionNotice('wheel modifications'),
-                React.createElement('div', { className: 'appearance-row' },
-                    React.createElement('div', { className: 'appearance-label' }, 'Plate Type'),
-                    React.createElement(CustomSelect, {
-                        options: VehicleConfig.plates,
-                        value: data.plate,
-                        disabled: !permissions.plate,
-                        onChange: (v) => handleUpdate('plate', null, v)
-                    })
-                ),
-                React.createElement('div', { className: 'appearance-row' },
-                    React.createElement('div', { className: 'appearance-label' }, 'Window Tint'),
-                    React.createElement(CustomSelect, {
-                        options: VehicleConfig.windows,
-                        value: data.windowTint,
-                        disabled: !permissions.mods,
-                        onChange: (v) => handleUpdate('window', null, v)
-                    })
-                )
+            (!studioSection || studioSection === 'wheels') && React.createElement(AppearanceCollapsible, {
+                title: 'Wheels, plates & glass', meta: String(wheelsExtrasCount),
+                expanded: !!studioSection || catOpen.wheels, onToggle: () => toggleCat('wheels')
+            }, React.createElement(React.Fragment, null,
+                React.createElement('nav', { className: 'vehicle-fitment-tabs', 'aria-label': 'Wheel and trim categories' },
+                    [['wheels', 'Wheels'], ['plates', 'Plates'], ['glass', 'Window tint']].map(([id, label]) =>
+                        React.createElement('button', { key: id, type: 'button', 'aria-pressed': fitmentTab === id, onClick: () => setFitmentTab(id) }, label))),
+                fitmentTab === 'wheels' && React.createElement('div', { className: 'admin-section' },
+                    React.createElement('div', { className: 'appearance-row' },
+                        React.createElement('div', { className: 'appearance-label' }, 'Wheel Type'),
+                        React.createElement(CustomSelect, { options: VehicleConfig.wheelTypes, value: data.wheelType,
+                            disabled: !permissions.mods, onChange: value => handleUpdate('wheelType', null, value) })),
+                    permissions.mods ? VehicleConfig.mods.filter(item => item.cat === 'Wheels').map(item =>
+                        React.createElement(VehicleWheelPicker, { key: `${data.wheelType}:${item.id}`, type: data.wheelType, slot: item.id,
+                            label: item.label, mod: data.mods[item.id], disabled: wheelBusy,
+                            onChange: (id, value) => handleUpdate('mod', id, value) })) : renderPermissionNotice('wheel modifications'),
+                    wheelBusy && React.createElement('button', { type: 'button', className: 'admin-button', onClick: refreshData }, 'Refresh wheel list')),
+                fitmentTab === 'plates' && React.createElement(VehiclePlatePicker, { options: VehicleConfig.plates, value: data.plate,
+                    text: data.vehicle?.plate, gameBuild: data.gameBuild, disabled: !permissions.plate,
+                    onChange: value => handleUpdate('plate', null, value) }),
+                fitmentTab === 'glass' && React.createElement(VehicleTintPicker, { options: VehicleConfig.windows, value: data.windowTint,
+                    disabled: !permissions.mods, onChange: value => handleUpdate('window', null, value) })
             )),
-            React.createElement(AppearanceCollapsible, {
+            (!studioSection || studioSection === 'extras') && React.createElement(AppearanceCollapsible, {
                 title: 'Vehicle extras',
                 meta: permissions.extras ? String((data.extras || []).length) : 'Locked',
-                expanded: catOpen.extras,
+                expanded: !!studioSection || catOpen.extras,
                 onToggle: () => toggleCat('extras')
             }, permissions.extras
                 ? ((data.extras || []).length === 0
                     ? React.createElement('div', { className: 'admin-inline-empty' }, 'This vehicle model has no native extras.')
-                    : React.createElement('div', { className: 'vehicle-custom-extra-grid' }, (data.extras || []).map((extra) => React.createElement('button', {
-                        type: 'button',
-                        className: `vehicle-custom-extra${extra.enabled ? ' active' : ''}`,
-                        key: extra.id,
-                        'aria-pressed': !!extra.enabled,
-                        onClick: () => handleUpdate('extra', extra.id, null, false, !extra.enabled)
-                    },
-                        React.createElement('span', { className: 'vehicle-custom-extra-id' }, String(extra.id).padStart(2, '0')),
-                        React.createElement('span', null, extra.label || `Extra #${extra.id}`),
-                        React.createElement('small', null, extra.enabled ? 'On' : 'Off')
-                    )))
+                    : React.createElement('div', { className: 'vehicle-custom-extra-grid' }, (data.extras || []).map(extra => React.createElement(StudioSwitch, {
+                        key: extra.id, label: extra.label || `Extra #${extra.id}`, checked: extra.enabled,
+                        onChange: enabled => handleUpdate('extra', extra.id, null, false, enabled)
+                    })))
                 ) : renderPermissionNotice('vehicle extras')),
-            React.createElement(AppearanceCollapsible, {
+            (!studioSection || studioSection === 'liveries') && React.createElement(AppearanceCollapsible, {
                 title: 'Native liveries',
                 meta: permissions.liveries ? String((data.liveries || []).length) : 'Locked',
-                expanded: catOpen.liveries,
+                expanded: !!studioSection || catOpen.liveries,
                 onToggle: () => toggleCat('liveries')
             }, permissions.liveries
                 ? ((data.liveries || []).length === 0
@@ -6068,107 +6371,36 @@ function VehicleView() {
                             })
                         )
                     )) : renderPermissionNotice('vehicle liveries')),
-            React.createElement(AppearanceCollapsible, {
+            (!studioSection || studioSection === 'lights') && React.createElement(AppearanceCollapsible, {
                 title: 'Lights',
-                expanded: catOpen.lights,
+                expanded: !!studioSection || catOpen.lights,
                 onToggle: () => toggleCat('lights')
             }, React.createElement(React.Fragment, null,
                 React.createElement('div', { className: 'admin-section' },
                     React.createElement('div', { className: 'admin-section-title' }, 'Xenon Headlights'),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'Xenon Lights'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${data.mods['22']?.enabled ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!data.mods['22']?.enabled,
-                                disabled: !permissions.mods,
-                                onClick: () => handleUpdate('mod', 22, null, true, !data.mods['22']?.enabled)
-                            })
-                        )
-                    ),
+                    React.createElement(StudioSwitch, { label: 'Xenon Lights', checked: !!data.mods['22']?.enabled, disabled: !permissions.mods, onChange: enabled => handleUpdate('mod', 22, null, true, enabled) }),
                     React.createElement('div', { className: 'appearance-row' },
                         React.createElement('div', { className: 'appearance-label' }, 'Xenon Color'),
-                        React.createElement(CustomSelect, {
-                            options: VehicleConfig.xenonColors,
-                            value: data.xenonColor ?? 255,
-                            disabled: !permissions.mods,
-                            onChange: (v) => handleUpdate('xenonColor', null, v)
-                        })
+                        React.createElement('div', { className: 'vehicle-xenon-grid' }, VehicleConfig.xenonColors.map(color =>
+                            React.createElement('button', { key: color.value, type: 'button', disabled: !permissions.mods,
+                                'aria-label': color.label, title: color.label, 'aria-pressed': (data.xenonColor ?? 255) === color.value,
+                                onClick: () => handleUpdate('xenonColor', null, color.value) },
+                                React.createElement('span', { className: 'vehicle-color-chip', style: { backgroundColor: window.VehicleCatalogData.xenon[color.value] || '#DEDEFF' } }),
+                                color.label)))
                     )
                 ),
                 React.createElement('div', { className: 'admin-section' },
                     React.createElement('div', { className: 'admin-section-title' }, 'Neon Lights'),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'All Neons'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${(data.neonFront && data.neonBack && data.neonLeft && data.neonRight) ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!(data.neonFront && data.neonBack && data.neonLeft && data.neonRight),
-                                disabled: !permissions.underglow,
-                                onClick: () => {
-                                    const allOn = data.neonFront && data.neonBack && data.neonLeft && data.neonRight;
-                                    handleUpdate('neon', 'all', !allOn);
-                                }
-                            })
-                        )
-                    ),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'Front'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${data.neonFront ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!data.neonFront,
-                                disabled: !permissions.underglow,
-                                onClick: () => handleUpdate('neon', 'front', !data.neonFront)
-                            })
-                        )
-                    ),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'Back'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${data.neonBack ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!data.neonBack,
-                                disabled: !permissions.underglow,
-                                onClick: () => handleUpdate('neon', 'back', !data.neonBack)
-                            })
-                        )
-                    ),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'Left'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${data.neonLeft ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!data.neonLeft,
-                                disabled: !permissions.underglow,
-                                onClick: () => handleUpdate('neon', 'left', !data.neonLeft)
-                            })
-                        )
-                    ),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'Right'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${data.neonRight ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!data.neonRight,
-                                disabled: !permissions.underglow,
-                                onClick: () => handleUpdate('neon', 'right', !data.neonRight)
-                            })
-                        )
-                    ),
+                    React.createElement(StudioSwitch, { label: 'All Neons', checked: !!(data.neonFront && data.neonBack && data.neonLeft && data.neonRight), disabled: !permissions.underglow, onChange: enabled => handleUpdate('neon', 'all', enabled) }),
+                    React.createElement(StudioSwitch, { label: 'Front', checked: !!data.neonFront, disabled: !permissions.underglow, onChange: enabled => handleUpdate('neon', 'front', enabled) }),
+                    React.createElement(StudioSwitch, { label: 'Back', checked: !!data.neonBack, disabled: !permissions.underglow, onChange: enabled => handleUpdate('neon', 'back', enabled) }),
+                    React.createElement(StudioSwitch, { label: 'Left', checked: !!data.neonLeft, disabled: !permissions.underglow, onChange: enabled => handleUpdate('neon', 'left', enabled) }),
+                    React.createElement(StudioSwitch, { label: 'Right', checked: !!data.neonRight, disabled: !permissions.underglow, onChange: enabled => handleUpdate('neon', 'right', enabled) }),
                     React.createElement('div', { className: 'admin-section-title', style: { marginTop: '1rem' } }, 'Neon Color'),
+                    React.createElement('input', { type: 'color', className: 'admin-color-input vehicle-light-swatch',
+                        'aria-label': 'Neon Color picker', disabled: !permissions.underglow,
+                        value: '#' + (data.neonColor || [0, 0, 0]).map(channel => Number(channel).toString(16).padStart(2, '0')).join(''),
+                        onChange: event => { const rgb = hexToRgb(event.target.value); if (rgb) handleUpdate('neonColor', null, [rgb.r, rgb.g, rgb.b]); } }),
                     ['Red', 'Green', 'Blue'].map((label, idx) => React.createElement('div', { className: 'appearance-row', key: `neon-${label}` },
                         React.createElement('div', { className: 'appearance-label' }, label),
                         React.createElement('div', { className: 'appearance-control wide' },
@@ -6192,20 +6424,12 @@ function VehicleView() {
                 ),
                 React.createElement('div', { className: 'admin-section' },
                     React.createElement('div', { className: 'admin-section-title' }, 'Tire Smoke'),
-                    React.createElement('div', { className: 'appearance-row' },
-                        React.createElement('div', { className: 'appearance-label' }, 'Tire Smoke'),
-                        React.createElement('div', { className: 'appearance-control align-right' },
-                            React.createElement('button', {
-                                type: 'button',
-                                className: `admin-toggle${data.mods['20']?.enabled ? ' active' : ''}`,
-                                role: 'switch',
-                                'aria-checked': !!data.mods['20']?.enabled,
-                                disabled: !permissions.mods,
-                                onClick: () => handleUpdate('mod', 20, null, true, !data.mods['20']?.enabled)
-                            })
-                        )
-                    ),
+                    React.createElement(StudioSwitch, { label: 'Tire Smoke', checked: !!data.mods['20']?.enabled, disabled: !permissions.mods, onChange: enabled => handleUpdate('mod', 20, null, true, enabled) }),
                     React.createElement('div', { className: 'admin-section-title', style: { marginTop: '1rem' } }, 'Smoke Color'),
+                    React.createElement('input', { type: 'color', className: 'admin-color-input vehicle-light-swatch',
+                        'aria-label': 'Smoke Color picker', disabled: !permissions.colors,
+                        value: '#' + (data.tyreSmokeColor || [0, 0, 0]).map(channel => Number(channel).toString(16).padStart(2, '0')).join(''),
+                        onChange: event => { const rgb = hexToRgb(event.target.value); if (rgb) handleUpdate('tyreSmokeColor', null, [rgb.r, rgb.g, rgb.b]); } }),
                     ['Red', 'Green', 'Blue'].map((label, idx) => React.createElement('div', { className: 'appearance-row', key: `smoke-${label}` },
                         React.createElement('div', { className: 'appearance-label' }, label),
                         React.createElement('div', { className: 'appearance-control wide' },
@@ -6231,6 +6455,8 @@ function VehicleView() {
         )
     );
 }
+
+const MemoVehicleView = React.memo(VehicleView);
 
 function VehicleTuningView() {
     const [snapshot, setSnapshot] = useState(null);
@@ -6601,107 +6827,133 @@ function VehicleTuningView() {
     );
 }
 
-// Sidebar Navigation Component with FontAwesome icons
-// Framework-specific items (inventory, garage) are conditionally included
-const baseSidebarItems = [
-    { id: 'all', label: 'All Commands', lucide: 'zap', tab: 'all' },
-    { id: 'favorites', label: 'Favorites', lucide: 'star-filled', tab: 'favorites' },
-    { type: 'divider' },
-    { id: 'player', label: 'Player', lucide: 'user', tab: 'player' },
-    { id: 'vehicle', label: 'Vehicle', lucide: 'car', tab: 'vehicle' },
-    { id: 'vehicle_tuning', label: 'Live Vehicle Tuning', lucide: 'gauge', tab: 'vehicle_tuning', requiresPermission: 'vehicle.liveTuning' },
-    { id: 'world', label: 'World', lucide: 'globe', tab: 'world' },
-    { id: 'weapons', label: 'Weapons', lucide: 'crosshair', tab: 'weapons' },
-    { id: 'voice', label: 'Voice Chat', lucide: 'radio', tab: 'voice' },
-    { id: 'teleport', label: 'Teleport', lucide: 'map-pin', tab: 'teleport' },
-    { id: 'appearance', label: 'Appearance', lucide: 'shirt', tab: 'appearance' },
-    { id: 'vehicle_custom', label: 'Vehicle Customizer', lucide: 'palette', tab: 'vehicle_custom', requiresAnyPermissions: ['vehicle.customMods', 'vehicle.customColors', 'vehicle.customLiveries', 'vehicle.customExtras', 'vehicle.customUnderglow', 'vehicle.plateType'] },
-    { id: 'inventory', label: 'Inventory', lucide: 'package', tab: 'inventory', requiresFramework: 'inventory' },
-    { id: 'garage', label: 'Garage', lucide: 'warehouse', tab: 'garage', requiresFramework: 'garage' },
+// Sidebar Navigation - grouped by workflow so every page has one home.
+// Tooltips read from `tooltip` (short page name) + `description` (one-line job).
+const SIDEBAR_SECTIONS = [
+    {
+        id: 'browse', label: 'Browse',
+        items: [
+            { id: 'all', label: 'All Commands', tooltip: 'All Commands', description: 'Every command in one searchable list', lucide: 'zap', tab: 'all' },
+            { id: 'favorites', label: 'Favorites', tooltip: 'Favorites', description: 'Your pinned actions', lucide: 'star-filled', tab: 'favorites' },
+        ]
+    },
+    {
+        id: 'studios', label: 'Studios',
+        items: [
+            { id: 'appearance', label: 'Character Studio', tooltip: 'Character Studio', description: 'Outfits, ped model, face and wardrobe', lucide: 'shirt', tab: 'appearance' },
+            { id: 'vehicle_custom', label: 'Vehicle Studio', tooltip: 'Vehicle Studio', description: 'Paint, parts, liveries and lighting', lucide: 'palette', tab: 'vehicle_custom', requiresAnyPermissions: ['vehicle.customMods', 'vehicle.customColors', 'vehicle.customLiveries', 'vehicle.customExtras', 'vehicle.customUnderglow', 'vehicle.plateType'] },
+        ]
+    },
+    {
+        id: 'player', label: 'Player',
+        items: [
+            { id: 'player', label: 'Player', tooltip: 'Player', description: 'Self options plus online players', lucide: 'user', tab: 'player' },
+            { id: 'teleport', label: 'Teleport', tooltip: 'Teleport', description: 'Waypoints, coords and saved spots', lucide: 'map-pin', tab: 'teleport' },
+            { id: 'weapons', label: 'Weapons', tooltip: 'Weapons', description: 'Give, loadouts, ammo and tints', lucide: 'crosshair', tab: 'weapons' },
+            { id: 'voice', label: 'Voice Chat', tooltip: 'Voice Chat', description: 'Proximity, channel and HUD', lucide: 'radio', tab: 'voice' },
+        ]
+    },
+    {
+        id: 'vehicles', label: 'Vehicles',
+        items: [
+            { id: 'vehicle', label: 'Vehicle', tooltip: 'Vehicle', description: 'Spawn, repair, mods and plates', lucide: 'car', tab: 'vehicle' },
+            { id: 'vehicle_tuning', label: 'Live Vehicle Tuning', tooltip: 'Live Vehicle Tuning', description: 'Handling and engine audio, live', lucide: 'gauge', tab: 'vehicle_tuning', requiresPermission: 'vehicle.liveTuning' },
+            { id: 'garage', label: 'Garage', tooltip: 'Garage', description: 'Spawn from your QBX garage', lucide: 'warehouse', tab: 'garage', requiresFramework: 'garage' },
+        ]
+    },
+    {
+        id: 'world', label: 'World',
+        items: [
+            { id: 'world', label: 'World', tooltip: 'World', description: 'Weather, time and area cleanup', lucide: 'globe', tab: 'world' },
+            { id: 'recording', label: 'Recording', tooltip: 'Recording', description: 'Clips, photos, freecam and editor', lucide: 'video', tab: 'recording' },
+        ]
+    },
+    {
+        id: 'server', label: 'Server',
+        items: [
+            { id: 'inventory', label: 'Inventory', tooltip: 'Inventory', description: 'Give items and open stashes', lucide: 'package', tab: 'inventory', requiresFramework: 'inventory' },
+            { id: 'bans', label: 'Banned Players', tooltip: 'Banned Players', description: 'Ban list and history', lucide: 'shield-ban', tab: 'bans' },
+            { id: 'server', label: 'Server Resources', tooltip: 'Server Resources', description: 'Start, stop and restart resources', lucide: 'server', tab: 'server' },
+            { id: 'dev', label: 'Dev Tools', tooltip: 'Dev Tools', description: 'Coords, HUDs and debug switches', lucide: 'code', tab: 'dev' },
+            { id: 'migration', label: 'Import vMenu', tooltip: 'Import vMenu', description: 'Migrate vMenu bans and settings', lucide: 'download', tab: 'migration' },
+            { id: 'imported', label: 'Imported Data', tooltip: 'Imported Data', description: 'Review migrated vMenu data', lucide: 'archive', tab: 'imported' },
+        ]
+    },
+    {
+        id: 'system', label: 'System',
+        items: [
+            { id: 'options', label: 'Options', tooltip: 'Options', description: 'Accent, scale, position, prefs', lucide: 'settings', tab: 'options' },
+        ]
+    },
 ];
 
-const sidebarFooterNavItems = [
-    { id: 'migration', label: 'Import vMenu', lucide: 'download', tab: 'migration' },
-    { id: 'imported', label: 'Imported Data', lucide: 'archive', tab: 'imported' },
-    { id: 'bans', label: 'Banned Players', lucide: 'shield-ban', tab: 'bans' },
-    { id: 'dev', label: 'Dev Tools', lucide: 'code', tab: 'dev' },
-    { id: 'recording', label: 'Recording', lucide: 'video', tab: 'recording' },
-    { id: 'options', label: 'Options', lucide: 'settings', tab: 'options' },
-    { id: 'server', label: 'Server Resources', lucide: 'server', tab: 'server' },
+const baseSidebarItems = [...SIDEBAR_SECTIONS.flatMap((section) => section.items),
+    { id: 'players', tab: 'players', label: 'Online Players', tooltip: 'Online Players', lucide: 'users' }];
+
+const sidebarFooterNavItems = [];
+
+const CONSOLE_WORKFLOWS = [
+    { id: 'player', label: 'Player', icon: 'user', tabs: ['player', 'players', 'weapons', 'voice'] },
+    { id: 'vehicle', label: 'Vehicles', icon: 'car', tabs: ['vehicle', 'vehicle_tuning', 'garage'] },
+    { id: 'world', label: 'World', icon: 'globe', tabs: ['world', 'teleport', 'recording'] },
+    { id: 'server', label: 'Server', icon: 'server', tabs: ['server', 'inventory', 'bans', 'migration', 'imported'] },
+    { id: 'dev', label: 'Developer', icon: 'code', tabs: ['dev'] },
 ];
-
-function Sidebar({ activeView, onViewChange, activeTab, frameworkInfo, allowed }) {
-    const sidebarItems = useMemo(() => {
-        return baseSidebarItems.filter(item => {
-            if (item.requiresPermission && allowed && allowed[item.requiresPermission] === false) return false;
-            if (item.requiresAnyPermissions && allowed && !item.requiresAnyPermissions.some((permission) => allowed[permission] === true)) return false;
-            if (!item.requiresFramework) return true;
-            if (item.requiresFramework === 'inventory') return frameworkInfo && frameworkInfo.hasInventory;
-            if (item.requiresFramework === 'garage') return frameworkInfo && frameworkInfo.hasGarage;
-            return true;
-        });
-    }, [frameworkInfo, allowed]);
-    return React.createElement('div', { className: 'admin-sidebar' },
-        React.createElement('div', { className: 'admin-sidebar-items' },
-            sidebarItems.map((item, index) => {
-                if (item.type === 'divider') {
-                    return React.createElement('div', { key: `divider-${index}`, className: 'admin-sidebar-divider' });
-                }
-
-                const isActive = activeTab === item.tab;
-                return React.createElement('button', {
-                    key: item.id,
-                    type: 'button',
-                    className: `admin-sidebar-item ${item.id}${isActive ? ' active' : ''}`,
-                    onClick: () => onViewChange(item.id, item.tab),
-                    'data-tooltip': item.label,
-                    title: item.label,
-                    'aria-label': item.label
-                },
-                    React.createElement('div', { className: 'admin-sidebar-icon' },
-                        React.createElement(Icon, { name: item.lucide, size: 17 })
-                    ),
-                    React.createElement('span', { className: 'admin-sidebar-label' }, item.label)
-                );
-            })
-        ),
-        React.createElement('div', { className: 'admin-sidebar-footer' },
-            sidebarFooterNavItems.map((item) => {
-                const isActive = activeTab === item.tab;
-                return React.createElement('button', {
-                    key: item.id,
-                    type: 'button',
-                    className: `admin-sidebar-item ${item.id}${isActive ? ' active' : ''}`,
-                    onClick: () => onViewChange(item.id, item.tab),
-                    'data-tooltip': item.label,
-                    title: item.label,
-                    'aria-label': item.label
-                },
-                    React.createElement('div', { className: 'admin-sidebar-icon' },
-                        React.createElement(Icon, { name: item.lucide, size: 17 })
-                    ),
-                    React.createElement('span', { className: 'admin-sidebar-label' }, item.label)
-                );
-            }),
-            React.createElement('button', {
-                className: 'admin-sidebar-item logout',
-                type: 'button',
-                onClick: () => fetchNui('cortex-admin:close'),
-                'data-tooltip': 'Close Menu',
-                title: 'Close Menu',
-                'aria-label': 'Close Menu'
-            },
-                React.createElement('div', { className: 'admin-sidebar-icon' },
-                    React.createElement(Icon, { name: 'power', size: 15 })
-                ),
-                React.createElement('span', { className: 'admin-sidebar-label' }, 'Close')
-            )
-        )
-    );
+const CONSOLE_QUICK_ACTIONS = ['player.heal', 'player.noclip', 'vehicle.spawn', 'vehicle.repair', 'teleport.waypoint', 'world.weather', 'world.time'];
+function consoleDestinationAllowed(item, allowed = {}, frameworkInfo = {}) {
+    if (item.requiresPermission && allowed[item.requiresPermission] === false) return false;
+    if (item.requiresAnyPermissions && !item.requiresAnyPermissions.some(permission => allowed[permission] === true)) return false;
+    if (item.requiresFramework === 'inventory' && !frameworkInfo.hasInventory) return false;
+    if (item.requiresFramework === 'garage' && !frameworkInfo.hasGarage) return false;
+    return true;
+}
+function consoleWorkflowTabs(tab, allowed, frameworkInfo) {
+    const workflow = CONSOLE_WORKFLOWS.find(item => item.tabs.includes(tab));
+    return workflow ? workflow.tabs.map(id => baseSidebarItems.find(item => item.id === id))
+        .filter(item => item && consoleDestinationAllowed(item, allowed, frameworkInfo)) : [];
+}
+function Sidebar({ onViewChange, activeTab, frameworkInfo, allowed, favoriteCount = 0 }) {
+    const [expanded, setExpanded] = useState(false);
+    const navigate = (id, tab = id) => { setExpanded(false); onViewChange(id, tab); };
+    const item = (id, label, icon, active, trailing) => React.createElement('button', {
+        key: id, type: 'button', className: `console-nav-item${active ? ' is-active' : ''}`,
+        'aria-current': active ? 'page' : undefined, onClick: () => navigate(id),
+    }, React.createElement(Icon, { name: icon, size: 17 }),
+        React.createElement('span', null, label),
+        trailing !== undefined && React.createElement('small', null, trailing));
+    const studios = SIDEBAR_SECTIONS.find(section => section.id === 'studios').items
+        .filter(destination => consoleDestinationAllowed(destination, allowed, frameworkInfo));
+    return React.createElement('aside', { className: `console-sidebar${expanded ? ' is-open' : ''}` },
+        React.createElement('div', { className: 'console-identity' },
+            React.createElement('span', { className: 'console-logomark', 'aria-hidden': true }, '//'),
+            React.createElement('div', null, React.createElement('strong', null, 'CORTEX'), React.createElement('small', null, 'ADMINISTRATION'))),
+        React.createElement('button', { type: 'button', className: 'console-menu-toggle',
+            'aria-expanded': expanded, 'aria-controls': 'console-task-navigation',
+            onClick: () => setExpanded(value => !value)
+        }, React.createElement(Icon, { name: expanded ? 'x' : 'menu', size: 17 }), 'Browse tools'),
+        React.createElement('nav', { id: 'console-task-navigation', className: 'console-navigation', 'aria-label': 'Admin tasks',
+            onKeyDown: event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); setExpanded(false); event.currentTarget.parentElement.querySelector('.console-menu-toggle')?.focus(); } }
+        },
+            React.createElement('div', { className: 'console-nav-group' },
+                item('workspace', 'Workspace', 'layout-dashboard', activeTab === 'workspace'),
+                item('favorites', 'Favorites', 'star', activeTab === 'favorites', favoriteCount),
+                item('all', 'Command library', 'list', activeTab === 'all')),
+            React.createElement('div', { className: 'console-nav-group' },
+                React.createElement('h2', null, 'Tools'),
+                CONSOLE_WORKFLOWS.map(workflow => item(workflow.id, workflow.label, workflow.icon, workflow.tabs.includes(activeTab)))),
+            React.createElement('div', { className: 'console-mobile-preferences' }, item('options', 'Preferences', 'settings', activeTab === 'options'))),
+            React.createElement('div', { className: 'console-nav-group console-nav-studios' },
+                React.createElement('h2', null, 'Studios'),
+                studios.map(studio => React.createElement('button', { key: studio.id, type: 'button', className: 'console-nav-studio',
+                    'aria-label': `Launch ${studio.label}`, onClick: () => navigate(studio.id)
+                }, React.createElement(Icon, { name: studio.lucide, size: 18 }),
+                    React.createElement('span', null, studio.id === 'appearance' ? 'Character' : 'Vehicle'),
+                    React.createElement(Icon, { name: 'arrow-up-right', size: 14 })))),
+        React.createElement('div', { className: 'console-nav-bottom' }, item('options', 'Preferences', 'settings', activeTab === 'options'),
+            React.createElement('span', null, 'CORTEX CONSOLE')));
 }
 
 
-// Coordinate HUD Component - displays live coordinates on middle-left of screen
 function CoordHud({ visible, data }) {
     if (!visible) return null;
 
@@ -7100,7 +7352,10 @@ function App() {
     const [garageVehicles, setGarageVehicles] = useState([]);
     const [frameworkInfo, setFrameworkInfo] = useState({ framework: 'standalone', hasInventory: false, hasGarage: false, hasQBX: false });
     const [voiceState, setVoiceState] = useState({ proximity: null, channel: null });
-    const [activeTab, setActiveTab] = useState('all');
+    const [activeTab, setActiveTab] = useState('workspace');
+    const [studioLaunchRequest, setStudioLaunchRequest] = useState(0);
+    const studioReturnTab = useRef('workspace');
+    const [commandSection, setCommandSection] = useState('');
     const [vehiclePreviewLaunch, setVehiclePreviewLaunch] = useState({ token: 0, model: null, shared: false, resumeOnly: false });
 
     const [activeView, setActiveView] = useState('commands');
@@ -7168,15 +7423,20 @@ function App() {
 
     const filteredActions = useMemo(() => {
         if (!open) return [];
+        if (activeTab === 'players') return [];
         const query = search.trim().toLowerCase();
         let list = decoratedActions;
-        if (activeTab && activeTab !== 'all' && activeTab !== 'favorites') {
+        if (activeTab && activeTab !== 'all' && activeTab !== 'favorites' && activeTab !== 'workspace') {
             const cmdTab = activeTab === 'players' ? 'player' : activeTab;
             list = list.filter((action) => action.tab === cmdTab);
         }
         if (activeTab === 'favorites') {
             list = list.filter((action) => favorites.includes(action.id));
         }
+        if (activeTab === 'workspace') {
+            list = list.filter(action => allowed[action.id] !== false && (favorites.includes(action.id) || CONSOLE_QUICK_ACTIONS.includes(action.id)));
+        }
+        if (commandSection && !query && activeTab !== 'workspace') list = list.filter(action => action.section === commandSection);
         if (query.length > 0) {
             list = list.filter((action) => {
                 const label = (action.label || '').toLowerCase();
@@ -7195,7 +7455,7 @@ function App() {
             });
         }
         return list;
-    }, [decoratedActions, activeTab, favorites, search]);
+    }, [decoratedActions, activeTab, favorites, search, commandSection, allowed]);
 
     const groupedActions = useMemo(() => {
         const groups = [];
@@ -7208,7 +7468,9 @@ function App() {
             groups[groupIndex.get(label)].actions.push(action);
         };
 
-        if (activeTab === 'all') {
+        if (activeTab === 'workspace') {
+            filteredActions.forEach(action => append(favorites.includes(action.id) ? 'Pinned commands' : 'Quick tools', action));
+        } else if (activeTab === 'all') {
             filteredActions.forEach((action) => {
                 const label = favorites.includes(action.id) ? 'Favorites' : (action.section || 'General');
                 append(label, action);
@@ -7468,6 +7730,7 @@ function App() {
         if (!open) return undefined;
 
         const keyHandler = (event) => {
+            if (document.body.classList.contains('character-studio-open')) return;
             if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
@@ -7500,6 +7763,9 @@ function App() {
             const isTyping = tag === 'input' || tag === 'textarea' || (target && target.isContentEditable);
 
             if (isTyping) return;
+            // Native controls and composite widgets own their keys. Global command
+            // navigation must not also activate a row when a navigation button runs.
+            if (target && target.closest && target.closest('button, select, [role="listbox"], [role="menu"], [role="slider"]')) return;
             if (isDedicatedVmenuWorkspace) return;
 
             if (event.key === 'ArrowDown') {
@@ -7566,6 +7832,7 @@ function App() {
         if (lastTabRef.current !== activeTab) {
             setSelectedIndex(-1);
             lastTabRef.current = activeTab;
+            setCommandSection('');
         }
     }, [activeTab]);
 
@@ -7767,17 +8034,33 @@ function App() {
     const showTargetInfo = settings.showTargetInfo !== false;
     const isDedicatedVmenuWorkspace = DEDICATED_VMENU_WORKSPACES.has(activeTab);
     const activeTabLabel = useMemo(() => {
-        const navItems = baseSidebarItems.concat(sidebarFooterNavItems).filter((item) => item && !item.type);
+        const navItems = baseSidebarItems.filter((item) => item && !item.type);
         const match = navItems.find((item) => item.tab === activeTab);
-        if (match) return match.label;
+        if (match) return match.tooltip || match.label;
         return activeTab.charAt(0).toUpperCase() + activeTab.slice(1).replace(/_/g, ' ');
     }, [activeTab]);
+    const isCommandPage = !['players', 'appearance', 'vehicle_custom', 'vehicle_tuning', 'inventory', 'garage'].includes(activeTab)
+        && !isDedicatedVmenuWorkspace;
+    const workflow = CONSOLE_WORKFLOWS.find(item => item.tabs.includes(activeTab));
+    const workflowTabs = consoleWorkflowTabs(activeTab, allowed, frameworkInfo);
+    const sectionOptions = Array.from(new Set(decoratedActions.filter(action =>
+        activeTab === 'all' || (activeTab === 'favorites' ? favorites.includes(action.id) : action.tab === activeTab)
+    ).map(action => action.section).filter(Boolean)));
+    const exitStudioToMenu = useCallback(() => {
+        setActiveTab(studioReturnTab.current);
+        setStudioLaunchRequest(0);
+        requestAnimationFrame(() => document.querySelector('.console-page-title')?.focus());
+    }, []);
 
     // Handle sidebar view switching - now directly sets tab
     const handleViewChange = useCallback((viewId, tab) => {
         setActiveView(viewId);
         setActionContext(null);
         if (tab) {
+            if (tab === 'appearance' || tab === 'vehicle_custom') {
+                if (activeTab !== 'appearance' && activeTab !== 'vehicle_custom') studioReturnTab.current = activeTab;
+                setStudioLaunchRequest(previous => previous + 1);
+            }
             setActiveTab(tab);
             if (tab === 'server') {
                 fetchNui('cortex-admin:requestResources');
@@ -7789,7 +8072,7 @@ function App() {
                 fetchNui('cortex-admin:requestGarage');
             }
         }
-    }, []);
+    }, [activeTab]);
 
     // Close handler
     const handleClose = useCallback(() => {
@@ -7850,20 +8133,16 @@ function App() {
                 activeTab,
                 onViewChange: handleViewChange,
                 frameworkInfo,
-                allowed
+                allowed, favoriteCount: favorites.length
             }),
 
             // Main Content Area
-            React.createElement('div', { className: 'admin-main' },
+            React.createElement('main', { className: 'admin-main', 'aria-label': activeTabLabel },
                 React.createElement('header', { className: 'admin-topbar' },
                     React.createElement('div', { className: 'admin-topbar-left' },
-                        React.createElement('div', { className: 'admin-brand' },
-                            React.createElement('span', { className: 'admin-brand-mark', 'aria-hidden': true }),
-                            React.createElement('span', { className: 'admin-brand-name' }, 'CORTEX'),
-                        ),
-                        React.createElement('div', { className: 'admin-topbar-context' },
-                            React.createElement('strong', null, activeTabLabel)
-                        )
+                        React.createElement('span', { className: 'console-breadcrumb' }, workflow ? 'Tools / ' + workflow.label : 'Admin menu'),
+                        React.createElement('h1', { className: 'console-page-title', tabIndex: -1 },
+                            workflow?.label || (activeTab === 'all' ? 'Command library' : activeTabLabel))
                     ),
                     React.createElement('div', { className: 'admin-topbar-right' },
                         React.createElement('div', { className: 'admin-topbar-player' },
@@ -7879,11 +8158,62 @@ function App() {
                         }, React.createElement(Icon, { name: 'x', size: 14 }))
                     )
                 ),
+                workflowTabs.length > 1 && React.createElement('nav', { className: 'console-subnav', 'aria-label': `${workflow.label} tools` },
+                    workflowTabs.map(item => React.createElement('button', { key: item.id, type: 'button',
+                        'aria-current': activeTab === item.tab ? 'page' : undefined,
+                        onClick: () => handleViewChange(item.id, item.tab)
+                    }, item.id === workflow.id ? (item.id === 'player' ? 'Self' : item.id === 'server' ? 'Resources' : 'Overview') : item.label))),
+                        // Search Bar (always visible, prominent in sidebar mode)
+                        isCommandPage && React.createElement('div', { className: 'admin-search-bar console-command-toolbar' },
+                            React.createElement('div', { className: 'admin-search-wrapper' },
+                                React.createElement(Icon, { name: 'search', size: 18, className: 'admin-search-icon' }),
+                                React.createElement('input', {
+                                    ref: searchRef,
+                                    type: 'text',
+                                    className: 'admin-search-input',
+                                    value: search,
+                                    'aria-label': (activeTab === 'all' || activeTab === 'workspace') ? 'Search all commands' : `Search ${activeTabLabel.toLowerCase()} commands`,
+                                    placeholder: (activeTab === 'all' || activeTab === 'workspace') ? 'Find a command...' : `Search ${activeTabLabel.toLowerCase()}...`,
+                                    onKeyDown: (e) => {
+                                        e.stopPropagation();
+                                        if (e.key === 'Escape') {
+                                            e.target.blur();
+                                            setSearch('');
+                                        }
+                                    },
+                                    onChange: (e) => {
+                                        setSearch(e.target.value);
+                                        if (activeTab === 'workspace' && e.target.value.trim()) setActiveTab('all');
+                                        setSelectedIndex(-1);
+                                    }
+                                }),
+                                search.length > 0 && React.createElement('button', {
+                                    type: 'button',
+                                    className: 'admin-search-clear',
+                                    title: 'Clear search',
+                                    'aria-label': 'Clear search',
+                                    onClick: () => {
+                                        setSearch('');
+                                        setSelectedIndex(-1);
+                                        if (searchRef.current) searchRef.current.focus();
+                                    }
+                                }, React.createElement(Icon, { name: 'x', size: 12 })),
+                                React.createElement('kbd', { className: 'admin-search-kbd' }, '/')
+                            ),
+                            activeTab !== 'workspace' && sectionOptions.length > 1 && React.createElement(CustomSelect, {
+                                value: commandSection, ariaLabel: 'Filter command section',
+                                options: [{ value: '', label: 'All sections' }, ...sectionOptions.map(section => ({ value: section, label: section }))],
+                                onChange: value => { setCommandSection(value); setSelectedIndex(-1); }
+                            })
+                        ),
+
                 // Content Area
                 React.createElement('div', { className: 'admin-content' },
                     React.createElement('div', {
                         className: 'admin-column',
                         onWheel: (e) => {
+                            // React portals bubble through this tree, but own their native scroll.
+                            if (!e.currentTarget.contains(e.target)) return;
                             const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
                             if (delta === 0) return;
 
@@ -7914,46 +8244,8 @@ function App() {
                             }
                         }
                     },
-                        // Search Bar (always visible, prominent in sidebar mode)
-                        activeTab !== 'vehicle_tuning' && activeTab !== 'appearance' && !isDedicatedVmenuWorkspace && React.createElement('div', { className: 'admin-search-bar' },
-                            React.createElement('div', { className: 'admin-search-wrapper' },
-                                React.createElement(Icon, { name: 'search', size: 18, className: 'admin-search-icon' }),
-                                React.createElement('input', {
-                                    ref: searchRef,
-                                    type: 'text',
-                                    className: 'admin-search-input',
-                                    value: search,
-                                    'aria-label': 'Search commands',
-                                    placeholder: 'Search commands...',
-                                    onKeyDown: (e) => {
-                                        e.stopPropagation();
-                                        if (e.key === 'Escape') {
-                                            e.target.blur();
-                                            setSearch('');
-                                        }
-                                    },
-                                    onChange: (e) => {
-                                        setSearch(e.target.value);
-                                        setSelectedIndex(-1);
-                                    }
-                                }),
-                                search.length > 0 && React.createElement('button', {
-                                    type: 'button',
-                                    className: 'admin-search-clear',
-                                    title: 'Clear search',
-                                    'aria-label': 'Clear search',
-                                    onClick: () => {
-                                        setSearch('');
-                                        setSelectedIndex(-1);
-                                        if (searchRef.current) searchRef.current.focus();
-                                    }
-                                }, React.createElement(Icon, { name: 'x', size: 12 })),
-                                React.createElement('kbd', { className: 'admin-search-kbd' }, '/')
-                            )
-                        ),
-
                         // Special sections for specific tabs
-                        (activeTab === 'player' || activeTab === 'players') && React.createElement('div', { className: 'admin-section' },
+                        activeTab === 'players' && React.createElement('div', { className: 'admin-section' },
                             React.createElement('div', { className: 'admin-section-title' }, 'Online Players'),
                             React.createElement(PlayerList, { players, onAction: handlePlayerAction, allowed, identifiers: playerIdentifiers })
                         ),
@@ -7968,7 +8260,7 @@ function App() {
                         ),
 
                         activeTab === 'appearance' && React.createElement(AppearanceErrorBoundary, null,
-                            React.createElement(AppearanceWorkspaceView, { onPrompt: setPrompt })
+                            React.createElement(AppearanceWorkspaceView, { onPrompt: setPrompt, menuOpen: open, launchRequest: studioLaunchRequest, onExit: exitStudioToMenu })
                         ),
                         activeTab === 'voice' && React.createElement(VoiceChatWorkspace, {
                             actions: decoratedActions,
@@ -7979,7 +8271,7 @@ function App() {
                             onSelect: handleSelect,
                             onPromptSubmit: handlePromptSubmit
                         }),
-                        activeTab === 'vehicle_custom' && React.createElement(VehicleView),
+                        activeTab === 'vehicle_custom' && React.createElement(VehicleStudioWorkspace, { menuOpen: open, launchRequest: studioLaunchRequest, onExit: exitStudioToMenu }),
                         activeTab === 'vehicle_tuning' && React.createElement(VehicleTuningView),
                         activeTab === 'teleport' && React.createElement(TeleportWorkspaceView, { onPrompt: setPrompt }),
                         activeTab === 'migration' && React.createElement(VmenuMigrationWorkspace, { onPrompt: setPrompt, allowed, banImportResult: vmenuBanImportResult }),
@@ -8000,22 +8292,26 @@ function App() {
                         }),
 
                         // General Commands Section (Filtered by Tab)
-                        activeTab !== 'appearance' && activeTab !== 'vehicle_custom' && activeTab !== 'vehicle_tuning' && activeTab !== 'inventory' && activeTab !== 'garage' && !isDedicatedVmenuWorkspace && React.createElement('div', {
+                        isCommandPage && React.createElement('div', {
                             className: activeTab === 'recording' ? 'admin-section admin-section--recording' : 'admin-section'
                         },
                             React.createElement('div', { className: 'admin-command-overview' },
-                                React.createElement('div', null,
-                                    React.createElement('span', { className: 'admin-section-kicker' }, activeTab === 'all' ? 'COMMAND LIBRARY' : activeTab === 'favorites' ? 'PINNED' : 'CATEGORY'),
-                                    React.createElement('h2', null,
-                                        activeTab === 'all' ? 'All commands' :
-                                            activeTab === 'favorites' ? 'Favorite actions' :
-                                                activeTab === 'recording' ? 'Recording & capture' :
-                                                    `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} commands`)
-                                ),
-                                React.createElement('span', { className: 'admin-command-count' }, `${displayActions.length} available`)
+                                React.createElement('h2', { className: 'console-list-label' }, search.trim() ? 'Search results' : activeTab === 'workspace' ? 'Your command desk' : activeTab === 'favorites' ? 'Pinned actions' : commandSection || 'Commands'),
+                                React.createElement('span', { className: 'admin-command-count', role: 'status' }, `${displayActions.length} commands`),
+                                search.trim() && activeTab !== 'all' && React.createElement('button', {
+                                    type: 'button', className: 'console-search-all', onClick: () => handleViewChange('all', 'all')
+                                }, 'Search all')
                             ),
                             filteredActions.length === 0
-                                ? React.createElement('div', { className: 'admin-no-results admin-command-empty' }, 'No commands found in this category.')
+                                ? React.createElement('div', { className: 'admin-no-results admin-command-empty' },
+                                    React.createElement(Icon, { name: activeTab === 'favorites' && !search.trim() ? 'star' : 'search', size: 24 }),
+                                    React.createElement('strong', null, activeTab === 'favorites' && !search.trim() ? 'Your shortcuts belong here' : 'No matching commands'),
+                                    React.createElement('p', null, activeTab === 'favorites' && !search.trim()
+                                        ? 'Use the star beside any command to pin it here.'
+                                        : search.trim() ? 'Try a shorter name or search across all commands.' : 'There are no commands in this category.'),
+                                    React.createElement('button', { type: 'button', className: 'admin-button',
+                                        onClick: () => { setSearch(''); setSelectedIndex(-1); if (!search.trim()) handleViewChange('all', 'all'); }
+                                    }, search.trim() ? 'Clear search' : 'Browse commands'))
                                 : React.createElement('div', { className: 'admin-action-groups' },
                                     groupedActions.map((group) => React.createElement('section', { className: 'admin-action-group', key: group.label },
                                         React.createElement('div', { className: 'admin-action-group-header' },
@@ -8062,6 +8358,15 @@ function App() {
                                 )
                         )
                     )
+                ),
+                React.createElement('footer', { className: 'console-footer' },
+                    React.createElement('span', { className: 'console-session' },
+                        React.createElement(Icon, { name: 'clock', size: 12 }),
+                        `${String(gameHour).padStart(2, '0')}:${String(gameMinute).padStart(2, '0')}`,
+                        React.createElement('span', { className: 'console-weather' }, currentWeather.replace(/_/g, ' ').toLowerCase())),
+                    React.createElement('span', { className: 'console-key-hints' },
+                        isCommandPage && React.createElement('span', null, React.createElement('kbd', null, '/'), ' Find'),
+                        React.createElement('span', null, React.createElement('kbd', null, 'Esc'), ' Close'))
                 )
             )
         )),

@@ -1,7 +1,8 @@
 AppearanceRandomizer = AppearanceRandomizer or {}
 
 local VALID_MODES = { outfit = true, character = true }
-local VALID_STYLES = { polished = true, casual = true, street = true }
+local VALID_STYLES = { polished = true, casual = true, street = true, sport = true, utility = true,
+    biker = true, resort = true, nightlife = true, designer = true }
 local VALID_GENDERS = { keep = true, male = true, female = true, random = true }
 local VALID_HAIR_TONES = { any = true, dark = true, warm = true, light = true }
 local VALID_PALETTES = { neutral = true, tonal = true, varied = true }
@@ -428,6 +429,14 @@ local STYLE_POOLS = {
     },
 }
 
+-- Every public direction has one catalog pool and optional base-game props.
+for _, gender in ipairs({ 'male', 'female' }) do
+    for style in pairs(VALID_STYLES) do
+        STYLE_POOLS[gender][style] = STYLE_POOLS[gender][style]
+            or { tops = {}, bottoms = {}, shoes = {}, accessories = { 'watch', 'glasses' } }
+    end
+end
+
 local function registerOfficialCatalog()
     if type(AppearanceCatalog) ~= 'table' then return end
     for _, gender in ipairs({ 'male', 'female' }) do
@@ -474,6 +483,196 @@ local function registerOfficialCatalog()
 end
 
 registerOfficialCatalog()
+
+-- Complete silhouettes, not the Cartesian product of a broad style tag.
+-- Open jackets, suit sets and tall boots require additional fit rules and
+-- stay available in the manual wardrobe instead of entering these families.
+local OUTFIT_FAMILIES = {
+    male = {
+        { id = 'smart', name = 'Smart separates', styles = { polished = true },
+          tops = { 'polo', 'official_tops_loose_polo', 'official_tops_tucked_shirt' },
+          bottoms = { 'chinos', 'dress_chinos', 'official_bottoms_slim_fit', 'official_bottoms_smart_regular' },
+          shoes = { 'boat', 'chelsea', 'official_shoes_slip_ons', 'official_shoes_leather_loafers' } },
+        { id = 'weekend', name = 'Weekend denim', styles = { casual = true, polished = true },
+          tops = { 'polo', 'official_tops_loose_polo' },
+          bottoms = { 'regular_jeans', 'ranch_jeans', 'official_bottoms_classic_jeans', 'official_bottoms_ribbed_denim' },
+          shoes = { 'boat', 'canvas', 'official_shoes_canvas_slip_ons' } },
+        { id = 'everyday', name = 'Everyday essentials', styles = { casual = true, street = true },
+          tops = { 'tee_clean', 'tee_graphic', 'official_tops_utility_tee', 'official_tops_print_sweater' },
+          bottoms = { 'regular_jeans', 'ranch_jeans', 'official_bottoms_loose_jeans', 'official_bottoms_ribbed_denim', 'official_bottoms_roadworn_denim' },
+          shoes = { 'canvas', 'skate', 'official_shoes_hi_top_sneakers', 'official_shoes_retro_sneakers' } },
+        { id = 'athletic', name = 'Off duty', styles = { casual = true, street = true },
+          tops = { 'official_tops_sport_hoodie', 'official_tops_zipped_bomber', 'official_tops_varsity_jacket' },
+          bottoms = { 'official_bottoms_tracksuit_pants', 'official_bottoms_modern_tracksuit', 'official_bottoms_loose_jeans' },
+          shoes = { 'skate', 'official_shoes_hi_top_sneakers', 'official_shoes_retro_sneakers' } },
+        { id = 'utility', name = 'Urban utility', styles = { street = true },
+          tops = { 'official_tops_combat_top', 'official_tops_combat_sweater', 'official_tops_utility_tee' },
+          bottoms = { 'cargo', 'fitted_cargo', 'official_bottoms_plain_biker', 'official_bottoms_padded_biker' },
+          shoes = { 'boots', 'official_shoes_ankle_boots', 'official_shoes_moc_toe_boots' } },
+    },
+    female = {
+        { id = 'smart', name = 'Smart separates', styles = { polished = true },
+          tops = { 'shirt', 'polo', 'official_tops_blouse', 'official_tops_rolled_shirt', 'official_tops_work_shirt' },
+          bottoms = { 'suit', 'chinos', 'official_bottoms_fitted_chinos', 'official_bottoms_high_waisted' },
+          shoes = { 'round_toed', 'ankle', 'official_shoes_patent_heels' } },
+        { id = 'weekend', name = 'Weekend denim', styles = { polished = true, casual = true },
+          tops = { 'shirt', 'polo', 'official_tops_blouse', 'official_tops_work_shirt' },
+          bottoms = { 'skinny', 'rollups', 'official_bottoms_ribbed_denim', 'official_bottoms_roadworn_denim' },
+          shoes = { 'canvas', 'ankle', 'round_toed' } },
+        { id = 'everyday', name = 'Everyday essentials', styles = { casual = true, street = true },
+          tops = { 'tee_clean', 'official_tops_utility_tee', 'official_tops_print_sweater' },
+          bottoms = { 'skinny', 'rollups', 'official_bottoms_skinny_cuts', 'official_bottoms_ribbed_denim' },
+          shoes = { 'canvas', 'sports', 'runners', 'high_tops' } },
+        { id = 'athletic', name = 'Off duty', styles = { casual = true, street = true },
+          tops = { 'official_tops_sport_hoodie', 'official_tops_varsity_jacket', 'tee_clean' },
+          bottoms = { 'official_bottoms_leggings', 'official_bottoms_tracksuit_pants', 'official_bottoms_modern_tracksuit' },
+          shoes = { 'sports', 'runners', 'high_tops' } },
+        { id = 'utility', name = 'Urban utility', styles = { street = true },
+          tops = { 'official_tops_combat_top', 'official_tops_combat_sweater', 'official_tops_utility_tee' },
+          bottoms = { 'cargo', 'official_bottoms_combat_pants', 'official_bottoms_skinny_cuts' },
+          shoes = { 'combat', 'ankle', 'high_tops' } },
+    },
+}
+
+-- Legacy families are fallbacks when the selected build lacks the later collections.
+for _, gender in ipairs({ 'male', 'female' }) do
+    for _, family in ipairs(OUTFIT_FAMILIES[gender]) do
+        family.fallback = true
+        if family.id == 'smart' then family.styles.nightlife = true; family.styles.designer = true end
+        if family.id == 'weekend' then family.styles.resort = true end
+        if family.id == 'athletic' then family.styles.sport = true; family.styles.designer = true end
+        if family.id == 'utility' then family.styles.utility = true; family.styles.biker = true end
+    end
+end
+
+local MODERN_FAMILIES = {
+    { id = 'modern_smart', name = 'Modern smart separates', styles = { polished = true },
+      tops = { 'official_tops_office', 'official_tops_office_open', 'official_tops_brand_polo' },
+      bottoms = { 'official_bottoms_straight_chinos' },
+      shoes = { 'official_shoes_smart_oxford', 'official_shoes_buckled' },
+    },
+    { id = 'soft_tailoring', name = 'Soft tailoring', styles = { polished = true, nightlife = true },
+      tops = { 'official_tops_cardigan', 'official_tops_designer_cardigan' },
+      bottoms = { 'official_bottoms_straight_chinos' },
+      shoes = { 'official_shoes_buckled', 'official_shoes_smart_oxford' },
+    },
+    { id = 'clean_denim', name = 'Clean denim', styles = { polished = true, casual = true },
+      tops = { 'official_tops_chore', 'official_tops_brand_polo' },
+      bottoms = { 'official_bottoms_turnups' },
+      shoes = { 'official_shoes_buckled', 'official_shoes_low_canvas' },
+    },
+    { id = 'modern_everyday', name = 'Relaxed layers', styles = { casual = true },
+      tops = { 'official_tops_double_shirt', 'official_tops_pullover' },
+      bottoms = { 'official_bottoms_turnups', 'official_bottoms_straight_chinos' },
+      shoes = { 'official_shoes_knit', 'official_shoes_low_canvas' },
+    },
+    { id = 'offduty', name = 'Off-duty sweats', styles = { casual = true, sport = true },
+      tops = { 'official_tops_pullover', 'official_tops_zipped_bigness' },
+      bottoms = { 'official_bottoms_cuffed_sweats' },
+      shoes = { 'official_shoes_knit', 'official_shoes_designer_lace' },
+    },
+    { id = 'chore_denim', name = 'Chore jacket & denim', styles = { casual = true, utility = true },
+      tops = { 'official_tops_chore', 'official_tops_double_shirt' },
+      bottoms = { 'official_bottoms_turnups' },
+      shoes = { 'official_shoes_low_canvas', 'official_shoes_logger' },
+    },
+    { id = 'sneaker_focus', name = 'Sneaker rotation', styles = { street = true, sport = true, designer = true },
+      tops = { 'official_tops_pullover', 'official_tops_zipped_bigness' },
+      bottoms = { 'official_bottoms_cuffed_sweats', 'official_bottoms_snap_joggers' },
+      shoes = { 'official_shoes_knit', 'official_shoes_designer_lace' },
+      accent = 'shoes',
+    },
+    { id = 'oversized', name = 'Volume & layers', styles = { street = true, designer = true },
+      tops = { 'official_tops_brand_hoodie', 'official_tops_broker_puffer' },
+      bottoms = { 'official_bottoms_large_cargo', 'official_bottoms_cuffed_sweats' },
+      shoes = { 'official_shoes_knit', 'official_shoes_designer_lace' },
+    },
+    { id = 'racing_street', name = 'Pit lane streetwear', styles = { street = true, biker = true },
+      tops = { 'official_tops_racing', 'official_tops_retro_racing' },
+      bottoms = { 'official_bottoms_chain', 'official_bottoms_turnups' },
+      shoes = { 'official_shoes_low_canvas', 'official_shoes_knit' },
+    },
+    { id = 'urban_utility', name = 'Technical layers', styles = { street = true, utility = true },
+      tops = { 'official_tops_waterproof', 'official_tops_field_blouson' },
+      bottoms = { 'official_bottoms_large_cargo' },
+      shoes = { 'official_shoes_logger' },
+    },
+    { id = 'training', name = 'Training day', styles = { sport = true },
+      tops = { 'official_tops_track_top', 'official_tops_pullover' },
+      bottoms = { 'official_bottoms_snap_joggers', 'official_bottoms_cuffed_sweats' },
+      shoes = { 'official_shoes_knit' },
+    },
+    { id = 'track', name = 'Track separates', styles = { sport = true },
+      tops = { 'official_tops_track_top' },
+      bottoms = { 'official_bottoms_track', 'official_bottoms_cuffed_sweats' },
+      shoes = { 'official_shoes_knit', 'official_shoes_designer_lace' },
+    },
+    { id = 'field', name = 'Field gear', styles = { utility = true },
+      tops = { 'official_tops_field_blouson', 'official_tops_waterproof' },
+      bottoms = { 'official_bottoms_large_cargo' },
+      shoes = { 'official_shoes_logger' },
+    },
+    { id = 'workwear', name = 'Workshop layers', styles = { utility = true },
+      tops = { 'official_tops_chore', 'official_tops_double_shirt' },
+      bottoms = { 'official_bottoms_straight_chinos', 'official_bottoms_large_cargo' },
+      shoes = { 'official_shoes_logger' },
+    },
+    { id = 'leather', name = 'Road leathers', styles = { biker = true },
+      tops = { 'official_tops_light_biker', 'official_tops_leather_bomber' },
+      bottoms = { 'official_bottoms_leather_stitch', 'official_bottoms_laced_leather' },
+      shoes = { 'official_shoes_road' },
+    },
+    { id = 'motorsport', name = 'Motorsport', styles = { biker = true },
+      tops = { 'official_tops_racing', 'official_tops_retro_racing' },
+      bottoms = { 'official_bottoms_chain' },
+      shoes = { 'official_shoes_road', 'official_shoes_low_canvas' },
+    },
+    { id = 'coastal', name = 'Coastal prints', styles = { resort = true },
+      tops = { 'official_tops_revere', 'official_tops_botanical', 'official_tops_palms' },
+      bottoms = { 'official_bottoms_beach_shorts', 'official_bottoms_jean_shorts' },
+      shoes = { 'official_shoes_pool_sliders', 'official_shoes_low_canvas' },
+    },
+    { id = 'boardwalk', name = 'Boardwalk club', styles = { resort = true },
+      tops = { 'official_tops_brand_polo', 'official_tops_revere' },
+      bottoms = { 'official_bottoms_beach_shorts' },
+      shoes = { 'official_shoes_buckled', 'official_shoes_low_canvas' },
+    },
+    { id = 'afterdark', name = 'After dark', styles = { nightlife = true },
+      tops = { 'official_tops_light_biker', 'official_tops_revere', 'official_tops_office_open' },
+      bottoms = { 'official_bottoms_laced_leather', 'official_bottoms_straight_chinos' },
+      shoes = { 'official_shoes_buckled', 'official_shoes_smart_oxford' },
+    },
+    { id = 'club_knit', name = 'Late-night knitwear', styles = { nightlife = true, designer = true },
+      tops = { 'official_tops_designer_cardigan', 'official_tops_cardigan', 'official_tops_casino_bomber' },
+      bottoms = { 'official_bottoms_wide_designer', 'official_bottoms_straight_chinos' },
+      shoes = { 'official_shoes_buckled', 'official_shoes_smart_oxford' },
+    },
+    { id = 'label_layers', name = 'Statement labels', styles = { designer = true },
+      tops = { 'official_tops_designer_cardigan', 'official_tops_casino_bomber', 'official_tops_broker_puffer' },
+      bottoms = { 'official_bottoms_wide_designer' },
+      shoes = { 'official_shoes_designer_lace', 'official_shoes_buckled' },
+    },
+    { id = 'luxury_sport', name = 'Designer sportswear', styles = { designer = true },
+      tops = { 'official_tops_brand_hoodie', 'official_tops_zipped_bigness' },
+      bottoms = { 'official_bottoms_cuffed_sweats', 'official_bottoms_snap_joggers' },
+      shoes = { 'official_shoes_designer_lace', 'official_shoes_knit' },
+    },
+}
+for _, gender in ipairs({ 'male', 'female' }) do
+    for _, family in ipairs(MODERN_FAMILIES) do
+        OUTFIT_FAMILIES[gender][#OUTFIT_FAMILIES[gender] + 1] = family
+    end
+end
+
+-- Base tops also need a bare undershirt, not a second visible copy of a tee.
+for gender, definitions in pairs(PIECES) do
+    for _, definition in pairs(definitions.tops) do
+        definition.components[8] = gender == 'female' and 14 or 15
+        for _, variants in pairs(definition.variants) do
+            for _, variant in ipairs(variants) do variant.textures[8] = 0 end
+        end
+    end
+end
 
 local function finiteInteger(value, minimum, maximum)
     if type(value) ~= 'number' and type(value) ~= 'string' then return nil end
@@ -594,6 +793,33 @@ function AppearanceRandomizer.getPiecePools(gender, style, palette)
         end
     end
     return pools
+end
+
+function AppearanceRandomizer.getOutfitFamilies(gender, style, palette)
+    gender = gender == 'female' and 'female' or 'male'
+    style = VALID_STYLES[style] and style or 'polished'
+    palette = VALID_PALETTES[palette] and palette or 'neutral'
+    local families = {}
+    for _, family in ipairs(OUTFIT_FAMILIES[gender]) do
+        if family.styles[style] then
+            local pools = { tops = {}, bottoms = {}, shoes = {}, accessories = {} }
+            for _, category in ipairs({ 'tops', 'bottoms', 'shoes' }) do
+                -- One focal garment carries color. Sneaker-led families let Mixed
+                -- use the newer footwear colorways without a clashing top.
+                local focal = palette == 'varied' and family.accent or 'tops'
+                local piecePalette = category == (focal or 'tops') and palette or 'neutral'
+                for _, id in ipairs(family[category]) do
+                    local definition = assert(PIECES[gender][category][id], 'Unknown family piece: ' .. id)
+                    for _, piece in ipairs(materializeClothingPiece(id, definition, piecePalette)) do
+                        pools[category][#pools[category] + 1] = piece
+                    end
+                end
+            end
+            pools.accessories = AppearanceRandomizer.getPiecePools(gender, style, palette).accessories
+            families[#families + 1] = { id = family.id, name = family.name, fallback = family.fallback == true, pools = pools }
+        end
+    end
+    return families
 end
 
 function AppearanceRandomizer.filterPiecePools(pools, clothingValidator, accessoryValidator)

@@ -28,6 +28,7 @@ function RegisterNetEvent(name, handler)
 end
 
 function AddEventHandler() end
+function RegisterCommand() end
 
 function TriggerClientEvent(name, target, ...)
     clientEvents[#clientEvents + 1] = {

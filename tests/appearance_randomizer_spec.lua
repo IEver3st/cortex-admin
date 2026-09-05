@@ -273,10 +273,13 @@ for _, style in ipairs({ 'polished', 'casual', 'street' }) do
         for _, category in ipairs({ 'tops', 'bottoms', 'shoes' }) do
             for _, piece in ipairs(femalePools[category]) do
                 local label = piece.name:lower()
-                assert(not label:match('%f[%a]red%f[%A]'), 'female capsule must exclude loud red pieces')
-                assert(not label:match('%f[%a]mint%f[%A]'), 'female capsule must exclude bright mint pieces')
-                assert(not label:match('%f[%a]green%f[%A]'), 'female capsule must exclude bright green pieces')
-                assert(not label:match('%f[%a]purple%f[%A]'), 'female capsule must exclude purple-accent pieces')
+                -- Restrained stays quiet; Tonal and Mixed now intentionally
+                -- include later DLC colors for both bodies.
+                if paletteName == 'neutral' then
+                    assert(not label:match('%f[%a]purple%f[%A]'), 'restrained clothing must not use purple accents')
+                    assert(not label:find('hot pink', 1, true), 'restrained clothing must not use hot pink')
+                    assert(not label:find('neon', 1, true), 'restrained clothing must not use neon colors')
+                end
             end
         end
         if style == 'street' then
@@ -336,7 +339,7 @@ assert(actionsSource:find('SetPedCollectionComponentVariation', 1, true), 'outfi
 assert(actionsSource:find('GetPedCollectionNameFromDrawable', 1, true), 'official global catalog indexes must resolve to their runtime collection')
 assert(actionsSource:find('GetPedCollectionLocalIndexFromDrawable', 1, true), 'official global catalog indexes must resolve to a collection-local index')
 assert(not actionsSource:find('IsPedCollectionComponentVariationValid', 1, true), 'the collection validator that rejected valid base pieces must not return')
-assert(actionsSource:find('AppearanceRandomizer.getPiecePools', 1, true), 'client generation must load modular compatible-piece pools')
+assert(actionsSource:find('AppearanceRandomizer.getOutfitFamilies', 1, true), 'client generation must select a compatible outfit family')
 assert(actionsSource:find('AppearanceRandomizer.assembleOutfit', 1, true), 'client generation must assemble interchangeable pieces')
 assert(actionsSource:find('AppearanceRandomizer.filterPiecePools', 1, true), 'runtime compatibility must filter modular pieces independently')
 assert(actionsSource:find('generatedClothingPieceIsValid', 1, true), 'invalid clothing must be filtered per piece rather than rejecting a whole style')

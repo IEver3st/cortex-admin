@@ -563,6 +563,13 @@ EsAdminActions = {
             type = 'action',
         },
         {
+            id = 'vehicle.performanceMods',
+            label = 'Full Performance Upgrades',
+            description = 'Apply max engine, brakes, transmission, suspension, armor and turbo only',
+            tab = 'vehicle',
+            type = 'action',
+        },
+        {
             id = 'vehicle.adminCar',
             label = 'Admin Car',
             description = 'Save current vehicle to your QBX garage',

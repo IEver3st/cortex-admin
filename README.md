@@ -248,6 +248,8 @@ The resource registers a large set of convenience chat commands. All commands re
 | Command | Description |
 |---------|-------------|
 | `/esadmin` | Open the admin menu. |
+| `/time [set] <hour> [minute]` | Set synchronized time (hour 0-23, minute 0-59). Minutes default to 00. Accepts `/time 12`, `/time set 12`, `/time 12 00`, and `/time set 12 00`. Requires the menu's `world.time` permission; also available from the server console. |
+| `/time [set] day` | Set synchronized time to 12:00. |
 | `/tp X Y [Z]` | Teleport to coordinates (supports `X=..., Y=...` style). |
 | `/tpm` | Teleport to the map waypoint. |
 | `/tpmarker` | Teleport to the current marker. |

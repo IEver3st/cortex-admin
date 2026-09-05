@@ -9,7 +9,9 @@ Config.Debug = false
 Config.Command = 'esadmin'
 Config.Keybind = 'F10'
 Config.WardrobeShareRadius = 8.0
-Config.VehiclePreviewCloseControl = 194
+Config.VehiclePreviewCloseControl = 177 -- Backspace (INPUT_CELLPHONE_CANCEL)
+-- On-demand only. Increase settling time if your streamed textures load slowly.
+Config.WardrobeCapture = { settleMs = 750 }
 
 Config.DefaultSettings = {
     uiScale = 1,

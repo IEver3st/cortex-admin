@@ -81,6 +81,11 @@ local state = {
 local worldState = {
     freezeTime = false,
 }
+EsAdmin.restoreWorldClock = function()
+    if worldState.freezeTime and worldState.hour ~= nil and worldState.minute ~= nil then
+        NetworkOverrideClockTime(worldState.hour, worldState.minute, 0)
+    end
+end
 
 local currentResourceName = GetCurrentResourceName()
 local trackedWeatherTypes = {
@@ -125,6 +130,10 @@ EsAdmin.state = state
 -- ============================================================================
 
 local function notify(notifyType, message)
+    if (EsAdmin.isCharacterStudioActive and EsAdmin.isCharacterStudioActive())
+        or (EsAdmin.silentNotificationThreads and EsAdmin.silentNotificationThreads[coroutine.running()]) then
+        return
+    end
     -- Position, sound, and sound preset are player-owned cortex-lib settings.
     -- Omitting those fields lets cortex-lib resolve the current preferences.
     exports['cortex-lib']:notify({
@@ -892,6 +901,8 @@ local function setOpen(open)
         startMenuHydration(openGeneration)
     else
         menuTypingLock = false
+        if EsAdmin.closeCharacterStudio then EsAdmin.closeCharacterStudio() end
+        if EsAdmin.closeVehicleStudio then EsAdmin.closeVehicleStudio() end
         SendNUIMessage({ action = 'cortex-admin:close' })
         clearMenuFocus()
     end
@@ -1223,6 +1234,14 @@ end, false)
 
 RegisterCommand('maxmods', function()
     runCommandAction('vehicle.maxMods', nil, 'max vehicle mods')
+end, false)
+
+RegisterCommand('perfmods', function()
+    runCommandAction('vehicle.performanceMods', nil, 'full performance upgrades')
+end, false)
+
+RegisterCommand('performancemods', function()
+    runCommandAction('vehicle.performanceMods', nil, 'full performance upgrades')
 end, false)
 
 local function giveWeaponCommand(args)
@@ -1636,7 +1655,7 @@ RegisterNetEvent('cortex-admin:client:updateWorldState', function(payload)
         shouldRefreshUi = true
     end
 
-    if shouldOverrideClock and worldState.hour ~= nil and worldState.minute ~= nil then
+    if shouldOverrideClock and not EsAdmin.vehicleStudioClockActive and worldState.hour ~= nil and worldState.minute ~= nil then
         NetworkOverrideClockTime(worldState.hour, worldState.minute, 0)
     end
 

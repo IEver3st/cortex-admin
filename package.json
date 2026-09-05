@@ -6,9 +6,13 @@
     "build": "bun run test:ui-layout && bun run vendor:ui && bun run preview:state",
     "dev": "bun tools/dev-server.ts",
     "preview:state": "bun tools/export-preview-state.mjs",
-    "test": "python tools/run-lua-tests.py",
+    "test": "python tools/run-lua-tests.py && bun run test:console && bun run test:catalog && bun run test:vehicle-mods && bun run test:vehicle-catalog",
+    "test:console": "bun test tests/console_navigation.test.mjs",
+    "test:vehicle-mods": "bun test tests/vehicle_mod_workbench.test.mjs",
+    "test:catalog": "bun test tests/wardrobe_capture.test.mjs",
     "test:ui-layout": "bun tools/check-ui-layout-contract.mjs",
-    "vendor:ui": "bun tools/vendor-ui.mjs"
+    "vendor:ui": "bun tools/vendor-ui.mjs",
+    "test:vehicle-catalog": "bun test tests/vehicle_catalog.test.mjs"
   },
   "dependencies": {
     "lucide": "0.462.0",

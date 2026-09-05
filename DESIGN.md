@@ -150,6 +150,50 @@ components:
 
 ## Overview
 
+### Admin console alignment
+
+The September 4 admin redesign is defined in [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md)
+and `ui/console.css`. It supersedes the older general shell styling below:
+flat ink surfaces, ivory selection, condensed italic page titles, square controls,
+task-group navigation, secondary tool tabs and a full-height edge-docked menu. The existing runtime
+accent remains for favorites, focus and changed values. Command search appears
+only where it filters commands; the studios have their own search and controls.
+No gradients or viewport-wide backing are introduced. Visual and in-game
+acceptance remain user-run. The later September 4 screenshots reject the icon
+rail, cramped floating window, trailing stars and flattened switch caps. Keep
+the task sidebar labeled, put favorites before command copy, give angled switch
+states the full control height, and launch either studio on the first click.
+The initial page is a workspace of pinned commands and registered quick tools;
+the complete command library is a separate destination with section filtering.
+Self controls and Online Players occupy separate pages. Studio launches stay
+outside the scrolling navigation. The latest brief rejects a small floating
+window; use the entire viewport height and scale width with the game viewport.
+
+### Vehicle modification workbench
+
+- Job: select discrete vehicle parts in the stationary, cursor-operated studio; the game vehicle remains the focal point in the transparent center.
+- Authority: the supplied September 4 screenshot identifies the rejected tall slider cards. Retain the studio's ivory, ink, condensed italic headings and scale tokens.
+- First viewport: Performance / Bodywork navigation and the complete normal performance set in the left inspector. Bodywork shows a compact part index with one expanded variant selector.
+- Signature: a tuning-sheet rhythm of hairline rows, numbered stage keys with diagonal status marks, and a numbered parts catalogue. Stock is a named choice, never a negative native index.
+- Grammar: direct stage buttons, a diagonal-cap turbo switch, grouped body parts, and one scrollable list of named variants without page controls. Native names and supported option counts remain authoritative; load the modification text bank before resolving labels. No invented horsepower or compatibility.
+- States: acknowledged selection, pending input lock, rejected changes, empty categories, long names, large addon catalogues, keyboard focus and reduced motion. Use compact rows and a height-limited scroll area at narrow widths and scales 1.0/1.6. Reveal the installed part when opening a list.
+- Reject: one slider card per discrete part, all body groups expanded at once, fake vehicle diagrams/thumbnails, gradients, blur and additional viewport backing. Runtime visual acceptance is user-run.
+
+### Character studio
+
+- Job: dress and shape the current character while keeping the actual ped central.
+- Authority: supplied character-customization screenshot and video for composition; Cortex tokens for material and typography.
+- Dedicated extension: transparent viewport, compact floating category navigation, left controls and a contextual right drawer. No full-width header backing, currency or checkout.
+- First viewport: outfit generator, numbered clothing selection, camera framing and Done remain reachable. The game occupies the center; panels own their scrolling.
+- Revision authority: the September 4 in-game screenshot rejects the opaque header and twin slabs. Use italic condensed section titles, ivory selection, thin rules and individually translucent control rows. Never blur the game. The wardrobe drawer is opt-in; clothing fitting details are contextual.
+- Signature: editorial section typography above open space, garment photographs with drawable numbers, numbered style rows and direct body/face camera framing. The character is framed from skeletal world coordinates rather than assumed model-origin offsets.
+- Controls: section tabs, searchable garment tiles, numeric steppers, continuous face sliders, explicit live-edit status. Existing save/share/import contracts remain intact.
+- Outfit directions: nine numbered choices in a compact two-column index, with one description for the selected direction below. Retain square ink rows and ivory selection; do not expand every direction into a tall description card. Newer named outfit families lead generation when available. The palette colors one focal garment, including footwear in sneaker-led looks.
+- Studio switches: square full-row controls with a diagonal divider at the right end. The end cap lights ivory with “On”; “Off” stays unlit. Preserve switch semantics, keyboard focus and disabled feedback. This studio-specific treatment overrides the general track-and-thumb switch rules below.
+- Reject: full-width opaque bars, permanent secondary panels, nested accordion stacks, decorative gradients, fake preview characters, invented thumbnails, guessed compatibility and broad random cross-products.
+- States: loading, unavailable ped, failed callbacks, empty catalog, unavailable photographs, busy generation, compact viewport and resource-stop cleanup.
+- Responsive: two side panels at 1920/2560; single scrolling left panel below 1200; transparent roots at every size. Runtime visual acceptance belongs to the user.
+
 Cortex Console is an in-game FiveM admin NUI. The screen behind the menu is the
 game world, so the design stays out of the way: deep neutral ink surfaces at
 ~98% opacity, flat hairline-divided settings instead of card stacks, and a
@@ -274,10 +318,11 @@ turn a section into a card. Docked shells and full-bleed panels are square
   accent-glow ring (`--es-focus-glow`), never a layout-shifting outline.
 - **`settings-section`:** transparent, square, and separated from the next
   section by one `line-1` divider. It is not a card.
-- **`toggle`:** a bare 34×19px track and thumb. Compact settings such as Voice
-  use the 30×18px variant. The button keeps `role="switch"`, `aria-checked`, a
-  visible focus ring, and a descriptive accessible name. Never put it inside
-  a second visual container.
+- **`toggle`:** use the character studio's angled state tab throughout the menu.
+  Compact controls use a 62 x 30px tab; studio controls use a full-width label
+  and a 72px state tab. Keep semantic switches, checked state, accessible names,
+  keyboard activation and visible focus. Warm paper indicates On, a diagonal
+  divider indicates Off. Do not reintroduce pill tracks or sliding thumbs.
 - **`segmented-control`:** one outer hairline and internal dividers. Options do
   not get separate borders, decorative indexes, or redundant check icons.
 
@@ -303,4 +348,25 @@ turn a section into a card. Docked shells and full-bleed panels are square
 - Don't let labels wrap to a second line in rows — shorten the string instead.
 - Don't stack rounded cards for settings, duplicate page context, or repeat
   control values in a separate summary panel.
-- Don't add `ON`/`OFF` text containers around switches.
+- Don't wrap the shared angled state tab in an additional switch container.
+
+## Vehicle catalog controls
+
+Paint and wheel selection should leave the vehicle as the main preview. Use the
+existing studio typography and transparent canvas, compact paint-area buttons,
+an eight-column square palette and a three-column wheel sheet. Show 64 paint
+samples or nine wheel images at a time; search by native name or ID. Active
+selections use a clear paper outline. No gradients, fake wheel illustrations,
+or whole-viewport surface. Runtime availability controls which wheels appear.
+Keep normal scrolling native, and keep the lighting clock outside the customizer
+render path. Swatch RGB values describe base color, not reflective finish.
+Small vehicle-workshop copy uses compact, square ink strips at 92% opacity:
+section labels, selected-color metadata, pagination, help and part feedback.
+Use the control rows' horizontal inset and hairlines for hierarchy. Text shadows
+alone are not a readability surface over daylight roads or the minimap. Keep
+panel gaps and the viewport transparent; do not add a full inspector slab.
+
+Plate and tint references live in separate Wheels subviews, so browsing wheel
+images does not also mount the plate/tint catalogs. Plates show original textures
+and the existing registration; tint examples are labeled illustrations, with no
+invented percentage claims. IDs and build availability follow the native enum.

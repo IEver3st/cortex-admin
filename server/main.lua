@@ -505,6 +505,58 @@ RegisterNetEvent('cortex-admin:server:requestPlayerDirectory', function()
     TriggerClientEvent('cortex-admin:client:setPlayerDirectory', src, buildPlayerDirectory(src))
 end)
 
+local function setWorldTime(hour, minute, changedState)
+    hour = toInteger(hour, 0, 23)
+    minute = toInteger(minute, 0, 59)
+    if hour == nil or minute == nil then return false end
+
+    worldState.hour = hour
+    worldState.minute = minute
+    changedState.hour = hour
+    changedState.minute = minute
+    return true
+end
+
+local function timeCommandReply(src, kind, message)
+    if src == 0 then
+        print('[cortex-admin] ' .. message)
+    else
+        TriggerClientEvent('cortex-admin:client:notify', src, kind, message)
+    end
+end
+
+RegisterCommand('time', function(src, args)
+    if src ~= 0 then
+        if not allowRequest(src, 'privileged-write', 15, 5000) then return end
+        if not hasPermission(src, 'world.time') then
+            timeCommandReply(src, 'error', 'You do not have permission to set the time.')
+            return
+        end
+    end
+
+    local first = args[1] and args[1]:lower() == 'set' and 2 or 1
+    local value = args[first] and args[first]:lower()
+    local count = #args - first + 1
+    local hour, minute
+    if value == 'day' and count == 1 then
+        hour, minute = 12, 0
+    elseif value and value:match('^%d+$') and (count == 1 or count == 2) then
+        local minuteArg = args[first + 1] or '0'
+        if minuteArg:match('^%d+$') then
+            hour, minute = value, minuteArg
+        end
+    end
+
+    local changedState = {}
+    if not setWorldTime(hour, minute, changedState) then
+        timeCommandReply(src, 'error', 'Usage: /time [set] <day|hour> [minute]. Hour: 0-23; minute: 0-59 (default 00).')
+        return
+    end
+
+    TriggerClientEvent('cortex-admin:client:updateWorldState', -1, changedState)
+    timeCommandReply(src, 'success', ('Time set to %02d:%02d.'):format(changedState.hour, changedState.minute))
+end, false) -- Authorization uses the same server-side world.time permission as the menu.
+
 RegisterNetEvent('cortex-admin:server:setWorldState', function(payload)
     local src = source
     if not allowRequest(src, 'privileged-write', 15, 5000) then return end
@@ -521,15 +573,7 @@ RegisterNetEvent('cortex-admin:server:setWorldState', function(payload)
     end
 
     if payload.hour ~= nil and hasPermission(src, 'world.time') then
-        local hour = toInteger(payload.hour, 0, 23)
-        local minute = toInteger(payload.minute, 0, 59)
-
-        if hour and minute then
-            worldState.hour = hour
-            worldState.minute = minute
-            changedState.hour = hour
-            changedState.minute = minute
-        end
+        setWorldTime(payload.hour, payload.minute, changedState)
     end
 
     if payload.freezeTime ~= nil and hasPermission(src, 'world.freezeTime') then

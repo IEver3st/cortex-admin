@@ -204,6 +204,7 @@ local PED_OVERLAY_MAP = {
     { key = 'molesFreckles', id = 9, colorType = 0 },
     { key = 'chestHair', id = 10, colorType = 1 },
     { key = 'bodyBlemishes', id = 11, colorType = 0 },
+    { key = 'additionalBodyBlemishes', id = 12, colorType = 0 },
 }
 
 local LEGACY_FACE_FEATURE_FIELDS = {
@@ -489,11 +490,7 @@ function ensureVmenuWriteBridge(actionLabel)
 end
 
 function getCurrentHairColors(ped)
-    local hairColor, hairHighlightColor = 0, 0
-    if GetPedHairColors then
-        hairColor, hairHighlightColor = GetPedHairColors(ped)
-    end
-    return hairColor or 0, hairHighlightColor or 0
+    return readPedHairColorsSafely(ped)
 end
 
 function getWardrobeShareTargetSnapshot()
@@ -595,7 +592,7 @@ function resolvePropVariation(ped, propId, drawable, texture)
     return safeDrawable, safeTexture, adjusted
 end
 
-function setPedComponent(ped, componentId, drawable, texture)
+function setPedComponent(ped, componentId, drawable, texture, palette)
     local componentIndex = tonumber(componentId)
     local safeDrawable, safeTexture, adjusted = resolveComponentVariation(ped, componentId, drawable, texture)
     if safeDrawable == nil or componentIndex == nil then
@@ -613,7 +610,7 @@ function setPedComponent(ped, componentId, drawable, texture)
         ))
     end
 
-    SetPedComponentVariation(ped, componentIndex, safeDrawable, safeTexture, 2)
+    SetPedComponentVariation(ped, componentIndex, safeDrawable, safeTexture, palette ~= nil and clampInteger(palette, 0, 3) or 2)
 end
 
 function setPedProp(ped, propId, drawable, texture)
@@ -685,6 +682,7 @@ function buildDefaultHeadBlend()
         shapeMix = 0.5,
         skinMix = 0.5,
         thirdMix = 0.0,
+        isParent = false,
     }
 end
 
@@ -743,35 +741,35 @@ function safeNativeNumber(fn, fallback, ...)
 end
 
 function readPedHairColorsSafely(ped)
-    if type(GetPedHairColors) ~= 'function' then
-        return 0, 0
-    end
-
-    local ok, hairColor, hairHighlightColor = pcall(GetPedHairColors, ped)
-    if not ok then
-        return 0, 0
-    end
-
-    return coerceWholeNumber(hairColor, 0), coerceWholeNumber(hairHighlightColor, 0)
+    -- Cfx exposes separate getters; GetPedHairColors is not a native.
+    return math.max(0, safeNativeWholeNumber(GetPedHairColor, 0, ped)),
+        math.max(0, safeNativeWholeNumber(GetPedHairHighlightColor, 0, ped))
 end
 
 function readPedHeadBlendSafely(ped)
     local fallback = buildDefaultHeadBlend()
-    local ok, hasData, shapeFirst, shapeSecond, shapeThird, skinFirst, skinSecond, skinThird, shapeMix, skinMix, thirdMix = pcall(GetPedHeadBlendData, ped)
+    -- The native writes an 80-byte struct with eight-byte field slots. The
+    -- generated Lua wrapper's single pointer return cannot represent it.
+    -- Layout: citizenfx/fivem code/client/clrcore/External/MpPedDataStructs.cs.
+    local buffer = string.rep('\0', 80)
+    local ok, hasData = pcall(function()
+        return Citizen.InvokeNative(0x2746BD9D88C5C5D0, ped, buffer, Citizen.ReturnResultAnyway())
+    end)
     if not ok or not hasData then
         return fallback, false
     end
 
     return {
-        shapeFirstID = coerceWholeNumber(shapeFirst, 0),
-        shapeSecondID = coerceWholeNumber(shapeSecond, 0),
-        shapeThirdID = coerceWholeNumber(shapeThird, 0),
-        skinFirstID = coerceWholeNumber(skinFirst, 0),
-        skinSecondID = coerceWholeNumber(skinSecond, 0),
-        skinThirdID = coerceWholeNumber(skinThird, 0),
-        shapeMix = coerceNumber(shapeMix, 0.5),
-        skinMix = coerceNumber(skinMix, 0.5),
-        thirdMix = coerceNumber(thirdMix, 0.0),
+        shapeFirstID = string.unpack('<i4', buffer, 1),
+        shapeSecondID = string.unpack('<i4', buffer, 9),
+        shapeThirdID = string.unpack('<i4', buffer, 17),
+        skinFirstID = string.unpack('<i4', buffer, 25),
+        skinSecondID = string.unpack('<i4', buffer, 33),
+        skinThirdID = string.unpack('<i4', buffer, 41),
+        shapeMix = coerceNumber(string.unpack('<f', buffer, 49), 0.5),
+        skinMix = coerceNumber(string.unpack('<f', buffer, 57), 0.5),
+        thirdMix = coerceNumber(string.unpack('<f', buffer, 65), 0.0),
+        isParent = string.unpack('<I1', buffer, 73) ~= 0,
     }, true
 end
 
@@ -808,6 +806,7 @@ Admin.getPedAppearance = function()
     end
 
     local data = buildEmptyAppearanceData(safeNativeWholeNumber(GetEntityModel, 0, ped))
+    data.gameBuild = safeNativeWholeNumber(GetGameBuildNumber, 0)
 
     for i = 0, 11 do
         local drawable = math.max(0, safeNativeWholeNumber(GetPedDrawableVariation, 0, ped, i))
@@ -845,7 +844,7 @@ Admin.getPedAppearance = function()
         data.hairColor, data.hairHighlightColor = readPedHairColorsSafely(ped)
         data.eyeColor = math.max(0, safeNativeWholeNumber(GetPedEyeColor, 0, ped))
 
-        local overlaysToTrack = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }
+        local overlaysToTrack = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }
         for _, id in ipairs(overlaysToTrack) do
             local overlayData = readPedOverlaySafely(ped, id)
             if overlayData then
@@ -1033,7 +1032,8 @@ function normalizeMpPedData(data, sourceKey)
         normalized.EyeColor = tonumber(pedAppearance.eyeColor) or 0
     end
 
-    if normalized.DrawableVariations.clothes[2] == nil and pedAppearance.hairStyle ~= nil then
+    if normalized.DrawableVariations.clothes[2] == nil
+        and normalized.DrawableVariations.clothes['2'] == nil and pedAppearance.hairStyle ~= nil then
         normalized.DrawableVariations.clothes[2] = {
             tonumber(pedAppearance.hairStyle) or 0,
             0,
@@ -2110,7 +2110,8 @@ end
 function fetchPedComponent(ped, componentId)
     return {
         GetPedDrawableVariation(ped, componentId),
-        GetPedTextureVariation(ped, componentId)
+        GetPedTextureVariation(ped, componentId),
+        safeNativeWholeNumber(GetPedPaletteVariation, 2, ped, componentId),
     }
 end
 
@@ -2182,7 +2183,7 @@ applyHeadBlend = function(ped, data)
         data.shapeMix or 0.0,
         data.skinMix or 0.0,
         data.thirdMix or 0.0,
-        false
+        data.isParent == true
     )
 end
 
@@ -2203,7 +2204,7 @@ function captureMpPedData(ped, saveName)
 
     local faceFeatures = { features = {} }
     local hasNonZeroFeatures = false
-    for featureId = 0, 19 do
+    for featureId = 0, (isFreemodePed(ped) and 19 or -1) do
         local value = GetPedFaceFeature(ped, featureId)
         faceFeatures.features[featureId] = value
         if value ~= 0 then hasNonZeroFeatures = true end
@@ -2215,9 +2216,10 @@ function captureMpPedData(ped, saveName)
         print('[cortex-admin] Face features captured (all default/zero)')
     end
 
-    local hairColor, hairHighlightColor = getCurrentHairColors(ped)
+    local hairColor, hairHighlightColor = 0, 0
+    if isFreemodePed(ped) then hairColor, hairHighlightColor = getCurrentHairColors(ped) end
 
-    local eyeColor = GetPedEyeColor(ped)
+    local eyeColor = isFreemodePed(ped) and GetPedEyeColor(ped) or 0
 
     local headOverlays = {}
     for i = 1, #PED_OVERLAY_MAP do
@@ -2296,7 +2298,7 @@ end
 function applyMpPedData(ped, data, options)
     if not data then return false end
     if data.ModelHash and data.ModelHash ~= 0
-        and not authorizeModel('ped', data.ModelHash, 'player.loadMpPed') then return false end
+        and not authorizeModel('ped', data.ModelHash, options and options.actionId or 'player.loadMpPed') then return false end
     
     print('[cortex-admin] Applying MP Ped data...')
 
@@ -2306,9 +2308,12 @@ function applyMpPedData(ped, data, options)
             if exports['cortex-lib']:requestModel(data.ModelHash, 5000) then
                 SetPlayerModel(PlayerId(), data.ModelHash)
                 SetModelAsNoLongerNeeded(data.ModelHash)
-            ped = getPed()
-            Wait(100)
-        end
+                ped = getPed()
+                Wait(100)
+            else
+                notify('error', 'Failed to load model.')
+                return false
+            end
         end
     end
 
@@ -2330,7 +2335,7 @@ function applyMpPedData(ped, data, options)
 
     if data.DrawableVariations and data.DrawableVariations.clothes then
         for componentId, values in pairs(data.DrawableVariations.clothes) do
-            setPedComponent(ped, tonumber(componentId), values[1], values[2])
+            setPedComponent(ped, tonumber(componentId), values[1], values[2], values[3])
         end
         print('[cortex-admin] Applied clothing')
     end
@@ -3127,7 +3132,7 @@ function savePersonalVehicles(data)
         end
     end
 
-    saveKvpJson(C.PERSONAL_VEHICLES_KEY, persist)
+    return saveKvpJson(C.PERSONAL_VEHICLES_KEY, persist)
 end
 
 local function emptyDomainResult(total)
@@ -3935,15 +3940,13 @@ function actionSavePed(data)
 
     local ped = getPed()
     local model = GetEntityModel(ped)
-    local payload = {
-        model = model,
-        ModelHash = model,
-        IsMale = model == joaat('mp_m_freemode_01'),
-        SaveName = name,
-        Version = 1,
-    }
+    local payload = captureMpPedData(ped, name)
+    payload.model = model
 
-    saveKvpJson(kvpKey('ped_', name), payload)
+    if not saveKvpJson(kvpKey('ped_', name), payload) then
+        notify('error', 'Failed to save ped.')
+        return
+    end
     notify('success', 'Ped saved.')
 end
 
@@ -3957,6 +3960,13 @@ function actionLoadPed(data)
     local payload = loadKvpJson(kvpKey('ped_', name))
     if not payload or not payload.ModelHash then
         notify('error', 'Saved ped not found.')
+        return
+    end
+
+    if payload.DrawableVariations then
+        if applyMpPedData(getPed(), payload, { actionId = 'player.loadPed' }) then
+            notify('success', 'Ped loaded.')
+        end
         return
     end
 
@@ -4254,6 +4264,19 @@ function applyVehicleMods(vehicle)
     SetVehicleMod(vehicle, 16, GetNumVehicleMods(vehicle, 16) - 1, false)
     SetVehicleWindowTint(vehicle, 1)
     SetVehicleTyresCanBurst(vehicle, false)
+end
+
+function applyPerformanceMods(vehicle)
+    SetVehicleModKit(vehicle, 0)
+
+    for _, modType in ipairs({ 11, 12, 13, 15, 16 }) do
+        local modCount = GetNumVehicleMods(vehicle, modType)
+        if modCount and modCount > 0 then
+            SetVehicleMod(vehicle, modType, modCount - 1, false)
+        end
+    end
+
+    ToggleVehicleMod(vehicle, 18, true)
 end
 
 local freecam = {
@@ -4901,6 +4924,18 @@ local function generatedComponentIsValid(ped, component)
     -- Runtime global counts let older game builds discard unavailable pieces.
     local drawableCount = tonumber(GetNumberOfPedDrawableVariations(ped, component.component)) or 0
     if drawable < 0 or drawable >= drawableCount then return false end
+    if component.globalDrawable ~= nil then
+        local gender = GetEntityModel(ped) == joaat('mp_f_freemode_01') and 'female' or 'male'
+        local expected = AppearanceIndex and AppearanceIndex[gender]
+            and AppearanceIndex[gender][component.component]
+            and AppearanceIndex[gender][component.component][drawable]
+        -- A count alone can accidentally accept addon clothing at an absent
+        -- DLC's old global index. Require the researched collection identity.
+        if not expected or type(GetPedCollectionNameFromDrawable) ~= 'function'
+            or type(GetPedCollectionLocalIndexFromDrawable) ~= 'function' then return false end
+        if GetPedCollectionNameFromDrawable(ped, component.component, drawable) ~= expected.collection
+            or GetPedCollectionLocalIndexFromDrawable(ped, component.component, drawable) ~= expected.drawable then return false end
+    end
     local textureCount = tonumber(GetNumberOfPedTextureVariations(ped, component.component, drawable)) or 0
     if textureCount <= 0 then return component.texture == 0 end
     return component.texture >= 0 and component.texture < textureCount
@@ -4925,34 +4960,58 @@ end
 
 local function selectGeneratedOutfit(ped, options)
     local gender = GetEntityModel(ped) == joaat('mp_f_freemode_01') and 'female' or 'male'
-    local pools = AppearanceRandomizer and AppearanceRandomizer.getPiecePools
-        and AppearanceRandomizer.getPiecePools(gender, options.style, options.palette) or nil
-    if not pools or not AppearanceRandomizer.filterPiecePools or not AppearanceRandomizer.assembleOutfit then return nil end
-
-    pools = AppearanceRandomizer.filterPiecePools(
-        pools,
-        function(piece) return generatedClothingPieceIsValid(ped, piece) end,
-        function(accessory) return generatedAccessoryIsValid(ped, accessory) end
-    )
-
-    if #pools.tops == 0 or #pools.bottoms == 0 or #pools.shoes == 0 then
-        print(('[cortex-admin] No compatible generated pieces model=%s gender=%s style=%s tops=%d bottoms=%d shoes=%d'):format(
-            tostring(GetEntityModel(ped)), gender, options.style, #pools.tops, #pools.bottoms, #pools.shoes
-        ))
-        return nil
+    if not AppearanceRandomizer or not AppearanceRandomizer.getOutfitFamilies then return nil end
+    local families = {}
+    local fallbackFamilies = {}
+    for _, family in ipairs(AppearanceRandomizer.getOutfitFamilies(gender, options.style, options.palette)) do
+        local pools = AppearanceRandomizer.filterPiecePools(family.pools,
+            function(piece) return generatedClothingPieceIsValid(ped, piece) end,
+            function(accessory) return generatedAccessoryIsValid(ped, accessory) end)
+        if #pools.tops > 0 and #pools.bottoms > 0 and #pools.shoes > 0 then
+            local available = family.fallback and fallbackFamilies or families
+            available[#available + 1] = { name = family.name, pools = pools }
+        end
     end
+    if #families == 0 then families = fallbackFamilies end
+    if #families == 0 then return nil end
 
     local fallback = nil
     for _ = 1, 12 do
-        local outfit = AppearanceRandomizer.assembleOutfit(pools, options.accessories, function(count)
+        local family = families[math.random(1, #families)]
+        local outfit = AppearanceRandomizer.assembleOutfit(family.pools, options.accessories, function(count)
             return math.random(1, count)
         end)
         if outfit then
+            outfit.name = family.name .. ': ' .. outfit.name
             fallback = outfit
             if outfit.id ~= lastGeneratedOutfitId then return outfit end
         end
     end
     return fallback
+end
+
+Admin.getStudioCatalog = function()
+    local ped = getPed()
+    if ped == 0 or not DoesEntityExist(ped) then return { ok = false, error = 'ped_unavailable' } end
+    local gender = GetEntityModel(ped) == joaat('mp_f_freemode_01') and 'female' or 'male'
+    local items = {}
+    if isFreemodePed(ped) then
+        for category, componentId in pairs({ tops = 11, bottoms = 4, shoes = 6 }) do
+            for _, entry in ipairs(AppearanceCatalog[gender][category]) do
+                local component = { component = componentId, globalDrawable = entry.drawable, texture = 0 }
+                if generatedComponentIsValid(ped, component) then
+                    local indexed = AppearanceIndex[gender][componentId][entry.drawable]
+                    items[#items + 1] = {
+                        component = componentId, drawable = entry.drawable,
+                        name = entry.id:gsub('_', ' '), collection = indexed.collection,
+                        localDrawable = indexed.drawable,
+                        photo = indexed.photo and ('wardrobe/%s-%d-%d.webp'):format(gender, componentId, entry.drawable) or nil,
+                    }
+                end
+            end
+        end
+    end
+    return { ok = true, items = items, model = GetEntityModel(ped) }
 end
 
 local function applyGeneratedCollectionComponent(ped, component)
@@ -5140,6 +5199,10 @@ Admin.randomizeAppearance = function(rawOptions)
 
     local outfit = selectGeneratedOutfit(ped, options)
     if not outfit then
+        if targetModel ~= currentModel and undoSnapshot then
+            local restored = applyMpPedData(ped, undoSnapshot, { preserveDecorations = true })
+            if not restored then lastAppearanceRandomization = undoSnapshot end
+        end
         notify('error', 'No compatible clothing pieces were available for this freemode model.')
         return { ok = false, error = 'no_compatible_outfit', canUndo = lastAppearanceRandomization ~= nil }
     end
@@ -5249,7 +5312,24 @@ local previewVehicle = 0
 local previewModel = nil
 local previewWatcherActive = false
 local previewShared = false
+local previewHelpVisible = false
+local previewGeneration = 0
 local clearVehiclePreview
+
+local function showPreviewHelp()
+    if previewHelpVisible then return end
+    if freecam.enabled or noclip.enabled then return end
+    previewHelpVisible = true
+    exports['cortex-lib']:showHelp({
+        { label = 'Stop vehicle preview', value = 'Backspace' },
+    })
+end
+
+local function hidePreviewHelp()
+    if not previewHelpVisible then return end
+    previewHelpVisible = false
+    exports['cortex-lib']:hideHelp()
+end
 
 function collectPreviewExtraStates()
     local list = {}
@@ -5348,15 +5428,23 @@ function configurePreviewVehicleEntity(vehicle, networkShared)
     end
 end
 
-function spawnPreviewVehicleEntity(model, networkShared, transform)
+function spawnPreviewVehicleEntity(model, networkShared, transform, generation)
     if not model or model == '' then
         return false
     end
-    if not exports['cortex-lib']:requestModel(model, 5000) then
+    local modelHash = type(model) == 'number' and model or joaat(model)
+    local loaded = exports['cortex-lib']:requestModel(model, 5000)
+    -- Streaming yields. A newer selection, Clear, spawn, or resource stop owns
+    -- the preview now; never create an entity for this obsolete request.
+    if generation ~= previewGeneration then
+        SetModelAsNoLongerNeeded(modelHash)
+        return false
+    end
+    if not loaded then
+        SetModelAsNoLongerNeeded(modelHash)
         notify('error', 'Unable to load vehicle model.')
         return false
     end
-    local modelHash = joaat(model)
     local spawnX, spawnY, spawnZ, spawnHeading
     if transform and transform.x and transform.y and transform.z then
         spawnX = transform.x
@@ -5428,12 +5516,15 @@ function startPreviewWatcher()
 
     previewWatcherActive = true
     CreateThread(function()
-        local closeControl = tonumber(Config.VehiclePreviewCloseControl) or 194
+        local closeControl = tonumber(Config.VehiclePreviewCloseControl) or 177
         while previewVehicle ~= 0 do
             if IsControlJustPressed(0, closeControl) then
-                clearVehiclePreview()
-                notify('info', 'Vehicle preview closed.')
-                break
+                -- Never steal Backspace while the admin menu (or chat) is consuming it as text input.
+                if not IsNuiFocused() or IsNuiFocusKeepingInput() then
+                    clearVehiclePreview()
+                    notify('info', 'Vehicle preview closed.')
+                    break
+                end
             end
 
             Wait(0)
@@ -5444,9 +5535,11 @@ function startPreviewWatcher()
 end
 
 clearVehiclePreview = function()
+    previewGeneration = previewGeneration + 1
     destroyPreviewEntityOnly()
     previewModel = nil
     previewShared = false
+    hidePreviewHelp()
 end
 
 function startVehiclePreview(model)
@@ -5455,12 +5548,19 @@ function startVehiclePreview(model)
         return false
     end
 
+    -- Reserve the request before authorization, which also yields. Ordering
+    -- must follow the user's selections, not server/model completion order.
+    previewGeneration = previewGeneration + 1
+    local generation = previewGeneration
     if not authorizeModel('vehicle', model, 'vehicle.spawn') then return false end
+    if generation ~= previewGeneration then return false end
     clearVehiclePreview()
-    if not spawnPreviewVehicleEntity(model, false, nil) then
+    generation = previewGeneration
+    if not spawnPreviewVehicleEntity(model, false, nil, generation) then
         return false
     end
     previewModel = model
+    showPreviewHelp()
     startPreviewWatcher()
     return true
 end
@@ -5477,6 +5577,8 @@ end
 
 Admin.setPreviewShared = function(shared)
     shared = shared == true
+    previewGeneration = previewGeneration + 1
+    local generation = previewGeneration
     if not previewModel or previewModel == '' then
         previewShared = false
         return not shared
@@ -5500,20 +5602,23 @@ Admin.setPreviewShared = function(shared)
         }
         states = collectPreviewExtraStates()
     end
+    local model = previewModel
     destroyPreviewEntityOnly()
-    previewShared = shared
-    if not spawnPreviewVehicleEntity(previewModel, previewShared, transform) then
-        previewShared = false
+    if not spawnPreviewVehicleEntity(model, shared, transform, generation) then
+        if generation ~= previewGeneration then return false end
+        clearVehiclePreview()
         notify('error', 'Failed to update preview vehicle.')
         Admin.sendUiState()
         return false
     end
+    previewShared = shared
     if #states > 0 then
         applyVehicleExtraStates(previewVehicle, states)
     end
     if previewShared then
         syncPreviewExtrasStatebag()
     end
+    showPreviewHelp()
     startPreviewWatcher()
     Admin.sendUiState()
     return true
@@ -5613,6 +5718,14 @@ function actionMaxMods()
 
     applyVehicleMods(vehicle)
     notify('success', 'Max mods applied.')
+end
+
+function actionPerformanceMods()
+    local vehicle = ensureVehicle()
+    if not vehicle then return end
+
+    applyPerformanceMods(vehicle)
+    notify('success', 'Full performance upgrades applied.')
 end
 
 Admin.vehicleTuning = Admin.vehicleTuning or {
@@ -6393,6 +6506,8 @@ Admin.executeAction = function(actionId, data)
         return actionFlipVehicle()
     elseif actionId == 'vehicle.maxMods' then
         return actionMaxMods()
+    elseif actionId == 'vehicle.performanceMods' then
+        return actionPerformanceMods()
     elseif actionId == 'vehicle.speedLimiter' then
         local speed = parseNumber(data and data.speed)
         if not speed or speed <= 0 then
@@ -6718,6 +6833,11 @@ Admin.toggleAction = function(actionId, enabled)
         setFreecam(enabled, false)
     elseif actionId == 'world.disableNpcs' then
         setAmbientSuppressionState(enabled == true)
+        TriggerEvent(
+            'cortex-reanimated:client:setPaused',
+            'cortex-admin:disableNpcs',
+            enabled == true
+        )
         if enabled then
             clearPoolEntities('CPed', 250.0)
             clearPoolEntities('CVehicle', 350.0)
@@ -6925,6 +7045,21 @@ AddEventHandler('onResourceStop', function(resourceName)
     clearVehiclePreview()
     Admin.restoreVehicleTuningSessions()
     setAmbientSuppressionState(false)
+    TriggerEvent('cortex-reanimated:client:setPaused', 'cortex-admin:disableNpcs', false)
+end)
+
+AddEventHandler('onClientResourceStart', function(resourceName)
+    if resourceName ~= 'cortex-reanimated' then return end
+    TriggerEvent(
+        'cortex-reanimated:client:setPaused',
+        'cortex-admin:disableNpcs',
+        state.toggles and state.toggles['world.disableNpcs'] == true
+    )
+end)
+
+AddEventHandler('onClientResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    TriggerEvent('cortex-reanimated:client:setPaused', 'cortex-admin:disableNpcs', false)
 end)
 
 CreateThread(function()
@@ -7159,7 +7294,11 @@ CreateThread(function()
     end
 end)
 
-local function getDrivenCustomizationVehicle()
+local function getDrivenCustomizationVehicle(studioSession)
+    if studioSession ~= nil then
+        if not Admin.getVehicleStudioVehicle then return nil, 'studio_unavailable' end
+        return Admin.getVehicleStudioVehicle(studioSession)
+    end
     local ped = getPed()
     local vehicle = GetVehiclePedIsIn(ped, false)
     if vehicle == 0 or not DoesEntityExist(vehicle) then return nil, 'no_vehicle' end
@@ -7221,9 +7360,48 @@ local function importedExtraLabelsForVehicle(modelHash)
     return labels
 end
 
-Admin.getVehicleCustomization = function()
-    local vehicle, errorReason = getDrivenCustomizationVehicle()
+Admin.saveVehicleStudioPreset = function(session, name)
+    if type(name) ~= 'string' then return { ok = false, error = 'invalid_name' } end
+    name = name:match('^%s*(.-)%s*$')
+    if #name == 0 or #name > 64 or name:find('%c') then return { ok = false, error = 'invalid_name' } end
+    local vehicle, err = Admin.getVehicleStudioVehicle(session)
+    if not vehicle then return { ok = false, error = err } end
+    local personalData = loadPersonalVehicles()
+    local vehicles = personalData.vehicles or {}
+    for _, entry in ipairs(vehicles) do
+        if type(entry.name) == 'string' and entry.name:lower() == name:lower() then
+            return { ok = false, error = 'name_exists' }
+        end
+    end
+    local props = captureVehicleData(vehicle, name)
+    vehicles[#vehicles + 1] = { id = ('veh_%d_%d'):format(GetGameTimer(), math.random(1000, 9999)),
+        name = name, model = props.model, modelLabel = getVehicleLabel(props.model),
+        category = props.category or 'other', source = C.PERSONAL_VEHICLE_SOURCE_ES_ADMIN, props = props }
+    sortPersonalVehicles(vehicles)
+    personalData.vehicles = vehicles
+    if not savePersonalVehicles(personalData) then return { ok = false, error = 'save_failed' } end
+    Admin.refreshPersonalVehiclesCache()
+    SendNUIMessage({ action = 'cortex-admin:setState', data = { personalVehicles = Admin.getPersonalVehiclesCache() } })
+    return { ok = true, name = name }
+end
+
+Admin.getVehicleCustomization = function(studioSession)
+    local vehicle, errorReason = getDrivenCustomizationVehicle(studioSession)
     if not vehicle then return nil, errorReason end
+
+    -- Mod labels live in the shop text bank, which is not loaded just by
+    -- entering a vehicle. Wait before resolving names for the NUI snapshot.
+    if not HasThisAdditionalTextLoaded('mod_mnu', 10) then
+        RequestAdditionalText('mod_mnu', 10)
+        local started = GetGameTimer()
+        while not HasThisAdditionalTextLoaded('mod_mnu', 10) and GetGameTimer() - started < 1000 do
+            Wait(0)
+        end
+        -- Streaming yields: the player may have closed the studio or changed cars.
+        local resolved, resolveError = getDrivenCustomizationVehicle(studioSession)
+        if not resolved then return nil, resolveError end
+        if resolved ~= vehicle then return nil, 'vehicle_changed' end
+    end
 
     SetVehicleModKit(vehicle, 0)
 
@@ -7245,6 +7423,7 @@ Admin.getVehicleCustomization = function()
     end
 
     local data = {
+        gameBuild = safeNativeWholeNumber(GetGameBuildNumber, 0),
         vehicle = {
             model = GetEntityModel(vehicle),
             label = getVehicleLabel(GetEntityModel(vehicle)),
@@ -7336,9 +7515,9 @@ Admin.getVehicleCustomization = function()
     return data
 end
 
-Admin.setVehicleCustomization = function(data)
+Admin.setVehicleCustomization = function(data, studioSession)
     if type(data) ~= 'table' or type(data.type) ~= 'string' then return false, 'invalid_payload' end
-    local vehicle, errorReason = getDrivenCustomizationVehicle()
+    local vehicle, errorReason = getDrivenCustomizationVehicle(studioSession)
     if not vehicle then return false, errorReason end
 
     SetVehicleModKit(vehicle, 0)
@@ -7409,6 +7588,7 @@ Admin.setVehicleCustomization = function(data)
     elseif data.type == 'plate' then
         local value = customizationInteger(data.value, 0, 12)
         if value == nil then return false, 'invalid_plate' end
+        if value >= 6 and safeNativeWholeNumber(GetGameBuildNumber, 0) < 3095 then return false, 'plate_build_unsupported' end
         SetVehicleNumberPlateTextIndex(vehicle, value)
     elseif data.type == 'window' then
         local value = customizationInteger(data.value, 0, 6)

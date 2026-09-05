@@ -1,0 +1,150 @@
+/* One switch language, shared by the menu and both studios. */
+.admin-toggle, .admin-option-toggle, .voice-switch {
+    display: inline-grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    align-items: stretch;
+    justify-items: stretch;
+    width: calc(62px * var(--es-ui-scale));
+    min-width: calc(62px * var(--es-ui-scale));
+    height: calc(30px * var(--es-ui-scale));
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+}
+/* Explicitly fill the button's grid cell. Native button content alignment can
+   otherwise shrink this span to its line box, flattening the diagonal cap. */
+:is(.admin-toggle, .admin-option-toggle, .voice-switch) > .studio-switch-state {
+    width: 100%;
+    height: 100%;
+    min-height: calc(30px * var(--es-ui-scale));
+    align-self: stretch;
+    justify-self: stretch;
+    box-sizing: border-box;
+}
+:is(.admin-toggle, .admin-option-toggle, .voice-switch) > .studio-switch-state::before {
+    background: var(--studio-wash, var(--ink-3));
+}
+.studio-switch-state {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    place-items: center;
+    padding-left: calc(16px * var(--es-ui-scale));
+    color: var(--text-2);
+    font: 600 calc(11px * var(--es-ui-scale))/1 var(--font-ui);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    transition: color 120ms;
+}
+.studio-switch-state::before, .studio-switch-state::after { content: ''; position: absolute; inset: 0; z-index: -1; }
+.studio-switch-state::before {
+    clip-path: polygon(calc(16px * var(--es-ui-scale)) 0, 100% 0, 100% 100%, 0 100%);
+    background: transparent;
+    transition: background-color 120ms;
+}
+.studio-switch-state::after {
+    clip-path: polygon(calc(16px * var(--es-ui-scale)) 0, calc(16px * var(--es-ui-scale) + 1px) 0, 1px 100%, 0 100%);
+    background: var(--studio-line, var(--line-2));
+}
+:is(.admin-toggle.active, .admin-option-toggle.active, .voice-switch.is-on, .appearance-generator-switch[aria-checked=true]) .studio-switch-state {
+    color: var(--studio-ink, var(--ink-1));
+}
+:is(.admin-toggle.active, .admin-option-toggle.active, .voice-switch.is-on, .appearance-generator-switch[aria-checked=true]) .studio-switch-state::before {
+    background: var(--studio-paper, var(--text-1));
+}
+.studio-toggle-row, .appearance-generator-switch {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) calc(72px * var(--es-ui-scale));
+    align-items: stretch;
+    width: 100%;
+    min-height: calc(44px * var(--es-ui-scale));
+    gap: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--studio-wash, var(--ink-2));
+    color: var(--text-1);
+    text-align: left;
+    cursor: pointer;
+}
+.studio-toggle-row { margin: 0 0 calc(6px * var(--es-ui-scale)); }
+.appearance-generator-switch > span:first-child { min-width: 0; padding: calc(12px * var(--es-ui-scale)); }
+.studio-toggle-row strong { display: block; font-size: calc(12px * var(--es-ui-scale)); font-weight: 600; }
+.studio-toggle-row small { display: block; margin-top: calc(3px * var(--es-ui-scale)); color: var(--text-2); font-size: calc(10px * var(--es-ui-scale)); }
+.studio-toggle-row:disabled { cursor: not-allowed; opacity: 0.45; }
+.studio-toggle-row:focus-visible { outline: 2px solid var(--studio-paper, var(--text-1)); outline-offset: 2px; }
+
+/* Native scroll ownership. No smooth-scroll interpolation or JS wheel loop. */
+.studio-panel-scroll, .appearance-content-area--scroll, .appearance-overlay-scroll {
+    overscroll-behavior-y: contain;
+    scroll-behavior: auto;
+    scrollbar-gutter: stable;
+}
+.studio-panel-scroll { contain: layout style; }
+.vehicle-paint-picker, .vehicle-wheel-picker { min-width: 0; margin-bottom: calc(18px * var(--es-ui-scale)); }
+.vehicle-paint-picker > input, .vehicle-wheel-picker > input { width: 100%; box-sizing: border-box; margin-bottom: calc(10px * var(--es-ui-scale)); }
+.vehicle-paint-channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(3px * var(--es-ui-scale)); }
+.vehicle-paint-channels button {
+    display: flex; align-items: center; gap: calc(8px * var(--es-ui-scale)); min-width: 0;
+    padding: calc(8px * var(--es-ui-scale)); border: 0; border-radius: 0;
+    background: var(--studio-wash, var(--ink-2)); color: var(--text-1);
+    text-align: left; font: 500 calc(11px * var(--es-ui-scale))/1.25 var(--font-ui); cursor: pointer;
+}
+.vehicle-paint-channels button[aria-pressed=true] { background: var(--studio-paper, var(--text-1)); color: var(--studio-ink, var(--ink-1)); }
+.vehicle-color-chip { width: calc(22px * var(--es-ui-scale)); height: calc(22px * var(--es-ui-scale)); flex-shrink: 0; border: 1px solid #808080; background: transparent; }
+.vehicle-catalog-selection { display: flex; align-items: baseline; justify-content: space-between; gap: calc(10px * var(--es-ui-scale)); margin: calc(14px * var(--es-ui-scale)) 0 calc(10px * var(--es-ui-scale)); }
+.vehicle-catalog-selection strong { font-size: calc(12px * var(--es-ui-scale)); overflow-wrap: anywhere; }
+.vehicle-catalog-selection > span { flex-shrink: 0; color: var(--text-2); font: calc(10px * var(--es-ui-scale))/1.4 var(--font-mono); }
+.vehicle-paint-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: calc(5px * var(--es-ui-scale)); }
+.vehicle-paint-grid button {
+    aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid #777;
+    border-radius: 0; cursor: pointer; position: relative;
+}
+.vehicle-paint-grid button > span { position: absolute; right: 0; bottom: 0; padding: 1px 2px; background: #111c; color: #fff; font: calc(8px * var(--es-ui-scale))/1.2 var(--font-mono); }
+.vehicle-paint-grid button[aria-pressed=true] { outline: 2px solid #fff; outline-offset: 1px; box-shadow: inset 0 0 0 2px #111; }
+.vehicle-catalog-pages { display: flex; align-items: center; justify-content: space-between; gap: calc(8px * var(--es-ui-scale)); margin: calc(10px * var(--es-ui-scale)) 0; }
+.vehicle-catalog-pages button { padding: calc(7px * var(--es-ui-scale)) calc(10px * var(--es-ui-scale)); border: 0; border-radius: 0; background: var(--studio-wash, var(--ink-2)); color: var(--text-1); font: calc(11px * var(--es-ui-scale))/1.3 var(--font-ui); cursor: pointer; }
+.vehicle-catalog-pages button:disabled { opacity: 0.4; cursor: not-allowed; }
+.vehicle-catalog-pages > span { color: var(--text-2); font: calc(10px * var(--es-ui-scale))/1.3 var(--font-mono); }
+.vehicle-wheel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(5px * var(--es-ui-scale)); }
+.vehicle-wheel-grid button {
+    display: flex; flex-direction: column; align-items: stretch; min-width: 0; padding: 0;
+    border: 1px solid transparent; border-radius: 0; background: var(--studio-wash, var(--ink-2)); color: var(--text-1);
+    text-align: left; cursor: pointer;
+}
+.vehicle-wheel-grid img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; background: #202124; }
+.vehicle-wheel-grid strong { padding: calc(6px * var(--es-ui-scale)) calc(7px * var(--es-ui-scale)) 0; min-height: 2.6em; font: 600 calc(10px * var(--es-ui-scale))/1.3 var(--font-ui); overflow-wrap: anywhere; }
+.vehicle-wheel-grid small { padding: calc(3px * var(--es-ui-scale)) calc(7px * var(--es-ui-scale)) calc(7px * var(--es-ui-scale)); color: var(--text-2); font: calc(9px * var(--es-ui-scale))/1.3 var(--font-mono); }
+.vehicle-wheel-grid button[aria-pressed=true] { border-color: var(--studio-paper, var(--text-1)); background: var(--studio-paper, var(--text-1)); color: var(--studio-ink, var(--ink-1)); }
+.vehicle-wheel-grid button[aria-pressed=true] small { color: inherit; }
+.vehicle-wheel-grid button:disabled { opacity: 0.45; cursor: wait; }
+.vehicle-wheel-no-image { display: grid; place-items: center; aspect-ratio: 1; color: var(--text-2); background: #202124; font: calc(9px * var(--es-ui-scale))/1.3 var(--font-mono); text-align: center; }
+.vehicle-xenon-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(4px * var(--es-ui-scale)); width: 100%; }
+.vehicle-xenon-grid button { display: flex; align-items: center; gap: calc(5px * var(--es-ui-scale)); padding: calc(6px * var(--es-ui-scale)); border: 1px solid transparent; background: var(--studio-wash, var(--ink-2)); color: var(--text-1); font: calc(10px * var(--es-ui-scale))/1.3 var(--font-ui); cursor: pointer; }
+.vehicle-xenon-grid button[aria-pressed=true] { border-color: var(--studio-paper, var(--text-1)); }
+.vehicle-xenon-grid button:disabled { opacity: 0.45; cursor: not-allowed; }
+.vehicle-light-swatch { width: 100%; height: calc(34px * var(--es-ui-scale)); margin-bottom: calc(10px * var(--es-ui-scale)); }
+.vehicle-fitment-tabs { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: calc(3px * var(--es-ui-scale)); margin-bottom: calc(16px * var(--es-ui-scale)); }
+.vehicle-fitment-tabs button { min-width: 0; padding: calc(10px * var(--es-ui-scale)) calc(6px * var(--es-ui-scale)); border: 0; border-radius: 0; background: var(--studio-wash, var(--ink-2)); color: var(--text-1); font: 600 calc(11px * var(--es-ui-scale))/1.3 var(--font-ui); cursor: pointer; }
+.vehicle-fitment-tabs button[aria-pressed=true] { background: var(--studio-paper, var(--text-1)); color: var(--studio-ink, var(--ink-1)); }
+.vehicle-plate-grid, .vehicle-tint-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(6px * var(--es-ui-scale)); }
+:is(.vehicle-plate-grid, .vehicle-tint-grid) button { display: flex; flex-direction: column; min-width: 0; align-items: stretch; padding: calc(5px * var(--es-ui-scale)); border: 1px solid transparent; border-radius: 0; background: var(--studio-wash, var(--ink-2)); color: var(--text-1); text-align: left; cursor: pointer; }
+:is(.vehicle-plate-grid, .vehicle-tint-grid) button[aria-pressed=true] { border-color: var(--studio-paper, var(--text-1)); background: var(--studio-paper, var(--text-1)); color: var(--studio-ink, var(--ink-1)); }
+:is(.vehicle-plate-grid, .vehicle-tint-grid) button:disabled { opacity: 0.45; cursor: not-allowed; }
+:is(.vehicle-plate-grid, .vehicle-tint-grid) strong { padding: calc(7px * var(--es-ui-scale)) calc(3px * var(--es-ui-scale)) 0; font: 600 calc(11px * var(--es-ui-scale))/1.3 var(--font-ui); }
+:is(.vehicle-plate-grid, .vehicle-tint-grid) small { padding: calc(3px * var(--es-ui-scale)); font: calc(9px * var(--es-ui-scale))/1.3 var(--font-mono); opacity: 0.7; }
+.vehicle-plate-example { display: grid; place-items: center; position: relative; aspect-ratio: 2; min-width: 0; }
+.vehicle-plate-example img { position: absolute; width: 100%; height: 100%; object-fit: contain; }
+.vehicle-plate-registration { position: relative; width: 100%; padding-top: 8%; text-align: center; font: 700 calc(18px * var(--es-ui-scale))/1.2 'Arial Narrow', monospace; letter-spacing: -0.03em; white-space: nowrap; }
+.vehicle-tint-grid svg { display: block; width: 100%; height: auto; }
+.vehicle-plate-picker > .vehicle-catalog-selection, .vehicle-tint-picker > .vehicle-catalog-selection { flex-wrap: wrap; }
+:is(.vehicle-fitment-tabs, .vehicle-plate-grid, .vehicle-tint-grid) button:focus-visible { outline: 2px solid var(--studio-paper, var(--text-1)); outline-offset: 2px; }
+:is(.vehicle-paint-channels, .vehicle-paint-grid, .vehicle-wheel-grid, .vehicle-catalog-pages, .vehicle-xenon-grid) button:focus-visible { outline: 2px solid var(--studio-paper, var(--text-1)); outline-offset: 2px; }
+:is(.vehicle-paint-channels, .vehicle-wheel-grid, .vehicle-xenon-grid) button:hover:not(:disabled) { border-color: var(--studio-paper, var(--text-1)); }
+@media (prefers-reduced-motion: reduce) {
+    .studio-switch-state, .studio-switch-state::before { transition: none; }
+}
